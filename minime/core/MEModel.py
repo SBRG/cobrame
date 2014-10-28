@@ -1,5 +1,3 @@
-__author__ = 'coltonlloyd'
-
 from cobra import Model, DictList
 
 class MEmodel(Model):

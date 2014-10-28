@@ -1,3 +1,6 @@
+from minime.util.dogma import *
+
+
 class ProcessData(object):
     """Generic class for holding information about a process
 

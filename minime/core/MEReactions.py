@@ -1,6 +1,8 @@
-__author__ = 'coltonlloyd'
 from cobra import Reaction
 from collections import defaultdict
+
+from minime.util.dogma import *
+from minime.util import mu
 
 class MetabolicReaction(Reaction):
     """Lumped metabolic reaction with enzyme complex formation"""
