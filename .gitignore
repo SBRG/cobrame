@@ -1,0 +1,11 @@
+*.pyc
+gurobi.log
+*$py.class
+*.egg-info
+build/
+dist/
+.DS_Store
+setuptools-*egg
+setuptools-*.tar.gz
+.idea/
+.ipynb_checkpoints
