@@ -45,6 +45,15 @@ class MetabolicReaction(Reaction):
         # doing checks for relationship every time is unnecessary. don't do.
         self.add_metabolites(new_stoichiometry, combine=False, add_to_container_model=False)
 
+        # set the bounds
+        if self.reverse:
+            self.lower_bound = max(0, -self.metabolic_reaction_data.upper_bound)
+            self.upper_bound = max(0, -self.metabolic_reaction_data.lower_bound)
+        else:
+            self.lower_bound = max(0, self.metabolic_reaction_data.lower_bound)
+            self.upper_bound = max(0, self.metabolic_reaction_data.upper_bound)
+
+
 
 class TranscriptionReaction(Reaction):
     """Transcription of a TU to produced TranscribedGene"""
