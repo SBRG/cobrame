@@ -21,7 +21,8 @@ class ProcessData(object):
 
     @property
     def parent_reactions(self):
-        return {self._model.reactions.get_by_id(i) for i in self._parent_reactions}
+        return {self._model.reactions.get_by_id(i)
+                for i in self._parent_reactions}
 
     def _update_parent_reactions(self):
         reactions = self._model.reactions
@@ -31,30 +32,40 @@ class ProcessData(object):
     def __repr__(self):
         return "<%s %s at 0x%x>" % (self.__class__.__name__, self.id, id(self))
 
+
 class MetabolicReactionData(ProcessData):
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
         model.metabolic_reaction_data.append(self)
+
 
 class ComplexData(ProcessData):
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
         model.complex_data.append(self)
 
+
 class TranscriptionData(ProcessData):
-    def __init__(self, id, model):
+    def __init__(self, id, model, RNA_products=set()):
         ProcessData.__init__(self, id, model)
         model.transcription_data.append(self)
-        self.nucleotide_sequence=''
+        self.nucleotide_sequence = ''
+        self.RNA_products = RNA_products
 
 
 class TranslationData(ProcessData):
-    protein_per_mRNA = 10
+    protein_per_mRNA = 50
+    amino_acid_sequence = ""
+    mRNA = None
 
-    def __init__(self, id, model):
+    def __init__(self, id, model, mRNA, protein):
         ProcessData.__init__(self, id, model)
         model.translation_data.append(self)
+        self.mRNA = mRNA
+        self.protein = protein
 
     def compute_sequence_from_DNA(self, dna_sequence):
-        codons = (dna_sequence[i: i + 3] for i in range(0, (len(dna_sequence)), 3))
-        self.amino_acid_sequence = ''.join(codon_table[i] for i in codons).rstrip("*")
+        codons = (dna_sequence[i: i + 3]
+                  for i in range(0, (len(dna_sequence)), 3))
+        self.amino_acid_sequence = ''.join(codon_table[i] for i in codons)
+        self.amino_acid_sequence = self.amino_acid_sequence.rstrip("*")

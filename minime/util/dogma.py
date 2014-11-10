@@ -36,3 +36,9 @@ codon_table = {"TTT": "F", "TTC": "F", "TTA": "L", "TTG": "L", "TCT": "S",
                "GGT": "G", "GGC": "G", "GGA": "G", "GGG": "G"}
 
 transcription_table = {"A": "ump_c", "T": "amp_c", "C": "gmp_c", "G": "cmp_c"}
+
+base_pairs = {"A": "T", "T": "A", "G": "C", "C": "G"}
+
+
+def reverse_transcribe(seq):
+    return ''.join(base_pairs[i] for i in reversed(seq))
