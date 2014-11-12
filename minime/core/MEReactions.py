@@ -118,6 +118,11 @@ class TranslationReaction(Reaction):
         mRNA_id = self.translation_data.mRNA
         new_stoichiometry = defaultdict(lambda: 0)
         try:
+            ribosome = self._model.metabolites.get_by_id("ribosome")
+            new_stoichiometry[ribosome] = -1/10000.
+        except KeyError:
+            warn("ribosome not found")
+        try:
             transcript = self._model.metabolites.get_by_id(mRNA_id)
         except KeyError:
             warn("transcript '%s' not found" % mRNA_id)
