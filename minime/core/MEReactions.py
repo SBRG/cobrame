@@ -1,3 +1,5 @@
+from __future__ import division
+
 from warnings import warn
 from collections import defaultdict
 
@@ -35,7 +37,7 @@ class MetabolicReaction(Reaction):
         process_data._parent_reactions.add(self.id)
     _metabolic_reaction_data = None
 
-    keff = 65.
+    keff = 65.  # in per second
     reverse = False
 
     def update(self):
@@ -43,7 +45,7 @@ class MetabolicReaction(Reaction):
         for component_name, value in iteritems(
                 self.complex_data._stoichiometry):
             component = self._model.metabolites.get_by_id(component_name)
-            new_stoichiometry[component] = -value * mu / self.keff
+            new_stoichiometry[component] = -value * mu / self.keff / 3600.
         sign = -1 if self.reverse else 1
         for component_name, value in iteritems(
                 self.metabolic_reaction_data._stoichiometry):
@@ -116,14 +118,19 @@ class TranslationReaction(Reaction):
     def update(self):
         protein_id = self.translation_data.protein
         mRNA_id = self.translation_data.mRNA
+        protein_length = len(self.translation_data.amino_acid_sequence)
+        metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(lambda: 0)
         try:
             ribosome = self._model.metabolites.get_by_id("ribosome")
-            new_stoichiometry[ribosome] = -1/10000.
         except KeyError:
             warn("ribosome not found")
+        else:
+            k_ribo = mu * 22.7 / (mu + 0.391)
+            coupling = -protein_length * mu / k_ribo / 3600
+            new_stoichiometry[ribosome] = coupling
         try:
-            transcript = self._model.metabolites.get_by_id(mRNA_id)
+            transcript = metabolites.get_by_id(mRNA_id)
         except KeyError:
             warn("transcript '%s' not found" % mRNA_id)
             transcript = TranscribedGene(mRNA_id)
@@ -131,7 +138,7 @@ class TranslationReaction(Reaction):
         new_stoichiometry[transcript] = -1. / \
             self.translation_data.protein_per_mRNA
         try:
-            protein = self._model.metabolites.get_by_id(protein_id)
+            protein = metabolites.get_by_id(protein_id)
         except KeyError:
             protein = TranslatedGene(protein_id)
             self._model.add_metabolites(protein)
@@ -140,5 +147,18 @@ class TranslationReaction(Reaction):
                       for key, value in amino_acids.iteritems()}
         for i in self.translation_data.amino_acid_sequence:
             new_stoichiometry[aa_mapping[i]] -= 1
+        # TODO: how many protons/water molecules are exchanged when making the
+        # peptide bond?
+        # tRNA charging requires 2 ATP per amino acid. TODO: tRNA demand
+        # Translocation and elongation each use one GTP per event
+        # (len(protein) - 1). Initiation and termination also each need
+        # one GTP each. Therefore, the GTP hydrolysis resulting from
+        # translation is 2 * len(protein)
+        new_stoichiometry[metabolites.get_by_id("h2o_c")] -= 4 * protein_length
+        new_stoichiometry[metabolites.get_by_id("h_c")] += 4 * protein_length
+        new_stoichiometry[metabolites.get_by_id("gtp_c")] -= 2 * protein_length
+        new_stoichiometry[metabolites.get_by_id("gdp_c")] += 2 * protein_length
+        new_stoichiometry[metabolites.get_by_id("atp_c")] -= 2 * protein_length
+        new_stoichiometry[metabolites.get_by_id("adp_c")] += 2 * protein_length
         self.add_metabolites(new_stoichiometry,
                              combine=False, add_to_container_model=False)
