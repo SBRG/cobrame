@@ -156,6 +156,7 @@ class TranslationReaction(Reaction):
         # translation is 2 * len(protein)
         new_stoichiometry[metabolites.get_by_id("h2o_c")] -= 4 * protein_length
         new_stoichiometry[metabolites.get_by_id("h_c")] += 4 * protein_length
+        new_stoichiometry[metabolites.get_by_id("pi_c")] += 4 * protein_length
         new_stoichiometry[metabolites.get_by_id("gtp_c")] -= 2 * protein_length
         new_stoichiometry[metabolites.get_by_id("gdp_c")] += 2 * protein_length
         new_stoichiometry[metabolites.get_by_id("atp_c")] -= 2 * protein_length
