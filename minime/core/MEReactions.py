@@ -86,14 +86,14 @@ class TranscriptionReaction(Reaction):
     def update(self):
         protein_id = self.transcription_data.id
         new_stoichiometry = defaultdict(lambda: 0)
-	TU_length = len(self.transcription_data.nucleotide_sequence)
-	metabolites = self._model.metabolites
-	try:
+        TU_length = len(self.transcription_data.nucleotide_sequence)
+        metabolites = self._model.metabolites
+        try:
             RNAP = self._model.metabolites.get_by_id("RNA_Polymerase")
         except KeyError:
             warn("RNA Polymerase not found")
         else:
-            k_RNAP = (mu * 22.7 / (mu + 0.391))*3 #3*k_ribo
+            k_RNAP = (mu * 22.7 / (mu + 0.391))*3  # 3*k_ribo
             coupling = -TU_length * mu / k_RNAP / 3600
             new_stoichiometry[RNAP] = coupling
 
@@ -102,15 +102,15 @@ class TranscriptionReaction(Reaction):
                 transcript = TranscribedGene(transcript_id)
                 self._model.add_metabolites([transcript])
             else:
-                transcript = self._model.metabolites.get_by_id(transcript_id)
+                transcript = metabolites.get_by_id(transcript_id)
             new_stoichiometry[transcript] += 1
 
         NT_mapping = {key: self._model.metabolites.get_by_id(value)
                       for key, value in transcription_table.iteritems()}
         for i in self.transcription_data.nucleotide_sequence:
             new_stoichiometry[NT_mapping[i]] -= 1
-	
-	new_stoichiometry[metabolites.get_by_id("ppi_c")] += TU_length-1
+
+        new_stoichiometry[metabolites.get_by_id("ppi_c")] += TU_length - 1
 
         self.add_metabolites(new_stoichiometry, combine=False,
                              add_to_container_model=False)
