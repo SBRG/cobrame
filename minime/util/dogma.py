@@ -35,7 +35,7 @@ codon_table = {"TTT": "F", "TTC": "F", "TTA": "L", "TTG": "L", "TCT": "S",
                "GCG": "A", "GAT": "D", "GAC": "D", "GAA": "E", "GAG": "E",
                "GGT": "G", "GGC": "G", "GGA": "G", "GGG": "G"}
 
-transcription_table = {"A": "ump_c", "T": "amp_c", "C": "gmp_c", "G": "cmp_c"}
+transcription_table = {"A": "utp_c", "T": "atp_c", "C": "gtp_c", "G": "ctp_c"}
 
 base_pairs = {"A": "T", "T": "A", "G": "C", "C": "G"}
 
