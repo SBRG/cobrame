@@ -17,5 +17,9 @@ class Ribosome(Component):
     pass
 
 
+class GenerictRNA(Component):
+    pass
+
+
 class RNAP(Component):
     pass

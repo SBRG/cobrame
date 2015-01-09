@@ -69,3 +69,11 @@ class TranslationData(ProcessData):
                   for i in range(0, (len(dna_sequence)), 3))
         self.amino_acid_sequence = ''.join(codon_table[i] for i in codons)
         self.amino_acid_sequence = self.amino_acid_sequence.rstrip("*")
+
+
+class tRNAData(ProcessData):
+    tRNA_keff = 65.
+    RNA = None
+    amino_acid = None
+    synthetase = None
+    synthetase_keff = 65.

@@ -11,7 +11,7 @@ from cobra import Reaction
 from minime.util.dogma import *
 from minime.util import mu
 
-from minime.core.Components import TranscribedGene, TranslatedGene
+from minime.core.Components import TranscribedGene, TranslatedGene, GenerictRNA
 
 
 class MetabolicReaction(Reaction):
@@ -159,8 +159,26 @@ class TranslationReaction(Reaction):
         new_stoichiometry[protein] = 1
         aa_mapping = {key: self._model.metabolites.get_by_id(value)
                       for key, value in amino_acids.iteritems()}
+        # count just the amino acids
+        aa_count = defaultdict(lambda: 0)
         for i in self.translation_data.amino_acid_sequence:
-            new_stoichiometry[aa_mapping[i]] -= 1
+            aa_count[aa_mapping[i]] -= 1
+        new_stoichiometry.update(aa_count)
+        # add in the tRNA's for each of the amino acids
+        # We add in a "generic tRNA" for each amino acid. The production
+        # of this generic tRNA represents the production of enough of any tRNA
+        # (according to its keff) for that amino acid to catalyze addition
+        # of a single amino acid to a growing peptide.
+
+        for aa, count in iteritems(aa_count):
+            try:
+                tRNA = self._model.metabolites.get_by_id("generic_tRNA_"
+                                                         + aa.id)
+            except KeyError:
+                warn("tRNA for '%s' not found" % aa.id)
+            else:
+                new_stoichiometry[tRNA] += count
+
         # TODO: how many protons/water molecules are exchanged when making the
         # peptide bond?
         # tRNA charging requires 2 ATP per amino acid. TODO: tRNA demand
@@ -177,3 +195,33 @@ class TranslationReaction(Reaction):
         new_stoichiometry[metabolites.get_by_id("adp_c")] += 2 * protein_length
         self.add_metabolites(new_stoichiometry,
                              combine=False, add_to_container_model=False)
+
+
+class tRNAChargingReaction(Reaction):
+
+    tRNAData = None
+
+    def update(self):
+        stoic = {}
+        data = self.tRNAData
+        mets = self._model.metabolites
+        complex_data = self._model.complex_data.get_by_id(data.synthetase)
+        # If the generic tRNA does not exist, create it now. The meaning of
+        # a generic tRNA is described in the TranslationReaction comments
+        try:
+            generic_tRNA = mets.get_by_id("generic_tRNA_" + data.amino_acid)
+        except KeyError:
+            generic_tRNA = GenerictRNA("generic_tRNA_" + data.amino_acid)
+            self._model.add_metabolites([generic_tRNA])
+        stoic[generic_tRNA] = 1
+        self.add_metabolites(stoic)
+
+        # compute what needs to go into production of a generic tRNA
+        tRNA_amount = mu / data.tRNA_keff / 3600
+        synthetase_amount = mu / data.synthetase_keff / \
+            3600 * (1 + tRNA_amount)
+        stoic[mets.get_by_id(data.RNA)] = -tRNA_amount
+        stoic[mets.get_by_id(data.amino_acid)] = -tRNA_amount
+        for component, amount in iteritems(complex_data._stoichiometry):
+            stoic[mets.get_by_id(component)] = -synthetase_amount * amount
+        self.add_metabolites(stoic)
