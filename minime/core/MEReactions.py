@@ -5,17 +5,17 @@ from collections import defaultdict
 
 from six import iteritems
 
-from cobra import Reaction
+from cobra import Reaction, Metabolite
 
 
 from minime.util.dogma import *
 from minime.util import mu
 
-from minime.core.Components import TranscribedGene, TranslatedGene, GenerictRNA
+from minime.core.Components import *
 
 
 class MetabolicReaction(Reaction):
-    """Lumped metabolic reaction with enzyme complex formation"""
+    """Metabolic reaction including required enzymatic complex"""
 
     @property
     def complex_data(self):
@@ -41,11 +41,7 @@ class MetabolicReaction(Reaction):
     reverse = False
 
     def update(self):
-        new_stoichiometry = {}
-        for component_name, value in iteritems(
-                self.complex_data._stoichiometry):
-            component = self._model.metabolites.get_by_id(component_name)
-            new_stoichiometry[component] = -value * mu / self.keff / 3600.
+        new_stoichiometry = {self.complex_data.complex: -mu / self.keff / 3600}
         sign = -1 if self.reverse else 1
         for component_name, value in iteritems(
                 self.metabolic_reaction_data._stoichiometry):
@@ -68,6 +64,32 @@ class MetabolicReaction(Reaction):
         else:
             self.lower_bound = max(0, self.metabolic_reaction_data.lower_bound)
             self.upper_bound = max(0, self.metabolic_reaction_data.upper_bound)
+
+
+class ComplexFormation(Reaction):
+    """Formation of a protein complex"""
+    _complex_id = None
+
+    @property
+    def complex(self):
+        return self._model.metabolites.get_by_id(self._complex_id)
+
+    def update(self):
+        complex_info = self._model.complex_data.get_by_id(self._complex_id)
+        metabolites = self._model.metabolites
+        try:
+            complex_met = metabolites.get_by_id(self._complex_id)
+        except KeyError:
+            complex_met = Complex(self._complex_id)
+            self._model.add_metabolites(complex_met)
+        stoichiometry = {complex_met: 1}
+        for component_name, value in iteritems(complex_info.stoichiometry):
+            try:
+                stoichiometry[metabolites.get_by_id(component_name)] = -value
+            except KeyError:
+                warn("No entity with id '%s' found" % component_name)
+        self.add_metabolites(stoichiometry, combine=False,
+                             add_to_container_model=False)
 
 
 class TranscriptionReaction(Reaction):
@@ -222,6 +244,6 @@ class tRNAChargingReaction(Reaction):
             3600 * (1 + tRNA_amount)
         stoic[mets.get_by_id(data.RNA)] = -tRNA_amount
         stoic[mets.get_by_id(data.amino_acid)] = -tRNA_amount
-        for component, amount in iteritems(complex_data._stoichiometry):
-            stoic[mets.get_by_id(component)] = -synthetase_amount * amount
-        self.add_metabolites(stoic)
+        stoic[mets.get_by_id(data.synthetase)] = -synthetase_amount
+        self.add_metabolites(stoic, combine=False,
+                             add_to_container_model=False)

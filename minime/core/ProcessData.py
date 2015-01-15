@@ -1,4 +1,5 @@
 from minime.util.dogma import *
+from minime.core.MEReactions import *
 
 
 class ProcessData(object):
@@ -40,9 +41,36 @@ class MetabolicReactionData(ProcessData):
 
 
 class ComplexData(ProcessData):
+
+    @property
+    def formation(self):
+        """a read-only link to the formation reaction"""
+        return self._model.reactions.get_by_id("formation_" + self.id)
+
+    @property
+    def complex(self):
+        """a read-only link to the complex object"""
+        return self._model.metabolites.get_by_id(self.id)
+
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
         model.complex_data.append(self)
+        self.stoichiometry = {}
+        self.translocation = {}
+        self.chaperones = {}
+
+    def create_complex_formation(self):
+        """creates a complex formation reaction
+
+        This assumes none exists already. Will create a reaction (prefixed by
+        'formation_') which forms the complex"""
+        formation_id = "formation_" + self.id
+        if formation_id in self._model.reactions:
+            raise ValueError("reaction %s already in model" % formation_id)
+        formation = ComplexFormation(formation_id)
+        formation._complex_id = self.id
+        self._model.add_reaction(formation)
+        formation.update()
 
 
 class TranscriptionData(ProcessData):
