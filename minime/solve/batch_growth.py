@@ -61,5 +61,6 @@ def batch_growth(me_model, max_mu=2, mu_accuracy=1e-9, verbose=True,
     if verbose:
         print "completed in %.1f seconds and %d iterations" % \
             (time() - start, len(feasible_mu) + len(infeasible_mu))
+    try_mu(feasible_mu[-1])
     me_model.solution = soplex.format_solution(lp, me_model)
     me_model.solution.f = feasible_mu[-1]
