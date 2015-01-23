@@ -13,7 +13,7 @@ except ImportError:
     Red = Green = Normal = ""
 
 
-def batch_growth(me_model, max_mu=2, mu_accuracy=1e-9, verbose=True,
+def batch_growth(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9, verbose=True,
                  **solver_args):
     """Computes maximum growth rate
 
@@ -52,15 +52,17 @@ def batch_growth(me_model, max_mu=2, mu_accuracy=1e-9, verbose=True,
 
     start = time()
     # try the edges of binary search
-    if not try_mu(0):
-        print "0 needs to be feasible"
+    if not try_mu(min_mu):
+        # Try 0 if min_mu failed
+        if min_mu == 0 or not try_mu(0):
+            raise ValueError("0 needs to be feasible")
     while try_mu(max_mu):  # If max_mu was feasible, keep increasing until not
         max_mu += 1
     while infeasible_mu[-1] - feasible_mu[-1] > mu_accuracy:
         try_mu((infeasible_mu[-1] + feasible_mu[-1]) * 0.5)
-    if verbose:
-        print "completed in %.1f seconds and %d iterations" % \
-            (time() - start, len(feasible_mu) + len(infeasible_mu))
     try_mu(feasible_mu[-1])
     me_model.solution = soplex.format_solution(lp, me_model)
     me_model.solution.f = feasible_mu[-1]
+    if verbose:
+        print "completed in %.1f seconds and %d iterations" % \
+            (time() - start, len(feasible_mu) + len(infeasible_mu))
