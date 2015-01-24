@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 from minime.util.dogma import *
+from minime.util.mass import *
 from minime.core.MEReactions import *
 
 
@@ -82,6 +83,15 @@ class TranscriptionData(ProcessData):
         self.nucleotide_sequence = ''
         self.RNA_products = RNA_products
 
+    @property
+    def nucleotide_count(self):
+        return {transcription_table[i]: self.nucleotide_sequence.count(i)
+                for i in ["A", "T", "G", "C"]}
+
+    @property
+    def mass(self):
+        return compute_RNA_mass(self.nucleotide_count)
+
 
 class TranslationData(ProcessData):
     protein_per_mRNA = 50
@@ -107,6 +117,11 @@ class TranslationData(ProcessData):
         for i in self.amino_acid_sequence:
             aa_count[amino_acids[i]] += 1
         return aa_count
+
+    @property
+    def mass(self):
+        """mass in kDa"""
+        return compute_protein_mass(self.amino_acid_count)
 
 
 class tRNAData(ProcessData):

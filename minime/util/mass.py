@@ -42,7 +42,7 @@ def compute_protein_mass(amino_acid_count):
     """
     protein_mass = sum(amino_acid_no_h2o[aa] * count
                        for aa, count in iteritems(amino_acid_count))
-    protein_mass += 18.015  # one water nto removed
+    protein_mass += 18.015  # one water not removed
     return protein_mass / 1000
 
 
@@ -54,5 +54,5 @@ def compute_RNA_mass(nucleotide_count):
     """
     RNA_mass = sum(rna_no_ppi[nuc] * count
                    for nuc, count in iteritems(nucleotide_count))
-    RNA_mass += 0  # 5' has 3 phosphates
+    RNA_mass += 174.951262  # 5' has 3 phosphates
     return RNA_mass / 1000

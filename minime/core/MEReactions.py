@@ -7,11 +7,8 @@ from six import iteritems
 
 from cobra import Reaction, Metabolite
 
-
-from minime.util.dogma import *
 from minime.util.mass import *
 from minime.util import mu
-
 from minime.core.Components import *
 
 
@@ -128,9 +125,8 @@ class TranscriptionReaction(Reaction):
                 transcript = metabolites.get_by_id(transcript_id)
             new_stoichiometry[transcript] += 1
 
-        base_counts = {transcription_table[i]:
-                       self.transcription_data.nucleotide_sequence.count(i)
-                       for i in ["A", "T", "G", "C"]}
+        base_counts = self.transcription_data.nucleotide_count
+
         for base, count in iteritems(base_counts):
             new_stoichiometry[metabolites.get_by_id(base)] -= count
 
