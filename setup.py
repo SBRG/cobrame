@@ -8,5 +8,6 @@ setup(name="minime",
       author="Ali Ebrahim and Colton Lloyd",
       author_email="minime_dev@googlegroups.com",
       url="https://github.com/SBRG/minime",
+      install_requires=["sympy", "six", "biopython"],
       packages=["minime"]
       )

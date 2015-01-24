@@ -9,3 +9,4 @@ setuptools-*egg
 setuptools-*.tar.gz
 .idea/
 .ipynb_checkpoints
+*.swp
