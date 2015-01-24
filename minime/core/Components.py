@@ -27,3 +27,7 @@ class GenerictRNA(Component):
 
 class RNAP(Component):
     pass
+
+
+class Constraint(Component):
+    pass

@@ -1,6 +1,7 @@
 from cobra import Model, DictList
 
 from minime.core.MEReactions import *
+from minime.util import mu
 
 
 class MEmodel(Model):
@@ -10,6 +11,12 @@ class MEmodel(Model):
         self.complex_data = DictList()
         self.translation_data = DictList()
         self.transcription_data = DictList()
+        self.biomass = Constraint("biomass")
+        self.biomass_dilution = SummaryVariable("biomass_dilution")
+        self.biomass_dilution.add_metabolites({self.biomass: -1})
+        self.add_reaction(self.biomass_dilution)
+        self.biomass_dilution.upper_bound = mu
+        self.biomass_dilution.lower_bound = mu
 
     def get_metabolic_flux(self, solution=None):
         """extract the flux state for metabolic reactions"""

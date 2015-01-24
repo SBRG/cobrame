@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from minime.util.dogma import *
 from minime.core.MEReactions import *
 
@@ -97,6 +99,14 @@ class TranslationData(ProcessData):
                   for i in range(0, (len(dna_sequence)), 3))
         self.amino_acid_sequence = ''.join(codon_table[i] for i in codons)
         self.amino_acid_sequence = self.amino_acid_sequence.rstrip("*")
+
+    @property
+    def amino_acid_count(self):
+        """count of each amino acid in the protein"""
+        aa_count = defaultdict(lambda: 0)
+        for i in self.amino_acid_sequence:
+            aa_count[amino_acids[i]] += 1
+        return aa_count
 
 
 class tRNAData(ProcessData):

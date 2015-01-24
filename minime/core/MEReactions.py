@@ -9,6 +9,7 @@ from cobra import Reaction, Metabolite
 
 
 from minime.util.dogma import *
+from minime.util.mass import *
 from minime.util import mu
 
 from minime.core.Components import *
@@ -127,15 +128,21 @@ class TranscriptionReaction(Reaction):
                 transcript = metabolites.get_by_id(transcript_id)
             new_stoichiometry[transcript] += 1
 
-        NT_mapping = {key: self._model.metabolites.get_by_id(value)
-                      for key, value in transcription_table.iteritems()}
-        for i in self.transcription_data.nucleotide_sequence:
-            new_stoichiometry[NT_mapping[i]] -= 1
+        base_counts = {transcription_table[i]:
+                       self.transcription_data.nucleotide_sequence.count(i)
+                       for i in ["A", "T", "G", "C"]}
+        for base, count in iteritems(base_counts):
+            new_stoichiometry[metabolites.get_by_id(base)] -= count
 
         new_stoichiometry[metabolites.get_by_id("ppi_c")] += TU_length - 1
 
         self.add_metabolites(new_stoichiometry, combine=False,
                              add_to_container_model=False)
+
+        # add to biomass
+        RNA_mass = compute_RNA_mass(base_counts)  # kDa
+        self.add_metabolites({self._model.biomass: RNA_mass},
+                             combine=False, add_to_container_model=False)
 
 
 class TranslationReaction(Reaction):
@@ -179,13 +186,13 @@ class TranslationReaction(Reaction):
             protein = TranslatedGene(protein_id)
             self._model.add_metabolites(protein)
         new_stoichiometry[protein] = 1
-        aa_mapping = {key: self._model.metabolites.get_by_id(value)
-                      for key, value in amino_acids.iteritems()}
         # count just the amino acids
-        aa_count = defaultdict(lambda: 0)
-        for i in self.translation_data.amino_acid_sequence:
-            aa_count[aa_mapping[i]] -= 1
-        new_stoichiometry.update(aa_count)
+
+        aa_count = self.translation_data.amino_acid_count
+
+        # update stoichiometry
+        for aa_name, value in iteritems(aa_count):
+            new_stoichiometry[metabolites.get_by_id(aa_name)] = -value
         # add in the tRNA's for each of the amino acids
         # We add in a "generic tRNA" for each amino acid. The production
         # of this generic tRNA represents the production of enough of any tRNA
@@ -195,11 +202,11 @@ class TranslationReaction(Reaction):
         for aa, count in iteritems(aa_count):
             try:
                 tRNA = self._model.metabolites.get_by_id("generic_tRNA_"
-                                                         + aa.id)
+                                                         + aa)
             except KeyError:
-                warn("tRNA for '%s' not found" % aa.id)
+                warn("tRNA for '%s' not found" % aa)
             else:
-                new_stoichiometry[tRNA] += count
+                new_stoichiometry[tRNA] -= count
 
         # TODO: how many protons/water molecules are exchanged when making the
         # peptide bond?
@@ -216,6 +223,11 @@ class TranslationReaction(Reaction):
         new_stoichiometry[metabolites.get_by_id("atp_c")] -= 2 * protein_length
         new_stoichiometry[metabolites.get_by_id("adp_c")] += 2 * protein_length
         self.add_metabolites(new_stoichiometry,
+                             combine=False, add_to_container_model=False)
+
+        # add to biomass
+        protein_mass = compute_protein_mass(aa_count)  # kDa
+        self.add_metabolites({self._model.biomass: protein_mass},
                              combine=False, add_to_container_model=False)
 
 
@@ -247,3 +259,7 @@ class tRNAChargingReaction(Reaction):
         stoic[mets.get_by_id(data.synthetase)] = -synthetase_amount
         self.add_metabolites(stoic, combine=False,
                              add_to_container_model=False)
+
+
+class SummaryVariable(Reaction):
+    pass
