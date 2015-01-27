@@ -22,9 +22,9 @@ class MEmodel(Model):
         """extract the flux state for metabolic reactions"""
         if solution is None:
             solution = self.solution
-            if solution.status != "optimal":
-                raise ValueError("model status '%s' is not 'optimal'" %
-                                 solution.status)
+        if solution.status != "optimal":
+            raise ValueError("solution status '%s' is not 'optimal'" %
+                             solution.status)
         flux_dict = {r.id: 0 for r in self.metabolic_reaction_data}
         for reaction in self.reactions:
             if isinstance(reaction, MetabolicReaction):
@@ -39,9 +39,9 @@ class MEmodel(Model):
         """extract the transcription flux state"""
         if solution is None:
             solution = self.solution
-            if solution.status != "optimal":
-                raise ValueError("model status '%s' is not 'optimal'" %
-                                 solution.status)
+        if solution.status != "optimal":
+            raise ValueError("solution status '%s' is not 'optimal'" %
+                             solution.status)
         flux_dict = {}
         for reaction in self.reactions:
             if isinstance(reaction, TranscriptionReaction):
@@ -56,9 +56,9 @@ class MEmodel(Model):
         """extract the translation flux state"""
         if solution is None:
             solution = self.solution
-            if solution.status != "optimal":
-                raise ValueError("model status '%s' is not 'optimal'" %
-                                 solution.status)
+        if solution.status != "optimal":
+            raise ValueError("solution status '%s' is not 'optimal'" %
+                             solution.status)
         flux_dict = {r.id: 0 for r in self.translation_data}
         for reaction in self.reactions:
             if isinstance(reaction, TranslationReaction):
