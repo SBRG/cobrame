@@ -78,16 +78,20 @@ class ComplexFormation(Reaction):
         try:
             complex_met = metabolites.get_by_id(self._complex_id)
         except KeyError:
-            complex_met = Complex(self._complex_id)
-            self._model.add_metabolites(complex_met)
+            complex_met = create_component(self._complex_id,
+                                           default_type=Complex)
         stoichiometry = {complex_met: 1}
         for component_name, value in iteritems(complex_info.stoichiometry):
             try:
-                stoichiometry[metabolites.get_by_id(component_name)] = -value
+                component = metabolites.get_by_id(component_name)
             except KeyError:
-                warn("No entity with id '%s' found" % component_name)
+                # make the component
+                component = create_component(component_name)
+                print("Created %s in %s" %
+                      (repr(component), repr(complex_met)))
+            stoichiometry[component] = -value
         self.add_metabolites(stoichiometry, combine=False,
-                             add_to_container_model=False)
+                             add_to_container_model=True)
 
 
 class TranscriptionReaction(Reaction):
