@@ -13,19 +13,25 @@ except ImportError:
     Red = Green = Normal = ""
 
 
-def batch_growth(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9, verbose=True,
-                 **solver_args):
-    """Computes maximum growth rate
+def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
+                  verbose=True, compiled_expressions=None, **solver_args):
+    """Computes maximum feasible growth rate (mu) through a binary search
 
-    This function is appropriate for "batch" growth where nutrient uptake is
-    unbounded.
+    The objective function of the model should be set to a dummy
+    reaction which forces translation of a dummy protein.
 
     max_mu: A guess for a growth rate which will be infeasible
+    min_mu: A guess for a growth rate which will be feasible
+    mu_accuracy: The final error in mu after the binary search
+    verbose: will print out each mu in the binary search
+    compiled_expressions: precompiled symbolic expressions in the model
+
     """
     lp = soplex.create_problem(me_model)
     for name, value in iteritems(solver_args):
         lp.set_parameter(name, value)
-    compiled_expressions = compile_expressions(me_model)
+    if compiled_expressions is None:
+        compiled_expressions = compile_expressions(me_model)
     feasible_mu = []
     infeasible_mu = []
     objectives = []
@@ -37,7 +43,7 @@ def batch_growth(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9, verbose=True,
         if status == "optimal":
             objective = lp.get_objective_value()
             if verbose:
-                print "%s%.13f%s\t%s" % (Green, mu, Normal, str(objective))
+                print("%s%.13f%s\t%s" % (Green, mu, Normal, str(objective)))
             if objective > 0:
                 feasible_mu.append(mu)
                 objectives.append(objective)
@@ -47,7 +53,7 @@ def batch_growth(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9, verbose=True,
         else:
             infeasible_mu.append(mu)
             if verbose:
-                print "%s%.13f%s" % (Red, mu, Normal)
+                print("%s%.13f%s" % (Red, mu, Normal))
             return False
 
     start = time()
@@ -64,5 +70,5 @@ def batch_growth(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9, verbose=True,
     me_model.solution = soplex.format_solution(lp, me_model)
     me_model.solution.f = feasible_mu[-1]
     if verbose:
-        print "completed in %.1f seconds and %d iterations" % \
-            (time() - start, len(feasible_mu) + len(infeasible_mu))
+        print("completed in %.1f seconds and %d iterations" %
+              (time() - start, len(feasible_mu) + len(infeasible_mu)))
