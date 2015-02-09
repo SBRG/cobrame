@@ -39,7 +39,10 @@ class MetabolicReaction(Reaction):
     reverse = False
 
     def update(self):
-        new_stoichiometry = {self.complex_data.complex: -mu / self.keff / 3600}
+        new_stoichiometry = {}
+        if self.complex_data:
+            new_stoichiometry = {self.complex_data.complex: -mu /
+                                 self.keff / 3600}
         sign = -1 if self.reverse else 1
         for component_name, value in iteritems(
                 self.metabolic_reaction_data._stoichiometry):
