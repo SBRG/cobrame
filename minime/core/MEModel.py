@@ -12,6 +12,7 @@ class MEmodel(Model):
         Model.__init__(self, *args)
         self.metabolic_reaction_data = DictList()
         self.complex_data = DictList()
+        self.modcomplex_data = DictList()
         self.translation_data = DictList()
         self.transcription_data = DictList()
         self.tRNA_data = DictList()

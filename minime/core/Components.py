@@ -33,6 +33,10 @@ class Constraint(Component):
     pass
 
 
+class ModComplex(Component):
+    pass
+
+
 def create_component(component_id, default_type=Component):
     """creates a component and attempts to set the correct type"""
     if not isinstance(component_id, str):

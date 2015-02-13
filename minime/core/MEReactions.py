@@ -77,14 +77,46 @@ class ComplexFormation(Reaction):
         return self._model.metabolites.get_by_id(self._complex_id)
 
     def update(self):
-        complex_info = self._model.complex_data.get_by_id(self._complex_id)
         metabolites = self._model.metabolites
-        try:
-            complex_met = metabolites.get_by_id(self._complex_id)
-        except KeyError:
-            complex_met = create_component(self._complex_id,
-                                           default_type=Complex)
-        stoichiometry = {complex_met: 1}
+        if self._model.modcomplex_data:
+            mod_complex_info = self._model.modcomplex_data.get_by_id(self._complex_id)
+            try:
+                complex_info = self._model.complex_data.get_by_id(mod_complex_info.core_complex)
+            except KeyError:
+                print mod_complex_info.core_complex + ' not found'
+                return
+            try:
+                modcomplex_met = metabolites.get_by_id(self._complex_id)
+            except:
+                modcomplex_met = create_component(self._complex_id,
+                                                  default_type=ModComplex)
+
+            try:
+                complex_met = metabolites.get_by_id(mod_complex_info.core_complex)
+            except KeyError:
+                complex_met = create_component(mod_complex_info.core_complex,
+                                               default_type=Complex)
+            stoichiometry = {modcomplex_met: 1}
+
+            for component_name, value in iteritems(mod_complex_info.stoichiometry):
+                try:
+                    component = metabolites.get_by_id(component_name)
+                except KeyError:
+                    # make the component
+                    component = create_component(component_name)
+                    print("Created %s in %s" %
+                          (repr(component), repr(modcomplex_met)))
+                stoichiometry[component] = value
+
+        else:
+            complex_info = self._model.complex_data.get_by_id(self._complex_id)
+            try:
+                complex_met = metabolites.get_by_id(self._complex_id)
+            except KeyError:
+                complex_met = create_component(self._complex_id,
+                                               default_type=Complex)
+            stoichiometry = {complex_met: 1}
+
         for component_name, value in iteritems(complex_info.stoichiometry):
             try:
                 component = metabolites.get_by_id(component_name)
