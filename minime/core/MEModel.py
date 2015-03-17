@@ -1,3 +1,6 @@
+from numpy import array
+from scipy.sparse import dok_matrix
+
 from cobra import Model, DictList
 
 from minime.core.MEReactions import *
@@ -18,7 +21,6 @@ class MEmodel(Model):
         self.add_reaction(self._biomass_dilution)
         self._biomass_dilution.upper_bound = mu
         self._biomass_dilution.lower_bound = mu
-
 
     def get_metabolic_flux(self, solution=None):
         """extract the flux state for metabolic reactions"""
@@ -67,3 +69,25 @@ class MEmodel(Model):
                 protein_id = reaction.translation_data.id
                 flux_dict[protein_id] += solution.x_dict[reaction.id]
         return flux_dict
+
+    def construct_S(self, growth_rate):
+        """build the stoichiometric matrix at a specific growth rate"""
+        # intialize to 0
+        S = dok_matrix((len(self.metabolites), len(self.reactions)))
+        # populate with stoichiometry
+        for i, r in enumerate(self.reactions):
+            for met, value in r._metabolites.iteritems():
+                met_index = self.metabolites.index(met)
+                if hasattr(value, "subs"):
+                    S[met_index, i] = float(value.subs(mu, growth_rate))
+                else:
+                    S[met_index, i] = float(value)
+        return S
+
+    def construct_attribute_vector(self, attr_name, growth_rate):
+        """build a vector of a reaction attribute at a specific growth rate
+
+        Mainly used for upper and lower bounds"""
+        return array([float(value.subs(mu, growth_rate))
+                      if hasattr(value, "subs") else float(value)
+                      for value in self.reactions.list_attr(attr_name)])
