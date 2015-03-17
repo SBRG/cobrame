@@ -4,6 +4,7 @@ from warnings import warn
 from collections import defaultdict
 
 from six import iteritems
+from six.moves import zip
 
 from cobra import Reaction, Metabolite
 
@@ -144,7 +145,7 @@ class TranscriptionReaction(Reaction):
 
         # add to biomass
         RNA_mass = compute_RNA_mass(base_counts)  # kDa
-        self.add_metabolites({self._model.biomass: RNA_mass},
+        self.add_metabolites({self._model._biomass: RNA_mass},
                              combine=False, add_to_container_model=False)
 
 
@@ -230,7 +231,7 @@ class TranslationReaction(Reaction):
 
         # add to biomass
         protein_mass = compute_protein_mass(aa_count)  # kDa
-        self.add_metabolites({self._model.biomass: protein_mass},
+        self.add_metabolites({self._model._biomass: protein_mass},
                              combine=False, add_to_container_model=False)
 
 

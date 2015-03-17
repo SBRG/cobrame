@@ -42,9 +42,9 @@ def create_component(component_id, default_type=Component):
         return TranslatedGene(component_id)
     elif component_id.startswith("RNA"):
         return TranscribedGene(component_id)
-    elif component_id.startswith("Ribosome"):
+    elif component_id.startswith("ribosome"):
         return Ribosome(component_id)
-    elif component_id.startswith("RNAP"):
+    elif component_id.startswith("RNA_Polymerase"):
         return RNAP(component_id)
     else:
         return default_type(component_id)

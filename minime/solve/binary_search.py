@@ -1,6 +1,14 @@
 from time import time
+from warnings import warn
 
-from cobra.solvers import soplex
+from cobra.solvers import solver_dict
+from six import string_types
+
+try:
+    import soplex
+except ImportError as e:
+    soplex = None
+    warn("soplex import failed with error '%s'" % e.message)
 
 from minime.solve.symbolic import *
 
@@ -14,7 +22,8 @@ except ImportError:
 
 
 def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
-                  verbose=True, compiled_expressions=None, **solver_args):
+                  solver=None, verbose=True, compiled_expressions=None,
+                  **solver_args):
     """Computes maximum feasible growth rate (mu) through a binary search
 
     The objective function of the model should be set to a dummy
@@ -27,7 +36,13 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
     compiled_expressions: precompiled symbolic expressions in the model
 
     """
-    lp = soplex.create_problem(me_model)
+    if solver is None:
+        solver = soplex
+        if soplex is None:
+            raise RuntimeError("soplex not installed")
+    elif isinstance(solver, string_types):
+        solver = solver_dict[solver]
+    lp = solver.create_problem(me_model)
     for name, value in iteritems(solver_args):
         lp.set_parameter(name, value)
     if compiled_expressions is None:
@@ -67,7 +82,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
     while infeasible_mu[-1] - feasible_mu[-1] > mu_accuracy:
         try_mu((infeasible_mu[-1] + feasible_mu[-1]) * 0.5)
     try_mu(feasible_mu[-1])
-    me_model.solution = soplex.format_solution(lp, me_model)
+    me_model.solution = solver.format_solution(lp, me_model)
     me_model.solution.f = feasible_mu[-1]
     if verbose:
         print("completed in %.1f seconds and %d iterations" %

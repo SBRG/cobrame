@@ -94,7 +94,7 @@ class TranscriptionData(ProcessData):
 
 
 class TranslationData(ProcessData):
-    protein_per_mRNA = 50
+    protein_per_mRNA = 50000000
     amino_acid_sequence = ""
     mRNA = None
 
