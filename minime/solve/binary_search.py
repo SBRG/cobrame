@@ -53,7 +53,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
 
     def try_mu(mu):
         substitute_mu(lp, mu, compiled_expressions)
-        lp.solve_problem()
+        lp.solve_problem(**solver_args)
         status = lp.get_status()
         if status == "optimal":
             objective = lp.get_objective_value()
