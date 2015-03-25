@@ -92,3 +92,20 @@ class MEmodel(Model):
         return array([float(value.subs(mu, growth_rate))
                       if hasattr(value, "subs") else float(value)
                       for value in self.reactions.list_attr(attr_name)])
+
+    def compute_solution_error(self, solution=None):
+        errors = {}
+        if solution is None:
+            solution = self.solution
+        S = self.construct_S(solution.f)
+        lb = self.construct_attribute_vector("lower_bound", solution.f)
+        ub = self.construct_attribute_vector("upper_bound", solution.f)
+        x = array(solution.x)
+        err = abs(S * x)
+        errors["max_error"] = err.max()
+        errors["sum_error"] = err.sum()
+        ub_err = min(ub - x)
+        errors["upper_bound_error"] = abs(ub_err) if ub_err < 0 else 0
+        lb_err = min(x - lb)
+        errors["lower_bound_error"] = abs(lb_err) if lb_err < 0 else 0
+        return errors
