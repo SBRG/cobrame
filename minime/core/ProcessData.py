@@ -2,6 +2,7 @@ from collections import defaultdict
 
 from minime.util.dogma import *
 from minime.util.mass import *
+from minime.util import mu
 from minime.core.MEReactions import *
 
 
@@ -125,8 +126,12 @@ class TranslationData(ProcessData):
 
 
 class tRNAData(ProcessData):
-    tRNA_keff = 65.
-    RNA = None
-    amino_acid = None
     synthetase = None
     synthetase_keff = 65.
+
+    def __init__(self, id, model, amino_acid, RNA):
+        ProcessData.__init__(self, id, model)
+        model.tRNA_data.append(self)
+        self.amino_acid = amino_acid
+        self.RNA = RNA
+        self.tRNA_keff = 2.39 * mu / (mu + 0.391)

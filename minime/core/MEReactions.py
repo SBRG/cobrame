@@ -243,7 +243,6 @@ class tRNAChargingReaction(Reaction):
         stoic = {}
         data = self.tRNAData
         mets = self._model.metabolites
-        complex_data = self._model.complex_data.get_by_id(data.synthetase)
         # If the generic tRNA does not exist, create it now. The meaning of
         # a generic tRNA is described in the TranslationReaction comments
         try:
@@ -260,7 +259,8 @@ class tRNAChargingReaction(Reaction):
             3600 * (1 + tRNA_amount)
         stoic[mets.get_by_id(data.RNA)] = -tRNA_amount
         stoic[mets.get_by_id(data.amino_acid)] = -tRNA_amount
-        stoic[mets.get_by_id(data.synthetase)] = -synthetase_amount
+        if data.synthetase is not None:
+            stoic[mets.get_by_id(data.synthetase)] = -synthetase_amount
         self.add_metabolites(stoic, combine=False,
                              add_to_container_model=False)
 
