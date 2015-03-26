@@ -49,7 +49,7 @@ class ModComplexData(ProcessData):
     @property
     def formation(self):
         """a read-only link to the formation reaction"""
-        return self._model.reactions.get_by_id("formation_" + self.id)
+        return self._model.reactions.get_by_id("mod_formation_" + self.id)
 
     @property
     def complex(self):
@@ -67,7 +67,7 @@ class ModComplexData(ProcessData):
 
         This assumes none exists already. Will create a reaction (prefixed by
         'formation_') which forms the complex"""
-        formation_id = "formation_" + self.id
+        formation_id = "mod_formation_" + self.id
         if formation_id in self._model.reactions:
             raise ValueError("reaction %s already in model" % formation_id)
         formation = ComplexFormation(formation_id)
