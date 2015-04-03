@@ -2,7 +2,8 @@ from time import time
 from warnings import warn
 
 from cobra.solvers import solver_dict
-from six import string_types
+from cobra.flux_analysis.variability import calculate_lp_variability
+from six import string_types, iteritems
 
 try:
     import soplex
@@ -88,3 +89,20 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
         print("completed in %.1f seconds and %d iterations" %
               (time() - start, len(feasible_mu) + len(infeasible_mu)))
     return me_model.solution
+
+
+def fva(me_model, mu, reaction_list, compiled_expressions=None, solver=None,
+        **solver_args):
+    if solver is None:
+        solver = soplex
+        if soplex is None:
+            raise RuntimeError("soplex not installed")
+    elif isinstance(solver, string_types):
+        solver = solver_dict[solver]
+    lp = solver.create_problem(me_model)
+    for name, value in iteritems(solver_args):
+        lp.set_parameter(name, value)
+    if compiled_expressions is None:
+        compiled_expressions = compile_expressions(me_model)
+    substitute_mu(lp, mu, compiled_expressions)
+    return calculate_lp_variability(lp, solver, me_model, reaction_list)
