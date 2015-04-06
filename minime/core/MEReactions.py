@@ -67,6 +67,64 @@ class MetabolicReaction(Reaction):
             self.lower_bound = max(0, self.metabolic_reaction_data.lower_bound)
             self.upper_bound = max(0, self.metabolic_reaction_data.upper_bound)
 
+class MacromoleculeModification(Reaction):
+    """Modifications to Macromolecules. Similar to metabolic reactions"""
+
+    @property
+    def complex_data(self):
+        return self._complex_data
+
+    @complex_data.setter
+    def complex_data(self, process_data):
+        self._complex_data = process_data
+        process_data._parent_reactions.add(self.id)
+    _complex_data = None
+
+    @property
+    def macromolecule_modification_data(self):
+        return self._macromolecule_modification_data
+
+    @macromolecule_modification_data.setter
+    def macromolecule_modification_data(self, process_data):
+        self._macromolecule_modification_data = process_data
+        process_data._parent_reactions.add(self.id)
+    _macromolecule_modification_data = None
+
+    keff = 65.  # in per second
+    reverse = False
+
+    def update(self):
+        new_stoichiometry = {}
+        if self.complex_data:
+            new_stoichiometry = {self.complex_data.complex: -mu /
+                                 self.keff / 3600}
+        sign = -1 if self.reverse else 1
+        for component_name, value in iteritems(
+                self.macromolecule_modification_data._stoichiometry):
+            try:
+                component = self._model.metabolites.get_by_id(component_name)
+            except:
+                component = ModComplex(component_name)
+                print "Added Modified Complex %s" % component_name
+            if component not in new_stoichiometry:
+                new_stoichiometry[component] = 0
+            new_stoichiometry[component] += value * sign
+        # replace old stoichiometry with new one
+        # TODO prune out old metabolites
+        # doing checks for relationship every time is unnecessary. don't do.
+        self.add_metabolites(new_stoichiometry,
+                             combine=False, add_to_container_model=False)
+
+        # set the bounds
+        if self.reverse:
+            self.lower_bound = max(
+                0, -self.macromolecule_modification_data.upper_bound)
+            self.upper_bound = max(
+                0, -self.macromolecule_modification_data.lower_bound)
+        else:
+            self.lower_bound = max(0, self.macromolecule_modification_data.lower_bound)
+            self.upper_bound = max(0, self.macromolecule_modification_data.upper_bound)
+
 
 class ComplexFormation(Reaction):
     """Formation of a protein complex"""
