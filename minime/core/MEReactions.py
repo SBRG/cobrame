@@ -67,6 +67,7 @@ class MetabolicReaction(Reaction):
             self.lower_bound = max(0, self.metabolic_reaction_data.lower_bound)
             self.upper_bound = max(0, self.metabolic_reaction_data.upper_bound)
 
+
 class MacromoleculeModification(Reaction):
     """Modifications to Macromolecules. Similar to metabolic reactions"""
 
@@ -113,7 +114,7 @@ class MacromoleculeModification(Reaction):
         # TODO prune out old metabolites
         # doing checks for relationship every time is unnecessary. don't do.
         self.add_metabolites(new_stoichiometry,
-                             combine=False, add_to_container_model=False)
+                             combine=False, add_to_container_model=True)
 
         # set the bounds
         if self.reverse:
