@@ -38,42 +38,33 @@ class ProcessData(object):
         return "<%s %s at 0x%x>" % (self.__class__.__name__, self.id, id(self))
 
 
-class MetabolicReactionData(ProcessData):
+class StoichiometricData(ProcessData):
+    """Encodes the stoichiometry  for a reaction.
+
+    Used by Metabolic Reactions
+    """
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
-        model.metabolic_reaction_data.append(self)
-
-
-class ModComplexData(ProcessData):
+        model.stoichiometric_data.append(self)
+        self._stoichiometry = {}
 
     @property
-    def formation(self):
-        """a read-only link to the formation reaction"""
-        return self._model.reactions.get_by_id("mod_formation_" + self.id)
+    def stoichiometry(self):
+        return self._stoichiometry
 
-    @property
-    def complex(self):
-        """a read-only link to the complex object"""
-        return self._model.metabolites.get_by_id(self.id)
 
-    def __init__(self, id, model, core_complex):
+class ModificationData(ProcessData):
+    def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
-        model.modcomplex_data.append(self)
-        self.core_complex = core_complex
+        model.modification_data.append(self)
         self.stoichiometry = {}
+        self.enzyme = None
+        self.modification_keff = None
 
-    def create_complex_formation(self):
-        """creates a complex formation reaction
-
-        This assumes none exists already. Will create a reaction (prefixed by
-        'formation_') which forms the complex"""
-        formation_id = "mod_formation_" + self.id
-        if formation_id in self._model.reactions:
-            raise ValueError("reaction %s already in model" % formation_id)
-        formation = ComplexFormation(formation_id)
-        formation._complex_id = self.id
-        self._model.add_reaction(formation)
-        formation.update()
+    def get_complex_data(self):
+        for i in self._model.complex_data:
+            if self.id in i.modifications:
+                yield i
 
 
 class ComplexData(ProcessData):
@@ -81,19 +72,34 @@ class ComplexData(ProcessData):
     @property
     def formation(self):
         """a read-only link to the formation reaction"""
-        return self._model.reactions.get_by_id("formation_" + self.id)
+        try:
+            return self._model.reactions.get_by_id("formation_" + self.id)
+        except KeyError:
+            return None
 
     @property
     def complex(self):
         """a read-only link to the complex object"""
-        return self._model.metabolites.get_by_id(self.id)
+        return self._model.metabolites.get_by_id(self.complex_id)
+
+    @property
+    def complex_id(self):
+        return self.id if self._complex_id is None else self._complex_id
+
+    @complex_id.setter
+    def complex_id(self, value):
+        self._complex_id = None if value == self.id else value
 
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
         model.complex_data.append(self)
+        # {Component.id: stoichiometry}
         self.stoichiometry = {}
         self.translocation = {}
         self.chaperones = {}
+        # {ModificationData.id : number}
+        self.modifications = {}
+        self._complex_id = None  # assumed to be the same as id if None
 
     def create_complex_formation(self):
         """creates a complex formation reaction
@@ -104,7 +110,7 @@ class ComplexData(ProcessData):
         if formation_id in self._model.reactions:
             raise ValueError("reaction %s already in model" % formation_id)
         formation = ComplexFormation(formation_id)
-        formation._complex_id = self.id
+        formation._complex_id = self.complex_id
         self._model.add_reaction(formation)
         formation.update()
 

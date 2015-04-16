@@ -3,19 +3,22 @@ from Bio import SeqIO
 from minime import util
 from minime import *
 
+
 def add_transcription_reaction(me_model, TU_name, locus_ids, sequence, update=True):
     """add a transcription reaction"""
     transcription = TranscriptionReaction("transcription_" + TU_name)
     transcription.transcription_data = TranscriptionData(TU_name, me_model)
     transcription.transcription_data.nucleotide_sequence = sequence
-    transcription.transcription_data.RNA_products = {"RNA_" + i for i in locus_ids}
+    transcription.transcription_data.RNA_products = {"RNA_" + i
+                                                     for i in locus_ids}
     me_model.add_reaction(transcription)
     if update:
         transcription.update()
 
+
 def build_reactions_from_genbank(me_model, filename):
     """create transcription and translation reactions from a genbank file
-    
+
     TOOD allow overriding amino acid names"""
     gb_file = SeqIO.read(filename, 'gb')
     full_seq = str(gb_file.seq)
@@ -36,17 +39,16 @@ def build_reactions_from_genbank(me_model, filename):
             me_model.add_reaction(translation)
             translation.translation_data = TranslationData(bnum, me_model, "RNA_" + bnum, "protein_" + bnum)
             translation.translation_data.amino_acid_sequence = amino_acid_sequence.replace("U", "C")  # TODO make selenocystine
-            
-        elif feature.type == "rRNA":
+
+        elif feature.type == "rRNA" or feature.type == "ncRNA":
             bnum = feature.qualifiers["locus_tag"][0]
             seq = full_seq[feature.location.start:feature.location.end]
             if feature.strand == -1:
                 seq = util.dogma.reverse_transcribe(seq)
-            add_transcription_reaction(me_model, "rRNA_" + bnum, {bnum}, seq)
-        
+            add_transcription_reaction(me_model, feature.type + "_" + bnum,
+                                       {bnum}, seq)
 
         elif feature.type == "tRNA":
-            # TODO account for modifications
             tRNA = feature
             bnum = feature.qualifiers["locus_tag"][0]
             seq = full_seq[feature.location.start:feature.location.end]

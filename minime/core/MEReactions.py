@@ -4,9 +4,8 @@ from warnings import warn
 from collections import defaultdict
 
 from six import iteritems
-from six.moves import zip
 
-from cobra import Reaction, Metabolite
+from cobra import Reaction
 
 from minime.util.mass import *
 from minime.util import mu
@@ -27,27 +26,36 @@ class MetabolicReaction(Reaction):
     _complex_data = None
 
     @property
-    def metabolic_reaction_data(self):
-        return self._metabolic_reaction_data
+    def stoichiometric_data(self):
+        return self._stoichiometric_data
 
-    @metabolic_reaction_data.setter
-    def metabolic_reaction_data(self, process_data):
-        self._metabolic_reaction_data = process_data
+    @stoichiometric_data.setter
+    def stoichiometric_data(self, process_data):
+        self._stoichiometric_data = process_data
         process_data._parent_reactions.add(self.id)
-    _metabolic_reaction_data = None
+    _stoichiometric_data = None
 
     keff = 65.  # in per second
     reverse = False
 
-    def update(self):
-        new_stoichiometry = {}
+    def update(self, create_new=False):
+        metabolites = self._model.metabolites
+        new_stoichiometry = defaultdict(float)
         if self.complex_data:
-            new_stoichiometry = {self.complex_data.complex: -mu /
-                                 self.keff / 3600}
+            new_stoichiometry[self.complex_data.complex] = \
+                -mu / self.keff / 3600.
         sign = -1 if self.reverse else 1
-        for component_name, value in iteritems(
-                self.metabolic_reaction_data._stoichiometry):
-            component = self._model.metabolites.get_by_id(component_name)
+        for component_id, value in iteritems(
+                self.stoichiometric_data._stoichiometry):
+            if create_new:
+                try:
+                    component = metabolites.get_by_id(component_id)
+                except KeyError:
+                    component = create_component(component_id)
+                    self._model.add_metabolites([component])
+                    print("Created %s in %s" % (repr(component), repr(self)))
+            else:
+                component = metabolites.get_by_id(component_id)
             if component not in new_stoichiometry:
                 new_stoichiometry[component] = 0
             new_stoichiometry[component] += value * sign
@@ -60,71 +68,17 @@ class MetabolicReaction(Reaction):
         # set the bounds
         if self.reverse:
             self.lower_bound = max(
-                0, -self.metabolic_reaction_data.upper_bound)
+                0, -self.stoichiometric_data.upper_bound)
             self.upper_bound = max(
-                0, -self.metabolic_reaction_data.lower_bound)
+                0, -self.stoichiometric_data.lower_bound)
         else:
-            self.lower_bound = max(0, self.metabolic_reaction_data.lower_bound)
-            self.upper_bound = max(0, self.metabolic_reaction_data.upper_bound)
+            self.lower_bound = max(0, self.stoichiometric_data.lower_bound)
+            self.upper_bound = max(0, self.stoichiometric_data.upper_bound)
 
 
-class MacromoleculeModification(Reaction):
-    """Modifications to Macromolecules. Similar to metabolic reactions"""
-
-    @property
-    def complex_data(self):
-        return self._complex_data
-
-    @complex_data.setter
-    def complex_data(self, process_data):
-        self._complex_data = process_data
-        process_data._parent_reactions.add(self.id)
-    _complex_data = None
-
-    @property
-    def macromolecule_modification_data(self):
-        return self._macromolecule_modification_data
-
-    @macromolecule_modification_data.setter
-    def macromolecule_modification_data(self, process_data):
-        self._macromolecule_modification_data = process_data
-        process_data._parent_reactions.add(self.id)
-    _macromolecule_modification_data = None
-
-    keff = 65.  # in per second
-    reverse = False
-
-    def update(self):
-        new_stoichiometry = {}
-        if self.complex_data:
-            new_stoichiometry = {self.complex_data.complex: -mu /
-                                 self.keff / 3600}
-        sign = -1 if self.reverse else 1
-        for component_name, value in iteritems(
-                self.macromolecule_modification_data._stoichiometry):
-            try:
-                component = self._model.metabolites.get_by_id(component_name)
-            except:
-                component = ModComplex(component_name)
-                print "Added Modified Complex %s" % component_name
-            if component not in new_stoichiometry:
-                new_stoichiometry[component] = 0
-            new_stoichiometry[component] += value * sign
-        # replace old stoichiometry with new one
-        # TODO prune out old metabolites
-        # doing checks for relationship every time is unnecessary. don't do.
-        self.add_metabolites(new_stoichiometry,
-                             combine=False, add_to_container_model=True)
-
-        # set the bounds
-        if self.reverse:
-            self.lower_bound = max(
-                0, -self.macromolecule_modification_data.upper_bound)
-            self.upper_bound = max(
-                0, -self.macromolecule_modification_data.lower_bound)
-        else:
-            self.lower_bound = max(0, self.macromolecule_modification_data.lower_bound)
-            self.upper_bound = max(0, self.macromolecule_modification_data.upper_bound)
+class MacromoleculeModification(MetabolicReaction):
+    """Modifications to Macromolecules."""
+    None
 
 
 class ComplexFormation(Reaction):
@@ -137,55 +91,41 @@ class ComplexFormation(Reaction):
 
     def update(self):
         metabolites = self._model.metabolites
-        if self._model.modcomplex_data:
-            mod_complex_info = self._model.modcomplex_data.get_by_id(self._complex_id)
-            try:
-                complex_info = self._model.complex_data.get_by_id(mod_complex_info.core_complex)
-            except KeyError:
-                print mod_complex_info.core_complex + ' not found'
-                return
-            try:
-                modcomplex_met = metabolites.get_by_id(self._complex_id)
-            except:
-                modcomplex_met = create_component(self._complex_id,
-                                                  default_type=ModComplex)
+        complex_info = self._model.complex_data.get_by_id(self._complex_id)
+        try:
+            complex_met = metabolites.get_by_id(self._complex_id)
+        except KeyError:
+            complex_met = create_component(self._complex_id,
+                                           default_type=Complex)
+            self._model.add_metabolites([complex_met])
+        stoichiometry = defaultdict(float)
+        stoichiometry[complex_met.id] = 1
 
-            try:
-                complex_met = metabolites.get_by_id(mod_complex_info.core_complex)
-            except KeyError:
-                complex_met = create_component(mod_complex_info.core_complex,
-                                               default_type=Complex)
-            stoichiometry = {modcomplex_met: 1}
+        # build the complex itself
+        for component_id, value in iteritems(complex_info.stoichiometry):
+            stoichiometry[component_id] -= value
 
-            for component_name, value in iteritems(mod_complex_info.stoichiometry):
-                try:
-                    component = metabolites.get_by_id(component_name)
-                except KeyError:
-                    # make the component
-                    component = create_component(component_name)
-                    print("Created %s in %s" %
-                          (repr(component), repr(modcomplex_met)))
-                stoichiometry[component] = value
+        # add in the modifications
+        all_modifications = self._model.modification_data
+        for modification_id, count in iteritems(complex_info.modifications):
+            modification = all_modifications.get_by_id(modification_id)
+            for mod_comp, mod_count in iteritems(modification.stoichiometry):
+                stoichiometry[mod_comp] += count * mod_count
+            if modification.enzyme is not None:
+                stoichiometry[modification.enzyme] -= \
+                    mu / modification.keff / 3600.
 
-        else:
-            complex_info = self._model.complex_data.get_by_id(self._complex_id)
+        object_stoichiometry = {}
+        for key, value in iteritems(stoichiometry):
             try:
-                complex_met = metabolites.get_by_id(self._complex_id)
+                object_stoichiometry[metabolites.get_by_id(key)] = value
             except KeyError:
-                complex_met = create_component(self._complex_id,
-                                               default_type=Complex)
-            stoichiometry = {complex_met: 1}
-
-        for component_name, value in iteritems(complex_info.stoichiometry):
-            try:
-                component = metabolites.get_by_id(component_name)
-            except KeyError:
-                # make the component
-                component = create_component(component_name)
+                new_met = create_component(key)
                 print("Created %s in %s" %
-                      (repr(component), repr(complex_met)))
-            stoichiometry[component] = -value
-        self.add_metabolites(stoichiometry, combine=False,
+                      (repr(new_met), repr(self)))
+                object_stoichiometry[new_met] = value
+
+        self.add_metabolites(object_stoichiometry, combine=False,
                              add_to_container_model=True)
 
 
