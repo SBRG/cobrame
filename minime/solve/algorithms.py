@@ -22,6 +22,28 @@ except ImportError:
     Red = Green = Normal = ""
 
 
+def solve_at_growth_rate(me_model, growth_rate, solver=None,
+                         compiled_expressions=None, **solver_args):
+    if solver is None:
+        solver = soplex
+        if soplex is None:
+            raise RuntimeError("soplex not installed")
+    elif isinstance(solver, string_types):
+        solver = solver_dict[solver]
+    lp = solver.create_problem(me_model)
+    for name, value in iteritems(solver_args):
+        lp.set_parameter(name, value)
+    # substitute in values
+    if compiled_expressions is None:
+        compiled_expressions = compile_expressions(me_model)
+    substitute_mu(lp, mu, compiled_expressions)
+
+    # solve and return
+    lp.solve_problem()
+    me_model.solution = solver.format_solution(lp, me_model)
+    return me_model.solution
+
+
 def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
                   solver=None, verbose=True, compiled_expressions=None,
                   **solver_args):
