@@ -22,6 +22,17 @@ except ImportError:
     Red = Green = Normal = ""
 
 
+def get_ME_solver(solver=None):
+    if solver is None:
+        if soplex is None:
+            raise RuntimeError("soplex not installed")
+        return soplex
+    elif isinstance(solver, string_types):
+        return solver_dict[solver]
+    else:
+        return solver
+
+
 def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
                   solver=None, verbose=True, compiled_expressions=None,
                   **solver_args):
@@ -37,13 +48,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
     compiled_expressions: precompiled symbolic expressions in the model
 
     """
-    if solver is None:
-        solver = soplex
-        if soplex is None:
-            raise RuntimeError("soplex not installed")
-    elif isinstance(solver, string_types):
-        solver = solver_dict[solver]
-    lp = solver.create_problem(me_model)
+    solver = get_ME_solver(solver)
     for name, value in iteritems(solver_args):
         lp.set_parameter(name, value)
     if compiled_expressions is None:
@@ -93,12 +98,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
 
 def create_lP_at_growth_rate(me_model, growth_rate, compiled_expressions=None,
                              solver=None, **solver_args):
-    if solver is None:
-        solver = soplex
-        if soplex is None:
-            raise RuntimeError("soplex not installed")
-    elif isinstance(solver, string_types):
-        solver = solver_dict[solver]
+    solver = get_ME_solver(solver)
     lp = solver.create_problem(me_model)
     for name, value in iteritems(solver_args):
         lp.set_parameter(name, value)
@@ -106,17 +106,21 @@ def create_lP_at_growth_rate(me_model, growth_rate, compiled_expressions=None,
     if compiled_expressions is None:
         compiled_expressions = compile_expressions(me_model)
     substitute_mu(lp, mu, compiled_expressions)
-    return lp
+    return (lp, solver)
 
 
 def solve_at_growth_rate(me_model, growth_rate, **solver_args):
-    lp = create_lP_at_growth_rate(me_model, growth_rate, **solver_args)
+    lp, solver = create_lP_at_growth_rate(me_model, growth_rate,
+                                          **solver_args)
     # solve and return
-    lp.solve_problem()
+    solver.solve_problem(lp)
     me_model.solution = solver.format_solution(lp, me_model)
+    if me_model.solution.status == "optimal":
+        me_model.solution.f = growth_rate
     return me_model.solution
 
 
 def fva(me_model, mu, reaction_list, **solver_args):
-    lp = create_lP_at_growth_rate(me_model, growth_rate, **solver_args)
+    lp, solver = create_lP_at_growth_rate(me_model, growth_rate,
+                                          **solver_args)
     return calculate_lp_variability(lp, solver, me_model, reaction_list)
