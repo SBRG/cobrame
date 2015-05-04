@@ -105,7 +105,7 @@ def create_lP_at_growth_rate(me_model, growth_rate, compiled_expressions=None,
     # substitute in values
     if compiled_expressions is None:
         compiled_expressions = compile_expressions(me_model)
-    substitute_mu(lp, mu, compiled_expressions)
+    substitute_mu(lp, growth_rate, compiled_expressions)
     return (lp, solver)
 
 
@@ -120,7 +120,7 @@ def solve_at_growth_rate(me_model, growth_rate, **solver_args):
     return me_model.solution
 
 
-def fva(me_model, mu, reaction_list, **solver_args):
+def fva(me_model, growth_rate, reaction_list, **solver_args):
     lp, solver = create_lP_at_growth_rate(me_model, growth_rate,
                                           **solver_args)
     return calculate_lp_variability(lp, solver, me_model, reaction_list)

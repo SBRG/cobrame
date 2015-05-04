@@ -50,8 +50,8 @@ def substitute_mu(lp, mu, compiled_exressions):
     for index, expr in iteritems(compiled_exressions):
         if index[0] is None:  # reaction bounds
             lp.change_variable_bounds(index[1],
-                                      _eval(expr[0], mu), _eval(expr[0], mu))
+                                      _eval(expr[0], mu), _eval(expr[1], mu))
         elif index[1] is None:  # metabolite _bound
             lp.change_constraint(index[0], expr[1], _eval(expr[0], mu))
         else:  # stoichiometry
-            lp.change_coefficient(index[0], index[1], expr(mu))
+            lp.change_coefficient(index[0], index[1], _eval(expr, mu))
