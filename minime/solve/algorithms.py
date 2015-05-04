@@ -49,6 +49,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
 
     """
     solver = get_ME_solver(solver)
+    lp = solver.create_problem(me_model)
     for name, value in iteritems(solver_args):
         lp.set_parameter(name, value)
     if compiled_expressions is None:
