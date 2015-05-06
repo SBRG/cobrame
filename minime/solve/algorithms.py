@@ -1,5 +1,8 @@
 from time import time
 from warnings import warn
+from os.path import join
+from tempfile import mkdtemp
+from math import log
 
 from cobra.solvers import solver_dict
 from cobra.flux_analysis.variability import calculate_lp_variability
@@ -35,7 +38,7 @@ def get_ME_solver(solver=None):
 
 def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
                   solver=None, verbose=True, compiled_expressions=None,
-                  **solver_args):
+                  debug=True, **solver_args):
     """Computes maximum feasible growth rate (mu) through a binary search
 
     The objective function of the model should be set to a dummy
@@ -50,32 +53,43 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
     """
     solver = get_ME_solver(solver)
     lp = solver.create_problem(me_model)
+    # reset the objective for faster feasibility solving
+    for i, reaction in enumerate(me_model.reactions):
+        if reaction.objective_coefficient != 0:
+            solver.change_variable_objective(lp, i, 0)
     for name, value in iteritems(solver_args):
-        lp.set_parameter(name, value)
+        solver.set_parameter(lp, name, value)
     if compiled_expressions is None:
         compiled_expressions = compile_expressions(me_model)
     feasible_mu = []
     infeasible_mu = []
-    objectives = []
+
+    # String formatting for display
+    str_places = int(abs(round(log(mu_accuracy)/log(10)))) + 1
+    num_format = "%." + str(str_places) + "f"
+    if debug:
+        save_dir = mkdtemp()
+        print("LP files will be saved in " + save_dir)
+        filename_base = join(save_dir, "me_mu_" + num_format + ".lp")
+    if verbose:
+        success_str_base = Green + num_format + " +" + Normal
+        failure_str_base = Red + num_format + " -" + Normal
 
     def try_mu(mu):
         substitute_mu(lp, mu, compiled_expressions)
+        if debug:
+            lp.write(filename_base % mu)
         lp.solve_problem()
         status = lp.get_status()
         if status == "optimal":
-            objective = lp.get_objective_value()
             if verbose:
-                print("%s%.13f%s\t%s" % (Green, mu, Normal, str(objective)))
-            if objective > 0:
-                feasible_mu.append(mu)
-                objectives.append(objective)
-                return True
-            else:
-                assert False
+                print(success_str_base % mu)
+            feasible_mu.append(mu)
+            return True
         else:
             infeasible_mu.append(mu)
             if verbose:
-                print("%s%.13f%s" % (Red, mu, Normal))
+                print(failure_str_base % mu)
             return False
 
     start = time()
@@ -88,6 +102,11 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
         max_mu += 1
     while infeasible_mu[-1] - feasible_mu[-1] > mu_accuracy:
         try_mu((infeasible_mu[-1] + feasible_mu[-1]) * 0.5)
+    # now we want to solve with the objective
+    for i, reaction in enumerate(me_model.reactions):
+        if reaction.objective_coefficient != 0:
+            solver.change_variable_objective(lp, i,
+                                             reaction.objective_coefficient)
     try_mu(feasible_mu[-1])
     me_model.solution = solver.format_solution(lp, me_model)
     me_model.solution.f = feasible_mu[-1]
