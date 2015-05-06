@@ -31,10 +31,10 @@ class MEmodel(Model):
         if solution.status != "optimal":
             raise ValueError("solution status '%s' is not 'optimal'" %
                              solution.status)
-        flux_dict = {r.id: 0 for r in self.metabolic_reaction_data}
+        flux_dict = {r.id: 0 for r in self.stoichiometric_data}
         for reaction in self.reactions:
             if isinstance(reaction, MetabolicReaction):
-                m_reaction_id = reaction.metabolic_reaction_data.id
+                m_reaction_id = reaction.stoichiometric_data.id
                 if reaction.reverse:
                     flux_dict[m_reaction_id] -= solution.x_dict[reaction.id]
                 else:
