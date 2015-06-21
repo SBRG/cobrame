@@ -94,7 +94,7 @@ class ComplexData(ProcessData):
         ProcessData.__init__(self, id, model)
         model.complex_data.append(self)
         # {Component.id: stoichiometry}
-        self.stoichiometry = {}
+        self.stoichiometry = defaultdict(float)
         self.translocation = {}
         self.chaperones = {}
         # {ModificationData.id : number}
@@ -174,10 +174,13 @@ class tRNAData(ProcessData):
         self.RNA = RNA
         self.tRNA_keff = 2.39 * mu / (mu + 0.391)
 
+
 class ProteinTranslocationData(ProcessData):
     """
-    The user will have to use update after all complexes are into the model...because otherwise how can you be sure that the translocases are added into the model?
-    
+    The user will have to use update after all complexes are into the
+    model...because otherwise how can you be sure that the translocases
+    are added into the model?
+
     """
 
     def __init__(self, id, model):
@@ -185,113 +188,187 @@ class ProteinTranslocationData(ProcessData):
         self.keff = 0.
         self.costs_complexes = []
         model.translocation_pathways.append(self)
-        
+
     def add_translocation_cost(self, model, complex, protein):
         """really need to document this
-           
+
            Need to add in membrane area calculations
         """
-        
-        costs={}
+
+        costs = {}
 
         def sec_translocation(protein):  # s
             """
+
             """
-            
-            protein,stoichiometry=protein.split('(')
-            stoichiometry=float(stoichiometry[:-1])
-            protein_length=len(model.translation_data.get_by_id(protein).amino_acid_sequence)
+
+            protein, stoichiometry = protein.split('(')
+            stoichiometry = float(stoichiometry[:-1])
+            protein_length = len(
+                model.translation_data.get_by_id(protein).amino_acid_sequence)
             atp = int(protein_length/25)
 
-            costs[self.costs_complexes[0]] = mu * stoichiometry/ (self.keff/protein_length) / 3600 # SecB
-            costs[self.costs_complexes[1]] = mu * stoichiometry / (self.keff/protein_length) / 3600 # SecA
-            costs[self.costs_complexes[2]] = mu * stoichiometry / (self.keff/protein_length) / 3600 # Sec-CPLX
+            # SecB
+            costs[self.costs_complexes[0]] = \
+                mu * stoichiometry / (self.keff/protein_length) / 3600
+            # SecA
+            costs[self.costs_complexes[1]] = \
+                mu * stoichiometry / (self.keff/protein_length) / 3600
+            # Sec-CPLX
+            costs[self.costs_complexes[2]] = \
+                mu * stoichiometry / (self.keff/protein_length) / 3600
             costs['atp_c'] = atp
             costs['adp_c'] = -atp
             costs['pi_c'] = -atp
 
         def tat_translocation(protein):  # t
             """
+
             """
-            peptide,stoichiometry=protein.split('(')
-            s1,s2=stoichiometry[:-1].split(':')  ## e.g. (1:14) for 1 of this protein in the final complex:14 tatAs required
-            costs[self.costs_complexes[0]]= mu * float(s1) / self.keff / 3600 # TatBC
-            costs[self.costs_complexes[1]]= mu * float(s1) * float(s2) / self.keff / 3600 # TatA
+
+            peptide, stoichiometry = protein.split('(')
+            # e.g. (1:14) for 1 of this protein in the final complex:14
+            # tatAs required
+            s1, s2 = stoichiometry[:-1].split(':')
+
+            # TatBC
+            costs[self.costs_complexes[0]] = \
+                mu * float(s1) / self.keff / 3600
+            # TatA
+            costs[self.costs_complexes[1]] = \
+                mu * float(s1) * float(s2) / self.keff / 3600
 
         def bam_translocation(protein):  # b
-            """ """
-            protein,stoichiometry=protein.split('(')
-            stoichiometry=float(stoichiometry[:-1])
-            costs[self.costs_complexes[0]]= mu * stoichiometry / self.keff / 3600 # SurA
-            costs[self.costs_complexes[1]]= mu * stoichiometry / self.keff / 3600 # Bam
+            """
+
+            """
+
+            protein, stoichiometry = protein.split('(')
+            stoichiometry = float(stoichiometry[:-1])
+
+            # SurA
+            costs[self.costs_complexes[0]] = \
+                mu * stoichiometry / self.keff / 3600
+            # Bam
+            costs[self.costs_complexes[1]] = \
+                mu * stoichiometry / self.keff / 3600
 
         def lol_translocation(protein):  # l
-            """	"""
-            protein,stoichiometry=protein.split('(')
-            stoichiometry=float(stoichiometry[:-1])
+            """
 
-            costs[self.costs_complexes[0]] = mu * stoichiometry / self.keff / 3600 # LolCDE
-            costs[self.costs_complexes[1]] = mu * stoichiometry / self.keff / 3600 # LolA
-            costs[self.costs_complexes[2]] = mu * stoichiometry / self.keff / 3600 # LolB
+            """
+
+            protein, stoichiometry = protein.split('(')
+            stoichiometry = float(stoichiometry[:-1])
+
+            # LolCDE
+            costs[self.costs_complexes[0]] = \
+                mu * stoichiometry / self.keff / 3600
+            # LolA
+            costs[self.costs_complexes[1]] = \
+                mu * stoichiometry / self.keff / 3600
+            # LolB
+            costs[self.costs_complexes[2]] = \
+                mu * stoichiometry / self.keff / 3600
+
             costs['atp_c'] = 1
             costs['adp_c'] = -1
             costs['pi_c'] = -1
 
         def yidC_translocation(protein):  # y
-            """	"""
-            protein,stoichiometry=protein.split('(')
-            stoichiometry=float(stoichiometry[:-1])        
-                
-            protein_length=len(model.translation_data.get_by_id(protein).amino_acid_sequence)
-            costs[self.costs_complexes[0]] = mu * stoichiometry / (self.keff/protein_length) / 3600	 # SRP
-            costs[self.costs_complexes[1]] = mu * 2 / (self.keff/protein_length) / 3600 # YidC
+            """
+
+            """
+
+            protein, stoichiometry = protein.split('(')
+            stoichiometry = float(stoichiometry[:-1])
+            protein_length = len(
+                model.translation_data.get_by_id(protein).amino_acid_sequence)
+
+            # SRP
+            costs[self.costs_complexes[0]] = \
+                mu * stoichiometry / (self.keff/protein_length) / 3600
+            # YidC
+            costs[self.costs_complexes[1]] = \
+                mu * 2 / (self.keff/protein_length) / 3600
+
             costs['gtp_c'] = 1
             costs['gdp_c'] = -1
             costs['pi_c'] = -1
 
         def secA_translocation(protein):  # a
-            """	"""
-            #Not sure what the actualy number is...will need to do calculations. For now, 1/3 of the peptide requires secA...since secA binding isn't detected until after ribosome release -Jo 10/31/13
-            protein,stoichiometry=protein.split('(')
-            stoichiometry=float(stoichiometry[:-1])
+            """
 
-            protein_length=len(model.translation_data.get_by_id(protein).amino_acid_sequence)
+            """
+
+            # Not sure what the actualy number is...will need to do
+            # calculations. For now, 1/3 of the peptide requires secA...since
+            # secA binding isn't detected until after ribosome release
+            # -Jo 10/31/13
+
+            protein, stoichiometry = protein.split('(')
+            stoichiometry = float(stoichiometry[:-1])
+            protein_length = len(
+                model.translation_data.get_by_id(protein).amino_acid_sequence)
             atp = int(protein_length / 3 / 25)
 
-            costs[self.costs_complexes[0]] = mu * stoichiometry / (self.keff/protein_length) / 3600 # SecA
+            # SecA
+            costs[self.costs_complexes[0]] = \
+                mu * stoichiometry / (self.keff/protein_length) / 3600
+
             costs['atp_c'] = atp
             costs['adp_c'] = -atp
             costs['pi_c'] = -atp
 
         def srp_yidC_translocation(protein):  # p
-            """	"""
-            protein,stoichiometry=protein.split('(')
-            stoichiometry=float(stoichiometry[:-1])
-                        
-            protein_length=len(model.translation_data.get_by_id(protein).amino_acid_sequence)
-            costs[self.costs_complexes[0]] = mu * stoichiometry / (self.keff/protein_length) / 3600 # SRP
-            costs[self.costs_complexes[1]] = mu * stoichiometry / (self.keff/protein_length) / 3600 # YidC
-            costs[self.costs_complexes[2]] = mu * stoichiometry / (self.keff/protein_length) / 3600 # Sec
+            """
+
+            """
+
+            protein, stoichiometry = protein.split('(')
+            stoichiometry = float(stoichiometry[:-1])
+            protein_length = len(
+                model.translation_data.get_by_id(protein).amino_acid_sequence)
+
+            # SRP
+            costs[self.costs_complexes[0]] = \
+                mu * stoichiometry / (self.keff/protein_length) / 3600
+            # YidC
+            costs[self.costs_complexes[1]] = \
+                mu * stoichiometry / (self.keff/protein_length) / 3600
+            # Sec
+            costs[self.costs_complexes[2]] = \
+                mu * stoichiometry / (self.keff/protein_length) / 3600
+
             costs['gtp_c'] = 1
             costs['gdp_c'] = -1
             costs['pi_c'] = -1
 
         def srp_translocation(protein):  # r
             """	FtsY keff needs to fixed"""
-            protein,stoichiometry=protein.split('(')
-            stoichiometry=float(stoichiometry[:-1])
-                        
-            protein_length=len(model.translation_data.get_by_id(protein).amino_acid_sequence)
-            costs[self.costs_complexes[0]] = mu * stoichiometry / (self.keff/protein_length) / 3600 # SRP
-            costs[self.costs_complexes[1]] = mu * stoichiometry / 65. / 3600 # FtsY
-            costs[self.costs_complexes[2]] = mu * stoichiometry / (self.keff/protein_length) / 3600 # Sec
+            protein, stoichiometry = protein.split('(')
+            stoichiometry = float(stoichiometry[:-1])
+            protein_length = len(
+                model.translation_data.get_by_id(protein).amino_acid_sequence)
+
+            # SRP
+            costs[self.costs_complexes[0]] = \
+                mu * stoichiometry / (self.keff/protein_length) / 3600
+            # FtsY
+            costs[self.costs_complexes[1]] = \
+                mu * stoichiometry / 65. / 3600
+            # Sec
+            costs[self.costs_complexes[2]] = \
+                mu * stoichiometry / (self.keff/protein_length) / 3600
+
             costs['gtp_c'] = 2
             costs['gdp_c'] = -2
             costs['pi_c'] = -2
 
         eval(self.id+'(protein)')
         formation = model.complex_data.get_by_id(complex).formation
-        for metabolite,cost in costs.iteritems():
-            model.complex_data.get_by_id(complex).stoichiometry[metabolite]=cost
-            #if membrane...then add into self.membrane
+        for metabolite, cost in costs.iteritems():
+            model.complex_data.get_by_id(complex).\
+                stoichiometry[metabolite] += cost
+            # if membrane...then add into self.membrane
         formation.update()
