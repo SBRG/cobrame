@@ -6,7 +6,13 @@ class Metabolite(Component):
 
 
 class TranscribedGene(Component):
-    pass
+
+    def __init__(self, id):
+        Component.__init__(self, id)
+        self.left_pos = None
+        self.right_pos = None
+        self.strand = None
+        self.RNA_type = ''
 
 
 class TranslatedGene(Component):

@@ -164,6 +164,18 @@ class TranscriptionReaction(Reaction):
                 transcript = metabolites.get_by_id(transcript_id)
             new_stoichiometry[transcript] += 1
 
+        # add in the modifications
+        all_modifications = self._model.modification_data
+        for modification_id, count in iteritems(
+                self.transcription_data.modifications):
+            modification = all_modifications.get_by_id(modification_id)
+            for mod_comp, mod_count in iteritems(modification.stoichiometry):
+                new_stoichiometry[metabolites.get_by_id(mod_comp)] += count * mod_count
+            if modification.enzyme is not None:
+                new_stoichiometry[metabolites.get_by_id(modification.enzyme)] -= \
+                    mu / modification.keff / 3600.
+
+
         base_counts = self.transcription_data.nucleotide_count
 
         for base, count in iteritems(base_counts):
