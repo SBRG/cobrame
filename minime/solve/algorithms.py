@@ -94,7 +94,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
             debug_str = "\t%s\t%.2f\t%d\t%s" % \
                 (has_basis, lp.solveTime, lp.numIterations, obj)
         else:
-            debug__str = ""
+            debug_str = ""
         if status == "optimal":
             if verbose:
                 print(success_str_base % mu + debug_str)
