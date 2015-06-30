@@ -2,6 +2,7 @@ from Bio import SeqIO
 
 from minime import util
 from minime import *
+from cobra.core import Reaction
 
 
 def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
@@ -32,13 +33,15 @@ def build_reactions_from_genbank(me_model, filename, using_TUs=False):
             gene = TranscribedGene('RNA_'+bnum)
             gene.left_pos = feature.location.start
             gene.right_pos = feature.location.end
-            gene.strand = feature.strand
             gene.RNA_type = 'mRNA'
             gene.has_5prime_triphosphate = 'True'
             genome_pos_dict[str(gene.left_pos) + ',' + str(gene.right_pos)] = gene.id
             me_model.add_metabolites([gene])
             if feature.strand == -1:
+                gene.strand = '-'
                 seq = util.dogma.reverse_transcribe(seq)
+            else:
+                gene.strand = '+'
             if not using_TUs:
                 add_transcription_reaction(me_model, "mRNA_" + bnum, {bnum}, seq)
             try:
@@ -48,6 +51,9 @@ def build_reactions_from_genbank(me_model, filename, using_TUs=False):
                 # translaion.translation_data.compute_sequence_from_DNA(dna_sequence)
             translation = TranslationReaction("translation_" + bnum)
             me_model.add_reaction(translation)
+            r = Reaction('DM_' + bnum)
+            me_model.add_reaction(r)
+            r.reaction = 'RNA_' + bnum + ' -> '
             translation.translation_data = \
                 TranslationData(bnum, me_model, "RNA_" + bnum,
                                 "protein_" + bnum)
@@ -60,11 +66,17 @@ def build_reactions_from_genbank(me_model, filename, using_TUs=False):
             gene = TranscribedGene('RNA_'+bnum)
             gene.left_pos = feature.location.start
             gene.right_pos = feature.location.end
-            gene.strand = feature.strand
+            if feature.strand == -1:
+                gene.strand = '-'
+            else:
+                gene.strand = '+'
             gene.RNA_type = feature.type
             gene.has_5prime_triphosphate = 'True'
             genome_pos_dict[str(gene.left_pos) + ',' + str(gene.right_pos)] = gene.id
             me_model.add_metabolites([gene])
+            r = Reaction('DM_' + bnum)
+            me_model.add_reaction(r)
+            r.reaction = 'RNA_' + bnum + ' -> '
             if feature.strand == -1:
                 seq = util.dogma.reverse_transcribe(seq)
             if not using_TUs:
@@ -78,11 +90,17 @@ def build_reactions_from_genbank(me_model, filename, using_TUs=False):
             gene = TranscribedGene('RNA_'+bnum)
             gene.left_pos = feature.location.start
             gene.right_pos = feature.location.end
-            gene.strand = feature.strand
+            if feature.strand == -1:
+                gene.strand = '-'
+            else:
+                gene.strand = '+'
             gene.RNA_type = feature.type
             gene.has_5prime_triphosphate = 'True'
             genome_pos_dict[str(gene.left_pos) + ',' + str(gene.right_pos)] = gene.id
             me_model.add_metabolites([gene])
+            r = Reaction('DM_' + bnum)
+            me_model.add_reaction(r)
+            r.reaction = 'RNA_' + bnum + ' -> '
             if feature.strand == -1:
                 seq = util.dogma.reverse_transcribe(seq)
             if not using_TUs:
