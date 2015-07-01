@@ -42,6 +42,7 @@ def build_reactions_from_genbank(me_model, filename, using_TUs=False):
                 seq = util.dogma.reverse_transcribe(seq)
             else:
                 gene.strand = '+'
+            gene.seq = seq
             if not using_TUs:
                 add_transcription_reaction(me_model, "mRNA_" + bnum, {bnum}, seq)
             try:
