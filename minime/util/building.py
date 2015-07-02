@@ -92,11 +92,13 @@ def build_reactions_from_genbank(me_model, filename, using_TUs=False):
 
     gb_file = SeqIO.read(filename, 'gb')
     full_seq = str(gb_file.seq)
+
     tRNA_aa = {}
     genome_pos_dict = {}
 
     for feature in gb_file.features:
 
+        # Skip if not a gene used in ME construction
         add_list = ['CDS', 'rRNA', 'tRNA', 'ncRNA']
         if feature.type not in add_list:
             continue
@@ -109,13 +111,15 @@ def build_reactions_from_genbank(me_model, filename, using_TUs=False):
         RNA_type = 'mRNA' if feature.type == 'CDS' else feature.type
         strand = '+' if feature.strand == 1 else '-'
 
+        # Create transcribed gene object with all important attributes
         gene = add_transcribed_gene(me_model, bnum, left_pos, right_pos, seq, strand, RNA_type)
 
-        if using_TUs:
+        if using_TUs:  # Add demands for transcripts if using TUs to not force translation
             add_demand_reaction(me_model, bnum)
-        else:
+        else:  # If not using TUs add transcription reaction directly
             add_transcription_reaction(me_model, RNA_type + "_" + bnum, {bnum}, gene.seq)
 
+        # Add translation reaction for all
         if feature.type == "CDS":
             try:
                 amino_acid_sequence = feature.qualifiers["translation"][0]
@@ -123,6 +127,7 @@ def build_reactions_from_genbank(me_model, filename, using_TUs=False):
             except KeyError:
                 continue
 
+        # tRNA_aa = ['amino_acid':'tRNA']
         elif feature.type == "tRNA":
             tRNA_aa[bnum] = feature.qualifiers["product"][0].split("-")[1]
 
@@ -136,3 +141,5 @@ def build_reactions_from_genbank(me_model, filename, using_TUs=False):
             r.update()
 
     return genome_pos_dict
+
+def add_transcription_translation_reactions(me_model, gb_filename, TU_filename=None)
