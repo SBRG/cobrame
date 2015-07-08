@@ -8,6 +8,10 @@ import cobra
 import itertools
 
 
+class gene_portion_object(object):
+    pass
+
+
 def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
                                update=True):
     """add a transcription reaction"""
@@ -22,8 +26,8 @@ def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
         transcription.update()
 
 
-def add_transcribed_gene(me_model, bnum, left_pos, right_pos, seq, strand,
-                         RNA_type):
+def add_transcribed_gene_w_info(me_model, bnum, left_pos, right_pos, seq,
+                                strand, RNA_type):
 
     gene = TranscribedGene('RNA_'+bnum)
     gene.left_pos = left_pos
@@ -42,7 +46,8 @@ def add_transcribed_gene(me_model, bnum, left_pos, right_pos, seq, strand,
     return gene
 
 
-def add_translation_reaction(me_model, bnum, amino_acid_sequence):
+def add_translation_reaction(me_model, bnum, amino_acid_sequence=None,
+                             dna_sequence=None, update=False):
 
     # try:
     # except KeyError:
@@ -54,8 +59,14 @@ def add_translation_reaction(me_model, bnum, amino_acid_sequence):
     translation.translation_data = \
         TranslationData(bnum, me_model, "RNA_" + bnum,
                         "protein_" + bnum)
-    translation.translation_data.amino_acid_sequence = \
-        amino_acid_sequence.replace("U", "C")  # TODO selenocystine
+    if amino_acid_sequence is not None:
+        translation.translation_data.amino_acid_sequence = \
+            amino_acid_sequence.replace("U", "C")  # TODO selenocystine
+    elif dna_sequence is not None:
+        translation.translation_data.compute_sequence_from_DNA(dna_sequence)
+
+    if update:
+        translation.update()
 
 
 def add_demand_reaction(me_model, bnum):
@@ -88,12 +99,12 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa):
         charging_reaction.update()
 
 
-def build_reactions_from_genbank(me_model, filename, using_TUs=False):
+def build_reactions_from_genbank(me_model, gb_file, TU_frame=None):
     """create transcription and translation reactions from a genbank file
 
     TODO allow overriding amino acid names"""
+    using_TUs = True if TU_frame is None else True
 
-    gb_file = SeqIO.read(filename, 'gb')
     full_seq = str(gb_file.seq)
 
     tRNA_aa = {}
@@ -115,8 +126,8 @@ def build_reactions_from_genbank(me_model, filename, using_TUs=False):
         strand = '+' if feature.strand == 1 else '-'
 
         # Create transcribed gene object with all important attributes
-        gene = add_transcribed_gene(me_model, bnum, left_pos,
-                                    right_pos, seq, strand, RNA_type)
+        gene = add_transcribed_gene_w_info(me_model, bnum, left_pos,
+                                           right_pos, seq, strand, RNA_type)
 
         # Add demands for RNA if using TUs to not force translation
         if using_TUs:
@@ -177,7 +188,7 @@ def add_met_info(me_model, met_info, compartment_lookup, generic_ions=False):
         compartment = "_c"
         ion_type_list = ['divalent', 'monovalent']
         for type in ion_type_list:
-            new_met = cobra.Metabolite('generic_%s_%s' % (type, compartment))
+            new_met = cobra.Metabolite('generic_%s%s' % (type, compartment))
             new_met.name = 'Generic ' + type + ' ion'
             me_model.add_metabolites([new_met])
 
@@ -215,8 +226,8 @@ def add_sources_and_sinks(me_model, sources_sinks, source_amounts,
         me_model.add_reaction(reaction)
         reaction.add_metabolites({me_model.metabolites.get_by_id(met_id): -1})
         # set bounds on exchanges
-        if reaction.id.startswith("EX_") and met_id in source_amounts.index:
-            reaction.lower_bound = -source_amounts.amount[met_id]
+        if reaction.id.startswith("EX_") and met in source_amounts.index:
+            reaction.lower_bound = -source_amounts.amount[met]
 
 
 def add_ecoli_M_model_content(me_model, m_model_id, met_info, rxn_info,
@@ -238,11 +249,13 @@ def add_ecoli_M_model_content(me_model, m_model_id, met_info, rxn_info,
 
 def add_generic_rRNAs(me_model):
 
-    rRNA_type_list = ['generic_16s_rRNAs', 'generic_23s_rRNAs', 'generic_5s_rRNAs']
+    rRNA_type_list = ['generic_16s_rRNAs', 'generic_23s_rRNAs',
+                      'generic_5s_rRNAs']
 
     for rRNA_type in rRNA_type_list:
         for rRNA in eval(rRNA_type):
             rRNA_id = 'RNA_' + rRNA
+            me_model.add_metabolites([TranscribedGene(rRNA_type)])
             new_rxn = cobra.Reaction("rRNA_" + rRNA + '_to_generic')
             me_model.add_reaction(new_rxn)
             new_rxn.reaction = rRNA_id + ' <=> ' + rRNA_type
@@ -283,7 +296,7 @@ def add_ribosomes(me_model):
         mod = add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme)
         ribosome_modifications[mod.id] = -num_mods
 
-    ribosome_components['generic_16'] = 1
+    ribosome_components['generic_16s_rRNAs'] = 1
 
     # 30S Listed as [rpsA -rpsU], sra, [rplA-rplF],
     # rplI, [rplK-rplY], [rpmA-rpmJ]
@@ -295,13 +308,17 @@ def add_ribosomes(me_model):
     for ribosome_subunit in ribosome_subunit_list:
         protein_dict = eval(ribosome_subunit)
         for protein, amount in protein_dict.items():
+            try:
+                me_model.add_metabolites([Complex(protein)])
+            except:
+                pass
             ribosome_components[protein] = amount
 
     ribosome_components['mg2_c'] = 60
 
     # 50s reactions
-    ribosome_components['generic_23s'] = 1
-    ribosome_components['generic_5s'] = 1
+    ribosome_components['generic_23s_rRNAs'] = 1
+    ribosome_components['generic_5s_rRNAs'] = 1
     ribosome_components['mg2_c'] += 111
 
     # get ribosome ready for translation
@@ -312,7 +329,7 @@ def add_ribosomes(me_model):
     ribosome_components['InfA_mono'] = 1
     ribosome_components['InfC_mono'] = 1
 
-    # 1 b3168_assumedMonomer_gtp (InfB_mono) + 1 rib_30_IF1_IF3 --> 1 rib_30_ini
+    # 1 b3168_assumedMonomer_gtp(InfB_mono) + 1 rib_30_IF1_IF3 --> 1 rib_30_ini
     ribosome_components['InfB_mono'] = 1
     ribosome_components['gtp_c'] = 1
 
@@ -324,7 +341,7 @@ def add_RNA_polymerase(me_model):
     RNAP_complex = ComplexData("RNA_Polymerase", me_model)
     RNAP_components = RNAP_complex.stoichiometry
 
-    #for component, value in eval('RNA_polymerase_core').items():
+    # for component, value in eval('RNA_polymerase_core').items():
     #    RNAP_components[component] = value
     RNAP_components['hRNAP'] = 1
     RNAP_complex.create_complex_formation()
@@ -335,7 +352,8 @@ def find_genes_within_TU(me_model, TU, RNA_pos_dict):
     for string_pos in RNA_pos_dict:
         pos = string_pos.split(',')
         if int(pos[0]) + 1 >= int(TU.start) and int(pos[1]) <= int(TU.stop):
-            if me_model.metabolites.get_by_id(RNA_pos_dict[string_pos]).strand == TU.strand:
+            gene = RNA_pos_dict[string_pos]
+            if me_model.metabolites.get_by_id(gene).strand == TU.strand:
                 loci.append(RNA_pos_dict[string_pos].replace('RNA_', ''))
 
     return set(loci)
@@ -346,7 +364,8 @@ def should_TU_be_excised(me_model, loci):
     for locus in loci:
         try:
             gene = me_model.metabolites.get_by_id('RNA_'+locus)
-            if gene.RNA_type == 'tRNA' or ('RNA_'+locus).RNA_type == 'rRNA' or locus == 'b3123':
+            RNA_type = gene.RNA_type
+            if RNA_type == 'tRNA' or RNA_type == 'rRNA' or locus == 'b3123':
                 excise = True
         except:
             pass
@@ -358,12 +377,13 @@ def find_existing_genome_region(me_model, left_pos, right_pos, TU_strand,
     try:
         TU_name = RNA_pos_dict[str(left_pos)+','+str(right_pos)]
     except:
-        TU_name = 'excised_TU_%s_%i_%i_%s' % (TU_strand.replace('-','M').replace('+','P'),
-                                                  left_pos, right_pos, has_5prime_triphosphate)
+        TU_name = 'excised_TU_%s_%i_%i_%s' % \
+            (TU_strand.replace('-', 'M').replace('+', 'P'), left_pos,
+             right_pos, has_5prime_triphosphate)
         try:
-            me.metabolites.get_by_id(TU_name)
+            me_model.metabolites.get_by_id(TU_name)
         except:
-            #print 'Creating new transcribed gene: ', TU_name
+            # print 'Creating new transcribed gene: ', TU_name
             new_TU = TranscribedGene(TU_name)
             new_TU.left_pos = left_pos
             new_TU.right_pos = right_pos
@@ -376,8 +396,7 @@ def find_existing_genome_region(me_model, left_pos, right_pos, TU_strand,
     return TU_name
 
 
-def find_and_update_gene_at_left_pos(me_model, bnum_set, TU_left,
-                                     gene_left_pos, TU_strand,
+def find_and_update_gene_at_left_pos(me_model, bnum_set, TU, gene_left_pos,
                                      excised_TU_portions,
                                      excised_TU_portion_count):
     # Check to see which rRNA, tRNA this segment represents
@@ -385,13 +404,13 @@ def find_and_update_gene_at_left_pos(me_model, bnum_set, TU_left,
         gene = me_model.metabolites.get_by_id('RNA_'+bnum)
         if gene.left_pos == gene_left_pos:
             gene_right_pos = gene.right_pos
-            excised_portion_name = gene_id
-            excised_gene = me_model.metabolites.get_by_id(gene_id)
+            excised_portion_name = gene.id
+            excised_gene = me_model.metabolites.get_by_id(gene.id)
 
     # tRNA, rRNA loses 5' triphosphate if cleaved
-    if gene_left_pos != TU_left and TU_strand == '+':
+    if gene_left_pos != TU.start and TU.strand == '+':
         excised_gene.has_5prime_triphosphate = 'False'
-    if gene_right_pos != TU_right and TU_strand == '-':
+    if gene_right_pos != TU.stop and TU.strand == '-':
         excised_gene.has_5prime_triphosphate = 'False'
 
     excised_TU_portions.append(excised_portion_name)
@@ -399,30 +418,83 @@ def find_and_update_gene_at_left_pos(me_model, bnum_set, TU_left,
     return gene_right_pos
 
 
-def process_ends_of_TU_segment(me_model, TU_left, RNA_left_pos, TU_strand,
-                                excised_TU_portions,
-                                excised_TU_portion_count, right_flag):
+def process_ends_of_TU_segment(me_model, TU, RNA_pos,
+                               excised_TU_portions, RNA_pos_dict,
+                               excised_TU_portion_count, right_flag):
 
     # (+) strain has not been sliced on the left side yet, preserving
     # triphosphate group
     if right_flag:
-        has_5prime_triphosphate = 'True' if TU_strand == '-' else 'False'
+        right_pos = TU.stop
+        left_pos = RNA_pos
+        has_5prime_triphosphate = 'True' if TU.strand == '-' else 'False'
     else:
-        has_5prime_triphosphate = 'False' if TU_strand == '-' else 'True'
-
+        right_pos = RNA_pos
+        left_pos = TU.start
+        has_5prime_triphosphate = 'False' if TU.strand == '-' else 'True'
 
     # Add TranscribedGene for this segment if not already in model
-    TU_id = find_existing_genome_region(me_model, TU_left, RNA_left_pos,
-                                        TU_strand, has_5prime_triphosphate)
+    TU_id = find_existing_genome_region(me_model, left_pos, right_pos,
+                                        TU.strand, RNA_pos_dict,
+                                        has_5prime_triphosphate)
 
     excised_TU_portions.append(TU_id)
     excised_TU_portion_count += 1
 
 
-def transcribe_all_TU_combos(me_model, TU, TU_left, TU_right, TU_strand,
-                             bnum_set, TU_seq, TU_pieces, RNA_pos_dict):
+def find_and_add_TU_pieces(me_model, TU, left_combo_list, RNA_pos_dict,
+                           bnum_set, TU_pieces):
 
-    # Create list of all left strand positions of tRNA, rRNA, sRNA that will be excised
+
+    excised_TU_portions = []
+    excised_TU_portion_count = 1
+
+    # Look at RNA portion between TU left_pos
+    # and first tRNA or rRNA
+    if left_combo_list[0] > TU.start:
+        RNA_left = left_combo_list[0]-1
+        process_ends_of_TU_segment(me_model, TU, RNA_left, excised_TU_portions,
+                                   RNA_pos_dict, excised_TU_portion_count,
+                                   False)
+
+    # iterate rest of possible segments
+    while len(left_combo_list) > 0:
+        gene_left_pos = left_combo_list[0]
+        gene_right_pos = \
+            find_and_update_gene_at_left_pos(me_model, bnum_set, TU,
+                                             gene_left_pos,
+                                             excised_TU_portions,
+                                             excised_TU_portion_count)
+
+        left_combo_list.pop(left_combo_list.index(gene_left_pos))
+
+        # Deal with the last (far right) segment
+        if len(left_combo_list) == 0:
+            if TU.stop > gene_right_pos:
+                process_ends_of_TU_segment(me_model, TU, gene_right_pos,
+                                           excised_TU_portions, RNA_pos_dict,
+                                           excised_TU_portion_count, True)
+
+        # Add in excised TU for next segment, if not tRNA, rRNA
+        else:
+            next_left = left_combo_list[0]
+            TU_id = find_existing_genome_region(me_model, gene_right_pos+1,
+                                                next_left-1, TU.strand,
+                                                RNA_pos_dict, 'False')
+            excised_TU_portion_count += 1
+            excised_TU_portions.append(TU_id)
+
+    if len(excised_TU_portions) > 0:
+        TU_pieces[TU.TU_id].append(excised_TU_portions)
+
+    return TU_pieces
+
+
+def find_all_TU_combos(me_model, TU, bnum_set, TU_seq, TU_pieces,
+                       RNA_pos_dict):
+
+    # Create list of all left strand positions of
+    # tRNA, rRNA, sRNA that will be excised
     all_lefts = []
     for bnum in bnum_set:
         all_lefts.append(me_model.metabolites.get_by_id('RNA_'+bnum).left_pos)
@@ -438,72 +510,103 @@ def transcribe_all_TU_combos(me_model, TU, TU_left, TU_right, TU_strand,
             left_combo_list = list(left_combo)
             left_combo_list.sort()  # ascending by default
 
-            if TU not in TU_pieces:
-                TU_pieces[TU] = []
+            if TU.TU_id not in TU_pieces:
+                TU_pieces[TU.TU_id] = []
 
             if len(left_combo_list) == 0:
-                TU_pieces[TU].append([])
+                TU_pieces[TU.TU_id].append([])
                 continue
 
-            excised_TU_portions = []
-            excised_TU_portion_count = 1
+            TU_pieces = find_and_add_TU_pieces(me_model, TU, left_combo_list,
+                                               RNA_pos_dict, bnum_set,
+                                               TU_pieces)
+    return TU_pieces
 
-            # Look at RNA portion between TU left_pos
-            # and first tRNA or rRNA
-            if left_combo_list[0] > TU_left:
-                process_ends_of_TU_segment(me_model, TU_left, left_combo_list[0]-1,
-                                            TU_strand, excised_TU_portions,
-                                            excised_TU_portion_count, False)
 
-            # iterate rest of possible segments
-            while len(left_combo_list) > 0:
-                gene_left_pos = left_combo_list[0]
-                gene_right_pos = \
-                    find_and_update_gene_at_left_pos(me_model, bnum_set, TU_left,
-                                                     gene_left_pos, TU_strand,
-                                                     excised_TU_portions,
-                                                     excised_TU_portion_count)
+def add_excision_machinery(me_model):
 
-                left_combo_list.pop(left_combo_list.index(gene_left_pos))
+    excision_types = ['rRNA_containing', 'monocistronic',
+                      'polycistronic_wout_rRNA']
+    for excision in excision_types:
+        excision_dict = {}
+        r = cobra.Reaction('combine_' + excision + '_excision_machinery')
+        for machine in eval(excision):
+            for ion in eval('divalent_list'):
+                machine = machine.replace(ion, 'generic_divalent')
+            excision_dict[Metabolite(machine)] = -1
+        excision_dict[Metabolite(excision + '_excision_set')] = 1
+        r.add_metabolites(excision_dict)
+        me_model.add_reaction(r)
 
-                # Deal with the last (far right) segment
-                if len(left_combo_list) == 0:
-                    if TU_right > gene_right_pos:
+        # Add modification data objects for TU excision reactions
+        rRNA_mod = ModificationData(excision + '_excision', me_model)
+        rRNA_mod.stoichiometry = {'h2o_c': -1, 'h_c': 1}
+        rRNA_mod.enzyme = excision + '_excision_set'
 
-                        if left_combo_list[0] > TU_left:
-                                process_ends_of_TU_segment(me_model, TU_left, left_combo_list[0]-1,
-                                            TU_strand, excised_TU_portions,
-                                            excised_TU_portion_count, True)
-                        # (-) strain has not been sliced on the right side yet, preserving
-                        # triphosphate group
-                        if TU_strand == '-':
-                            has_5prime_triphosphate = 'True'
-                        else:
-                            has_5prime_triphosphate = 'False'
 
-                        TU_id = find_existing_genome_region(me_model, gene_right_pos+1, TU_right,
-                                                            TU_strand, RNA_pos_dict,
-                                                            has_5prime_triphosphate)
+def splice_TUs(me_model, TU_pieces, generic_flag=False):
 
-                        excised_TU_portions.append(TU_id)
-                        excised_TU_portion_count += 1
+    add_generic_RNase(me_model, generic_flag=generic_flag)
+    add_excision_machinery(me_model)
 
-                # Add in excised TU for next segment, if not tRNA, rRNA
+    for TU, combos_of_pieces in TU_pieces.iteritems():
+        for i, pieces in enumerate(combos_of_pieces):
+            tRNA_count = 0
+            rRNA_count = 0
+            sRNA_count = 0  # not supported
+
+            if len(pieces) < 1:  # no fragments to splice
+                continue
+
+            transcription = TranscriptionReaction(
+                'transcription_' + TU + '_slice_' + str(i))
+            transcription_data = TranscriptionData(
+                TU + '_slice_' + str(i), me_model)
+            full_TU_data = me_model.transcription_data.get_by_id(TU)
+            transcription_data.nucleotide_sequence = \
+                full_TU_data.nucleotide_sequence
+
+            RNA_products = set()
+
+            for piece in pieces:
+                RNA_object = me_model.metabolites.get_by_id(piece)
+                if RNA_object.RNA_type == 'tRNA':
+                    tRNA_count += 1
+                elif RNA_object.RNA_type == 'rRNA':
+                    rRNA_count += 1
                 else:
-                    next_left = left_combo_list[0]
-                    TU_id = find_existing_genome_region(me_model, gene_right_pos+1,
-                                                        next_left-1, TU_strand, 'False')
-                    excised_TU_portion_count += 1
-                    excised_TU_portions.append(TU_id)
+                    sRNA_count += 1
+                RNA_products.add(piece)
 
-            if len(excised_TU_portions) > 0:
-                TU_pieces[TU].append(excised_TU_portions)
+            if rRNA_count > 0:
+                transcription_data.modifications[
+                    'rRNA_containing_excision'] = len(pieces)-1
+            elif tRNA_count == 1 and rRNA_count == 0:
+                transcription_data.modifications[
+                    'monocistronic_excision'] = len(pieces)-1
+            elif tRNA_count > 1 and rRNA_count == 0:
+                transcription_data.modifications[
+                    'polycistronic_wout_rRNA_excision'] = len(pieces)-1
+            else:  # only applies to rnpB
+                transcription_data.modifications[
+                    'monocistronic_excision'] = len(pieces)-1
+
+            transcription_data.RNA_products = RNA_products
+            transcription.transcription_data = transcription_data
+
+            me_model.add_reaction(transcription)
+            transcription.update()
 
 
-def add_TUs_and_translation(me_model, gb_file, TU_frame, RNA_pos_dict):
+def add_TUs_and_translation(me_model, filename, TU_frame=None,
+                            generic_flag=False):
+
+    gb_file = SeqIO.read(filename, 'gb')
     full_seq = str(gb_file.seq)
-    TU_pieces = {}
+    RNA_pos_dict = build_reactions_from_genbank(me_model, gb_file,
+                                                TU_frame=TU_frame)
 
+    TU_pieces = {}
     for index, TU in TU_frame.iterrows():
         seq = full_seq[TU.start:TU.stop]
         if TU.strand == '-':
@@ -514,13 +617,69 @@ def add_TUs_and_translation(me_model, gb_file, TU_frame, RNA_pos_dict):
         excise = should_TU_be_excised(me_model, loci)
 
         if not excise:
-            add_transcription_reaction(me_model, index, loci, seq)
+            add_transcription_reaction(me_model, TU.TU_id, loci, seq)
 
         else:
-            TU_data = TranscriptionData(index, me_model)
+            TU_data = TranscriptionData(TU.TU_id, me_model)
             TU_data.nucleotide_sequence = seq
             TU_data.RNA_products = loci
             # Must splice TU to form tRNA, rRNA, sRNA (not supported)
-            transcribe_all_TU_combos(me_model, index, TU.start, TU.stop,
-                                     TU.strand, loci, seq, TU_pieces,
-                                     RNA_pos_dict)
+            TU_pieces = find_all_TU_combos(me_model, TU, loci, seq, TU_pieces,
+                                           RNA_pos_dict)
+    splice_TUs(me_model, TU_pieces, generic_flag=generic_flag)
+
+
+def add_dummy_reactions(me_model, dna_seq):
+    dummy = StoichiometricData("dummy_reaction", me_model)
+    dummy.lower_bound = 0
+    dummy.upper_bound = 1000
+    dummy._stoichiometry = {}
+
+    add_transcription_reaction(me_model, "dummy", {"dummy"}, dna_seq)
+
+    me_model.add_metabolites(TranslatedGene("protein_" + "dummy"))
+    add_translation_reaction(me_model, "dummy", dna_sequence=dna_seq,
+                             update=True)
+
+    complex_data = ComplexData("CPLX_dummy", me_model)
+    complex_data.stoichiometry = {}
+    complex_data.stoichiometry["protein_" + "dummy"] = 1
+    complex_data.create_complex_formation()
+
+
+def add_complex_stoichiometry_data(me_model, ME_complex_dict):
+    for cplx, stoichiometry in ME_complex_dict.iteritems():
+        complex_data = ComplexData(cplx, me_model)
+
+        # stoichiometry is a defaultdict so much build as follows
+        for complex, value in stoichiometry.items():
+            complex_data.stoichiometry[complex] = value
+
+
+def add_modication_data(me_model, mod_id, mod_dict, enzyme=None, keff=65):
+    try:
+        mod = me_model.modification_data.get_by_id(mod_id)
+    except:
+        mod = ModificationData(mod_id, me_model)
+        mod.stoichiometry = mod_dict
+
+    if not enzyme:
+        mod.enzyme = enzyme
+        mod.keff = keff
+
+
+def add_complex_modification_data(me_model, modification_dict):
+    for mod_cplx_id, mod_complex_info in iteritems(modification_dict):
+
+        unmod_cplx_id, mods = mod_complex_info
+        unmod_cplx = me_model.complex_data.get_by_id(unmod_cplx_id)
+
+        cplx = ComplexData(mod_cplx_id, me_model)
+        cplx.stoichiometry = unmod_cplx.stoichiometry
+        cplx.translocation = unmod_cplx.translocation
+        cplx.chaperones = unmod_cplx.chaperones
+
+        for mod_comp, mod_count in iteritems(mods):
+            mod_id = "mod_" + mod_comp
+            cplx.modifications[mod_id] = -mod_count
+            add_modication_data(me_model, mod_id, {mod_comp: -1})
