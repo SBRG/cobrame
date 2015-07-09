@@ -544,6 +544,39 @@ def add_excision_machinery(me_model):
         rRNA_mod.enzyme = excision + '_excision_set'
 
 
+def count_and_add_excisions(me_model, pieces, transcription_data):
+
+    tRNA_count = 0
+    rRNA_count = 0
+    sRNA_count = 0  # not supported
+
+    RNA_products = set()
+
+    for piece in pieces:
+        RNA_object = me_model.metabolites.get_by_id(piece)
+        if RNA_object.RNA_type == 'tRNA':
+            tRNA_count += 1
+        elif RNA_object.RNA_type == 'rRNA':
+            rRNA_count += 1
+        else:
+            sRNA_count += 1
+        RNA_products.add(piece)
+
+    if rRNA_count > 0:
+        transcription_data.modifications[
+            'rRNA_containing_excision'] = len(pieces)-1
+    elif tRNA_count == 1 and rRNA_count == 0:
+        transcription_data.modifications[
+            'monocistronic_excision'] = len(pieces)-1
+    elif tRNA_count > 1 and rRNA_count == 0:
+        transcription_data.modifications[
+            'polycistronic_wout_rRNA_excision'] = len(pieces)-1
+    else:  # only applies to rnpB
+        transcription_data.modifications[
+            'monocistronic_excision'] = len(pieces)-1
+    return RNA_products
+
+
 def splice_TUs(me_model, TU_pieces, generic_flag=False):
 
     add_generic_RNase(me_model, generic_flag=generic_flag)
@@ -551,9 +584,6 @@ def splice_TUs(me_model, TU_pieces, generic_flag=False):
 
     for TU, combos_of_pieces in TU_pieces.iteritems():
         for i, pieces in enumerate(combos_of_pieces):
-            tRNA_count = 0
-            rRNA_count = 0
-            sRNA_count = 0  # not supported
 
             if len(pieces) < 1:  # no fragments to splice
                 continue
@@ -566,30 +596,9 @@ def splice_TUs(me_model, TU_pieces, generic_flag=False):
             transcription_data.nucleotide_sequence = \
                 full_TU_data.nucleotide_sequence
 
-            RNA_products = set()
-
-            for piece in pieces:
-                RNA_object = me_model.metabolites.get_by_id(piece)
-                if RNA_object.RNA_type == 'tRNA':
-                    tRNA_count += 1
-                elif RNA_object.RNA_type == 'rRNA':
-                    rRNA_count += 1
-                else:
-                    sRNA_count += 1
-                RNA_products.add(piece)
-
-            if rRNA_count > 0:
-                transcription_data.modifications[
-                    'rRNA_containing_excision'] = len(pieces)-1
-            elif tRNA_count == 1 and rRNA_count == 0:
-                transcription_data.modifications[
-                    'monocistronic_excision'] = len(pieces)-1
-            elif tRNA_count > 1 and rRNA_count == 0:
-                transcription_data.modifications[
-                    'polycistronic_wout_rRNA_excision'] = len(pieces)-1
-            else:  # only applies to rnpB
-                transcription_data.modifications[
-                    'monocistronic_excision'] = len(pieces)-1
+            RNA_products = \
+                count_and_add_excisions(me_model, pieces,
+                                        transcription_data)
 
             transcription_data.RNA_products = RNA_products
             transcription.transcription_data = transcription_data
@@ -669,17 +678,84 @@ def add_modication_data(me_model, mod_id, mod_dict, enzyme=None, keff=65):
 
 
 def add_complex_modification_data(me_model, modification_dict):
-    for mod_cplx_id, mod_complex_info in iteritems(modification_dict):
+    for mod_complex_id, mod_complex_info in iteritems(modification_dict):
 
-        unmod_cplx_id, mods = mod_complex_info
-        unmod_cplx = me_model.complex_data.get_by_id(unmod_cplx_id)
+        unmod_complex_id, mods = mod_complex_info
+        unmod_complex = me_model.complex_data.get_by_id(unmod_complex_id)
 
-        cplx = ComplexData(mod_cplx_id, me_model)
-        cplx.stoichiometry = unmod_cplx.stoichiometry
-        cplx.translocation = unmod_cplx.translocation
-        cplx.chaperones = unmod_cplx.chaperones
+        cplx = ComplexData(mod_complex_id, me_model)
+        cplx.stoichiometry = unmod_complex.stoichiometry
+        cplx.translocation = unmod_complex.translocation
+        cplx.chaperones = unmod_complex.chaperones
 
         for mod_comp, mod_count in iteritems(mods):
             mod_id = "mod_" + mod_comp
             cplx.modifications[mod_id] = -mod_count
             add_modication_data(me_model, mod_id, {mod_comp: -1})
+
+
+def add_complex(me_model, modifcation_dict, ME_complex_dict):
+
+    add_complex_stoichiometry_data(me_model, ME_complex_dict)
+
+    add_complex_modification_data(me_model, modifcation_dict)
+
+
+def find_associated_complexes(rxnToModCplxDict, reaction_data,
+                              rxn_info):
+    try:
+        complexes_list = rxnToModCplxDict[reaction_data.id]
+    except KeyError:
+        # These are orphans catalyzed by a dummy
+        if reaction_data.id == "dummy_reaction" or \
+                not rxn_info.is_spontaneous[reaction_data.id]:
+            complexes_list = ["CPLX_dummy"]
+        # These are truly spontaneous
+        else:
+            complexes_list = [None]
+    return complexes_list
+
+
+def add_and_update_metabolic_reaction(me_model, reaction_data, complex_id,
+                                      reverse_flag, keff=65,
+                                      update=False, create_new=True):
+    complex_data = me_model.complex_data.get_by_id(complex_id) if complex_id else None
+
+    direction = "_REV_" if reverse_flag is True else "_FWD_"
+
+    r = MetabolicReaction(reaction_data.id + direction + str(complex_id))
+    me_model.add_reaction(r)
+    r.keff = keff
+    r.stoichiometric_data = reaction_data
+    r.reverse = reverse_flag
+    if complex_data is not None:
+        r.complex_data = complex_data
+    if update:
+        r.update(create_new=create_new)
+
+
+def add_complexes_and_rxn_data(me_model, reaction_data, complexes_list,
+                               keff=65, update=False,
+                               create_new=False):
+    for complex_id in complexes_list:
+
+        if reaction_data.lower_bound < 0:
+            reverse_flag = True
+            add_and_update_metabolic_reaction(me_model, reaction_data, complex_id,
+                                              reverse_flag, keff=keff, update=update,
+                                              create_new=create_new)
+        if reaction_data.upper_bound > 0:
+            reverse_flag = False
+            add_and_update_metabolic_reaction(me_model, reaction_data, complex_id,
+                                              reverse_flag, keff=keff, update=update,
+                                              create_new=create_new)
+
+
+def add_metabolic_reactions(me_model, reaction_data, rxnToModCplxDict,
+                            rxn_info, update=False,
+                            create_new=False):
+
+    complexes_list = find_associated_complexes(rxnToModCplxDict,
+                                               reaction_data, rxn_info)
+    add_complexes_and_rxn_data(me_model, reaction_data, complexes_list,
+                               update=update, create_new=create_new)
