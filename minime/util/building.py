@@ -8,10 +8,6 @@ import cobra
 import itertools
 
 
-class gene_portion_object(object):
-    pass
-
-
 def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
                                update=True):
     """add a transcription reaction"""
@@ -49,10 +45,6 @@ def add_transcribed_gene_w_info(me_model, bnum, left_pos, right_pos, seq,
 def add_translation_reaction(me_model, bnum, amino_acid_sequence=None,
                              dna_sequence=None, update=False):
 
-    # try:
-    # except KeyError:
-    #    continue
-    # translaion.translation_data.compute_sequence_from_DNA(dna_sequence)
     translation = TranslationReaction("translation_" + bnum)
     me_model.add_reaction(translation)
 
@@ -445,7 +437,6 @@ def process_ends_of_TU_segment(me_model, TU, RNA_pos,
 def find_and_add_TU_pieces(me_model, TU, left_combo_list, RNA_pos_dict,
                            bnum_set, TU_pieces):
 
-
     excised_TU_portions = []
     excised_TU_portion_count = 1
 
@@ -719,7 +710,10 @@ def find_associated_complexes(rxnToModCplxDict, reaction_data,
 def add_and_update_metabolic_reaction(me_model, reaction_data, complex_id,
                                       reverse_flag, keff=65,
                                       update=False, create_new=True):
-    complex_data = me_model.complex_data.get_by_id(complex_id) if complex_id else None
+    if complex_id:
+        complex_data = me_model.complex_data.get_by_id(complex_id)
+    else:
+        complex_data = None
 
     direction = "_REV_" if reverse_flag is True else "_FWD_"
 
@@ -741,13 +735,15 @@ def add_complexes_and_rxn_data(me_model, reaction_data, complexes_list,
 
         if reaction_data.lower_bound < 0:
             reverse_flag = True
-            add_and_update_metabolic_reaction(me_model, reaction_data, complex_id,
-                                              reverse_flag, keff=keff, update=update,
+            add_and_update_metabolic_reaction(me_model, reaction_data,
+                                              complex_id, reverse_flag,
+                                              keff=keff, update=update,
                                               create_new=create_new)
         if reaction_data.upper_bound > 0:
             reverse_flag = False
-            add_and_update_metabolic_reaction(me_model, reaction_data, complex_id,
-                                              reverse_flag, keff=keff, update=update,
+            add_and_update_metabolic_reaction(me_model, reaction_data,
+                                              complex_id, reverse_flag,
+                                              keff=keff, update=update,
                                               create_new=create_new)
 
 
