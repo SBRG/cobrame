@@ -60,6 +60,7 @@ class ModificationData(ProcessData):
         self.stoichiometry = {}
         self.enzyme = None
         self.modification_keff = None
+        self.keff = 65
 
     def get_complex_data(self):
         for i in self._model.complex_data:
@@ -121,6 +122,8 @@ class TranscriptionData(ProcessData):
         model.transcription_data.append(self)
         self.nucleotide_sequence = ''
         self.RNA_products = RNA_products
+        # {ModificationData.id : number}
+        self.modifications = {}
 
     @property
     def nucleotide_count(self):
