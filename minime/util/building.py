@@ -1,4 +1,5 @@
 from Bio import SeqIO
+from six import iteritems
 
 from minime import util
 from minime import *
@@ -161,82 +162,38 @@ def fix_id(id_str):
     return id_str.replace("_DASH_", "__")
 
 
-def add_met_info(me_model, met_info, compartment_lookup, generic_ions=False):
+def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
+    for met in m_model.metabolites:
+        if met.id in complex_metabolite_ids:
+            new_met = Complex(met.id)
+        elif met.id.startswith("RNA"):
+            new_met = TranscribedGene(met.id)
+        else:
+            new_met = Metabolite(met.id)
+        new_met.name = met.name
+        new_met.formula = met.formula
+        new_met.compartment = met.compartment
+        new_met.charge = met.charge
+        new_met.annotation = met.annotation
+        new_met.notes = met.notes
+        me_model.add_metabolites(new_met)
 
-    for met_id in met_info.index:
-        fixed_id = fix_id(met_id)
-        for compartment in met_info.compartment[met_id].split("AND"):
-            compartment = compartment.strip()
-            if compartment == "No_Compartment":
-                print "Assigned %s to e" % met_id
-                compartment = me_model.compartments["e"]
-            new_met = Metabolite(
-                fixed_id + "_" + compartment_lookup[compartment])
-            new_met.name = met_info.name[met_id]
-            new_met.formula = met_info.formula[met_id]
-            me_model.add_metabolites(new_met)
+    for reaction in m_model.reactions:
+        if reaction.id.startswith("EX_") or reaction.id.startswith("DM_"):
+            new_reaction = cobra.Reaction(reaction.id)
+            me_model.add_reaction(new_reaction)
+            new_reaction.lower_bound = reaction.lower_bound
+            new_reaction.upper_bound = reaction.upper_bound
+            for met, stoichiometry in iteritems(reaction.metabolites):
+                new_reaction.add_metabolites(
+                    {me_model.metabolites.get_by_id(met.id): stoichiometry})
 
-    if generic_ions:
-        compartment = "_c"
-        ion_type_list = ['divalent', 'monovalent']
-        for type in ion_type_list:
-            new_met = cobra.Metabolite('generic_%s%s' % (type, compartment))
-            new_met.name = 'Generic ' + type + ' ion'
-            me_model.add_metabolites([new_met])
-
-            for ion in eval(type + '_list'):  # load these lists from ecolime
-                new_rxn = cobra.Reaction(ion + compartment + '_to_generic')
-                ion_dict = {}
-                new_met2 = me_model.metabolites.get_by_id(ion + compartment)
-                ion_dict[new_met2] = -1
-                ion_dict[new_met] = 1
-                new_rxn.add_metabolites(ion_dict)
-                me_model.add_reaction(new_rxn)
-
-
-def add_rxn_info(me_model, rxn_info, rxn_dict):
-    for rxn_id in rxn_info.index:
-        reaction = StoichiometricData(rxn_id, me_model)
-        reaction._stoichiometry = {fix_id(k): v
-                                   for k, v in rxn_dict[rxn_id].items()}
-        reaction.lower_bound = \
-            -1000. if rxn_info.is_reversible[rxn_id] else 0.
-        reaction.upper_bound = 1000.
-
-
-def add_sources_and_sinks(me_model, sources_sinks, source_amounts,
-                          compartment_lookup):
-
-    sources_sinks.index = [fix_id(i) for i in sources_sinks.index]
-    source_amounts.index = [fix_id(i) for i in source_amounts.index]
-
-    for met in sources_sinks.index:
-        met_id = met + "_" + compartment_lookup[sources_sinks.compartment[met]]
-        # EX_ or DM_ + met_id
-        reaction_id = sources_sinks.rxn_id[met][:3] + met_id
-        reaction = cobra.Reaction(reaction_id)
-        me_model.add_reaction(reaction)
-        reaction.add_metabolites({me_model.metabolites.get_by_id(met_id): -1})
-        # set bounds on exchanges
-        if reaction.id.startswith("EX_") and met in source_amounts.index:
-            reaction.lower_bound = -source_amounts.amount[met]
-
-
-def add_ecoli_M_model_content(me_model, m_model_id, met_info, rxn_info,
-                              rxn_dict, sources_sinks_info, source_amounts,
-                              generic_ions=False):
-
-    me_model.compartments = {"p": "Periplasm", "e": "Extra-organism",
-                             "c": "Cytosol"}
-    compartment_lookup = {v: k for k, v in me_model.compartments.items()}
-
-    add_met_info(me_model, met_info, compartment_lookup,
-                 generic_ions=generic_ions)
-
-    add_rxn_info(me_model, rxn_info, rxn_dict)
-
-    add_sources_and_sinks(me_model, sources_sinks_info, source_amounts,
-                          compartment_lookup)
+        else:
+            reaction_data = StoichiometricData(reaction.id, me_model)
+            reaction_data.lower_bound = reaction.lower_bound
+            reaction_data.upper_bound = reaction.upper_bound
+            reaction_data._stoichiometry = {k.id: v for k, v
+                                            in iteritems(reaction.metabolites)}
 
 
 def add_generic_rRNAs(me_model):
@@ -345,6 +302,10 @@ def find_genes_within_TU(me_model, TU, RNA_pos_dict):
         pos = string_pos.split(',')
         if int(pos[0]) + 1 >= int(TU.start) and int(pos[1]) <= int(TU.stop):
             gene = RNA_pos_dict[string_pos]
+            try:
+                me_model.metabolites.get_by_id(gene).strand
+            except AttributeError:
+                print gene
             if me_model.metabolites.get_by_id(gene).strand == TU.strand:
                 loci.append(RNA_pos_dict[string_pos].replace('RNA_', ''))
 
