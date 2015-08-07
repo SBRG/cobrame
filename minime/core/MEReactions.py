@@ -175,6 +175,8 @@ class TranscriptionReaction(Reaction):
                 new_stoichiometry[metabolites.get_by_id(modification.enzyme)] -= \
                     mu / modification.keff / 3600.
 
+        # add excision of nucleotides around tRNA, rRNA, and ncRNA
+
 
         base_counts = self.transcription_data.nucleotide_count
 
@@ -187,7 +189,7 @@ class TranscriptionReaction(Reaction):
                              add_to_container_model=False)
 
         # add to biomass
-        RNA_mass = compute_RNA_mass(base_counts)  # kDa
+        RNA_mass = self.transcription_data.mass  # kDa
         self.add_metabolites({self._model._biomass: RNA_mass},
                              combine=False, add_to_container_model=False)
 

@@ -1,6 +1,8 @@
 from __future__ import division
 from six import iteritems
 
+from dogma import transcription_table
+
 # Mass of amino acids (Daltons) with H and OH removed from either end.
 # This is used to compute protein masses because a water is removed
 # during formation of the amide bond.
@@ -46,13 +48,15 @@ def compute_protein_mass(amino_acid_count):
     return protein_mass / 1000
 
 
-def compute_RNA_mass(nucleotide_count):
+def compute_RNA_mass(DNA_sequence):
     """compute RNA mass in kDA from nucleotide count
 
     nucleotide_count: {nucleotide: number}
 
     """
+    nuc_count = {transcription_table[i]: DNA_sequence.count(i)
+                 for i in set(DNA_sequence)}
     RNA_mass = sum(rna_no_ppi[nuc] * count
-                   for nuc, count in iteritems(nucleotide_count))
+                   for nuc, count in iteritems(nuc_count))
     RNA_mass += 174.951262  # 5' has 3 phosphates
     return RNA_mass / 1000

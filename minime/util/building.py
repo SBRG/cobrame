@@ -1,4 +1,5 @@
 from Bio import SeqIO
+import pandas
 from six import iteritems
 
 from minime import util
@@ -23,21 +24,17 @@ def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
         transcription.update()
 
 
-def add_transcribed_gene_w_info(me_model, bnum, left_pos, right_pos, seq,
-                                strand, RNA_type):
-
-    gene = TranscribedGene('RNA_'+bnum)
+def create_transcribed_gene(me_model, bnum, left_pos, right_pos, seq,
+                            strand, RNA_type):
+    """creates a TranscribedGene object and adds it to the model"""
+    gene = TranscribedGene('RNA_' + bnum)
     gene.left_pos = left_pos
     gene.right_pos = right_pos
     gene.RNA_type = RNA_type
     gene.strand = strand
-
-    if RNA_type != 'mRNA':
-        gene.has_5prime_triphosphate = 'True'
-        gene.seq = seq
-
+    gene.seq = seq
     if strand == '-':
-        gene.seq = util.dogma.reverse_transcribe(seq)
+       gene.seq = util.dogma.reverse_transcribe(seq)
 
     me_model.add_metabolites([gene])
     return gene
@@ -63,10 +60,11 @@ def add_translation_reaction(me_model, bnum, amino_acid_sequence=None,
 
 
 def add_demand_reaction(me_model, bnum):
+    warn("deprecated")
 
-    r = Reaction('DM_' + bnum)
-    me_model.add_reaction(r)
-    r.reaction = 'RNA_' + bnum + ' -> '
+    #r = Reaction('DM_RNA'_+ bnum)
+    #me_model.add_reaction(r)
+    #r.reaction = 'RNA_' + bnum + ' -> '
 
 
 def convert_aa_codes_and_add_charging(me_model, tRNA_aa):
@@ -92,74 +90,103 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa):
         charging_reaction.update()
 
 
-def build_reactions_from_genbank(me_model, gb_file, TU_frame=None):
+def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
+                                 element_types={"CDS", "rRNA", "tRNA", "ncRNA"}):
+
+    # TODO handle special RNAse without type ('b3123')
     """create transcription and translation reactions from a genbank file
 
     TODO allow overriding amino acid names"""
-    using_TUs = True if TU_frame is None else True
-
+    gb_file = SeqIO.read(gb_filename, 'gb')
     full_seq = str(gb_file.seq)
+
+    using_TUs = TU_frame is not None
+    if not using_TUs:
+        # generate a new TU frame where each mRNA gets its own TU
+        TU_frame = pandas.DataFrame.from_dict(
+            {"TU_" + i.qualifiers["locus_tag"][0]:
+                 {"start": int(i.location.start),
+                  "stop": int(i.location.end),
+                  "strand": "+" if i.strand == 1 else "-"}
+             for i in gb_file.features if
+             i.type in element_types},
+            orient="index")
 
     tRNA_aa = {}
     genome_pos_dict = {}
 
+    # create transcription reactions for each TU
+    for TU_id in TU_frame.index:
+        sequence = full_seq[TU_frame.start[TU_id]:TU_frame.stop[TU_id]]
+        if TU_frame.strand[TU_id] == "-":
+            sequence = reverse_transcribe(sequence)
+        add_transcription_reaction(me_model, TU_id, set(), sequence,
+                                   update=False)
+
+    # associate each feature with a TU and add translation
     for feature in gb_file.features:
 
         # Skip if not a gene used in ME construction
-        add_list = ['CDS', 'rRNA', 'tRNA', 'ncRNA']
-        if feature.type not in add_list:
+        # add_list = ['CDS', 'rRNA', 'tRNA', 'ncRNA']
+        if feature.type not in element_types or 'pseudo' in feature.qualifiers:
             continue
 
         # Assign values for all important gene attributes
         bnum = feature.qualifiers["locus_tag"][0]
-        left_pos = feature.location.start
-        right_pos = feature.location.end
-        seq = full_seq[feature.location.start:feature.location.end]
+        left_pos = int(feature.location.start)
+        right_pos = int(feature.location.end)
         RNA_type = 'mRNA' if feature.type == 'CDS' else feature.type
         strand = '+' if feature.strand == 1 else '-'
+        seq = full_seq[feature.location.start:feature.location.end]
+        if strand == "-":
+                seq = reverse_transcribe(seq)
 
-        # Create transcribed gene object with all important attributes
-        gene = add_transcribed_gene_w_info(me_model, bnum, left_pos,
-                                           right_pos, seq, strand, RNA_type)
-
-        # Add demands for RNA if using TUs to not force translation
-        if using_TUs:
-            add_demand_reaction(me_model, bnum)
-        else:  # If not using TUs add transcription reaction directly
-            add_transcription_reaction(me_model, RNA_type + "_" + bnum,
-                                       {bnum}, gene.seq)
-
-        # Add translation reaction for all
-        if feature.type == "CDS":
+        # Add translation reaction for mRNA
+        if RNA_type == "mRNA":
             try:
                 amino_acid_sequence = feature.qualifiers["translation"][0]
-                add_translation_reaction(me_model, bnum, amino_acid_sequence)
-            except KeyError:
+            except KeyError as e:
+                warn("No translated sequence found for " + bnum)
                 continue
+            else:
+                add_translation_reaction(me_model, bnum, amino_acid_sequence)
 
-        # tRNA_aa = ['amino_acid':'tRNA']
+        # tRNA_aa = {'amino_acid':'tRNA'}
         elif feature.type == "tRNA":
             tRNA_aa[bnum] = feature.qualifiers["product"][0].split("-")[1]
 
-        genome_pos_dict[str(left_pos) + ',' + str(right_pos)] = 'RNA_' + bnum
+        # every genetic entity gets transcription
+        gene = create_transcribed_gene(me_model, bnum, left_pos,
+                                       right_pos, seq, strand, RNA_type)
+        # Add in a demand reaction for each mRNA in case the TU makes
+        # multiple products and one needs a sink. If the demand reaction is
+        # used, it means the mRNA doesn't count towards biomass
+
+        demand_reaction = cobra.Reaction("DM_" + gene.id)
+        me_model.add_reaction(demand_reaction)
+        demand_reaction.add_metabolites(
+            {gene: -1, me_model._biomass: -compute_RNA_mass(seq)})
+
+        # associate with TU's
+        parent_TU = TU_frame[
+            (TU_frame.start <= left_pos + 1) & (TU_frame.stop >= right_pos) & (
+            TU_frame.strand == strand)].index
+
+        if len(parent_TU) == 0:
+            warn('No TU found for %s %s' % (RNA_type, bnum))
+            TU_id = "TU_" + bnum
+            parent_TU = [TU_id]
+            add_transcription_reaction(me_model, TU_id, set(), seq)
+
+        for TU_id in parent_TU:
+            me_model.transcription_data.get_by_id(TU_id).RNA_products.add("RNA_" + bnum)
 
     convert_aa_codes_and_add_charging(me_model, tRNA_aa)
 
     # update reactions
     for r in me_model.reactions:
-        if isinstance(r, TranslationReaction):
+        if isinstance(r, (TranscriptionReaction, TranslationReaction)):
             r.update()
-
-    return genome_pos_dict
-
-
-def add_transcription_translation_reactions(me_model, gb_filename,
-                                            TU_filename=None):
-    pass
-
-
-def fix_id(id_str):
-    return id_str.replace("_DASH_", "__")
 
 
 def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
@@ -561,6 +588,7 @@ def splice_TUs(me_model, TU_pieces, generic_flag=False):
 
 def add_TUs_and_translation(me_model, filename, TU_frame=None,
                             generic_flag=False):
+    warn("deprecated - use build_reactions_from_genbank")
 
     gb_file = SeqIO.read(filename, 'gb')
     full_seq = str(gb_file.seq)
@@ -568,6 +596,7 @@ def add_TUs_and_translation(me_model, filename, TU_frame=None,
                                                 TU_frame=TU_frame)
 
     TU_pieces = {}
+    all_rna_types = set()
     for index, TU in TU_frame.iterrows():
         seq = full_seq[TU.start:TU.stop]
         if TU.strand == '-':
@@ -576,6 +605,9 @@ def add_TUs_and_translation(me_model, filename, TU_frame=None,
         loci = find_genes_within_TU(me_model, TU, RNA_pos_dict)
 
         excise = should_TU_be_excised(me_model, loci)
+
+        RNA_types = {me_model.metabolites.get_by_id("RNA_" + i).RNA_type for i in loci}
+        all_rna_types.add(tuple(sorted(RNA_types)))
 
         if not excise:
             add_transcription_reaction(me_model, TU.TU_id, loci, seq)
@@ -587,6 +619,7 @@ def add_TUs_and_translation(me_model, filename, TU_frame=None,
             # Must splice TU to form tRNA, rRNA, sRNA (not supported)
             TU_pieces = find_all_TU_combos(me_model, TU, loci, seq, TU_pieces,
                                            RNA_pos_dict)
+    print all_rna_types
     splice_TUs(me_model, TU_pieces, generic_flag=generic_flag)
 
 

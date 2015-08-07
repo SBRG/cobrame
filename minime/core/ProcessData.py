@@ -132,7 +132,7 @@ class TranscriptionData(ProcessData):
 
     @property
     def mass(self):
-        return compute_RNA_mass(self.nucleotide_count)
+        return compute_RNA_mass(self.nucleotide_sequence)
 
 
 class TranslationData(ProcessData):
