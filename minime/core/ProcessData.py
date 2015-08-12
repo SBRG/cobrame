@@ -122,6 +122,8 @@ class TranscriptionData(ProcessData):
         model.transcription_data.append(self)
         self.nucleotide_sequence = ''
         self.RNA_products = RNA_products
+        # i.e. {"amp_c": 10, "gmp_c": 11, "ump_c": 9, "cmp_c": 11}
+        self.excised_bases = {}
         # {ModificationData.id : number}
         self.modifications = {}
 
@@ -132,7 +134,7 @@ class TranscriptionData(ProcessData):
 
     @property
     def mass(self):
-        return compute_RNA_mass(self.nucleotide_sequence)
+        return compute_RNA_mass(self.nucleotide_sequence, self.excised_bases)
 
 
 class TranslationData(ProcessData):
@@ -155,7 +157,7 @@ class TranslationData(ProcessData):
     @property
     def amino_acid_count(self):
         """count of each amino acid in the protein"""
-        aa_count = defaultdict(lambda: 0)
+        aa_count = defaultdict(int)
         for i in self.amino_acid_sequence:
             aa_count[amino_acids[i]] += 1
         return aa_count

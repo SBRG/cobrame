@@ -144,7 +144,7 @@ class TranscriptionReaction(Reaction):
 
     def update(self):
         protein_id = self.transcription_data.id
-        new_stoichiometry = defaultdict(lambda: 0)
+        new_stoichiometry = defaultdict(int)
         TU_length = len(self.transcription_data.nucleotide_sequence)
         metabolites = self._model.metabolites
         try:
@@ -175,15 +175,18 @@ class TranscriptionReaction(Reaction):
                 new_stoichiometry[metabolites.get_by_id(modification.enzyme)] -= \
                     mu / modification.keff / 3600.
 
-        # add excision of nucleotides around tRNA, rRNA, and ncRNA
-
-
         base_counts = self.transcription_data.nucleotide_count
 
         for base, count in iteritems(base_counts):
             new_stoichiometry[metabolites.get_by_id(base)] -= count
+        for base, count in iteritems(self.transcription_data.excised_bases):
+            new_stoichiometry[metabolites.get_by_id(base)] += count
 
         new_stoichiometry[metabolites.get_by_id("ppi_c")] += TU_length - 1
+        # 5' had a triphosphate, but this is removed when excising
+        # Is this universally true?
+        if sum(self.transcription_data.excised_bases.values()) > 0:
+            new_stoichiometry[metabolites.get_by_id("ppi_c")] += 1
 
         self.add_metabolites(new_stoichiometry, combine=False,
                              add_to_container_model=False)
@@ -212,7 +215,7 @@ class TranslationReaction(Reaction):
         mRNA_id = self.translation_data.mRNA
         protein_length = len(self.translation_data.amino_acid_sequence)
         metabolites = self._model.metabolites
-        new_stoichiometry = defaultdict(lambda: 0)
+        new_stoichiometry = defaultdict(int)
         try:
             ribosome = self._model.metabolites.get_by_id("ribosome")
         except KeyError:
@@ -250,8 +253,7 @@ class TranslationReaction(Reaction):
 
         for aa, count in iteritems(aa_count):
             try:
-                tRNA = self._model.metabolites.get_by_id("generic_tRNA_"
-                                                         + aa)
+                tRNA = self._model.metabolites.get_by_id("generic_tRNA_" + aa)
             except KeyError:
                 warn("tRNA for '%s' not found" % aa)
             else:

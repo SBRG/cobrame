@@ -42,3 +42,13 @@ base_pairs = {"A": "T", "T": "A", "G": "C", "C": "G"}
 
 def reverse_transcribe(seq):
     return ''.join(base_pairs[i] for i in reversed(seq))
+
+
+def extract_sequence(full_seq, left_pos, right_pos, strand):
+    seq = full_seq[left_pos:right_pos]
+    if strand == "+":
+        return seq
+    elif strand == "-":
+        return reverse_transcribe(seq)
+    else:
+        raise ValueError("strand must be either '+' or '-'")

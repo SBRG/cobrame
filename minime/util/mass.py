@@ -48,7 +48,7 @@ def compute_protein_mass(amino_acid_count):
     return protein_mass / 1000
 
 
-def compute_RNA_mass(DNA_sequence):
+def compute_RNA_mass(DNA_sequence, excised_bases={}):
     """compute RNA mass in kDA from nucleotide count
 
     nucleotide_count: {nucleotide: number}
@@ -56,7 +56,12 @@ def compute_RNA_mass(DNA_sequence):
     """
     nuc_count = {transcription_table[i]: DNA_sequence.count(i)
                  for i in set(DNA_sequence)}
+    nuc_count["gtp_c"] -= excised_bases.get("gmp_c", 0)
+    nuc_count["utp_c"] -= excised_bases.get("ump_c", 0)
+    nuc_count["ctp_c"] -= excised_bases.get("cmp_c", 0)
+    nuc_count["atp_c"] -= excised_bases.get("amp_c", 0)
     RNA_mass = sum(rna_no_ppi[nuc] * count
                    for nuc, count in iteritems(nuc_count))
-    RNA_mass += 174.951262  # 5' has 3 phosphates
+    if sum(excised_bases.values()) > 0:
+        RNA_mass += 174.951262  # 5' has 3 phosphates
     return RNA_mass / 1000

@@ -3,6 +3,7 @@ import pandas
 from six import iteritems
 
 from minime import util
+from minime.util import dogma
 from minime import *
 from cobra.core import Reaction
 from ecolime.ecoli_k12 import *
@@ -22,6 +23,7 @@ def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
     me_model.add_reaction(transcription)
     if update:
         transcription.update()
+    return transcription
 
 
 def create_transcribed_gene(me_model, bnum, left_pos, right_pos, seq,
@@ -32,9 +34,7 @@ def create_transcribed_gene(me_model, bnum, left_pos, right_pos, seq,
     gene.right_pos = right_pos
     gene.RNA_type = RNA_type
     gene.strand = strand
-    gene.seq = seq
-    if strand == '-':
-       gene.seq = util.dogma.reverse_transcribe(seq)
+    gene.nucleotide_sequence = seq
 
     me_model.add_metabolites([gene])
     return gene
@@ -90,6 +90,7 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa):
         charging_reaction.update()
 
 
+
 def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
                                  element_types={"CDS", "rRNA", "tRNA", "ncRNA"}):
 
@@ -99,6 +100,8 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
     TODO allow overriding amino acid names"""
     gb_file = SeqIO.read(gb_filename, 'gb')
     full_seq = str(gb_file.seq)
+
+    original_transcription_count = len(me_model.transcription_data)
 
     using_TUs = TU_frame is not None
     if not using_TUs:
@@ -117,9 +120,9 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
 
     # create transcription reactions for each TU
     for TU_id in TU_frame.index:
-        sequence = full_seq[TU_frame.start[TU_id]:TU_frame.stop[TU_id]]
-        if TU_frame.strand[TU_id] == "-":
-            sequence = reverse_transcribe(sequence)
+        sequence = dogma.extract_sequence(full_seq, TU_frame.start[TU_id],
+                                          TU_frame.stop[TU_id],
+                                          TU_frame.strand[TU_id])
         add_transcription_reaction(me_model, TU_id, set(), sequence,
                                    update=False)
 
@@ -156,8 +159,9 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             tRNA_aa[bnum] = feature.qualifiers["product"][0].split("-")[1]
 
         # every genetic entity gets transcription
+        gene_seq = dogma.extract_sequence(full_seq, left_pos, right_pos, strand)
         gene = create_transcribed_gene(me_model, bnum, left_pos,
-                                       right_pos, seq, strand, RNA_type)
+                                       right_pos, gene_seq, strand, RNA_type)
         # Add in a demand reaction for each mRNA in case the TU makes
         # multiple products and one needs a sink. If the demand reaction is
         # used, it means the mRNA doesn't count towards biomass
@@ -165,7 +169,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         demand_reaction = cobra.Reaction("DM_" + gene.id)
         me_model.add_reaction(demand_reaction)
         demand_reaction.add_metabolites(
-            {gene: -1, me_model._biomass: -compute_RNA_mass(seq)})
+            {gene: -1, me_model._biomass: -compute_RNA_mass(gene_seq)})
 
         # associate with TU's
         parent_TU = TU_frame[
@@ -176,12 +180,37 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             warn('No TU found for %s %s' % (RNA_type, bnum))
             TU_id = "TU_" + bnum
             parent_TU = [TU_id]
-            add_transcription_reaction(me_model, TU_id, set(), seq)
+            add_transcription_reaction(me_model, TU_id, set(), seq, update=False)
 
         for TU_id in parent_TU:
             me_model.transcription_data.get_by_id(TU_id).RNA_products.add("RNA_" + bnum)
 
     convert_aa_codes_and_add_charging(me_model, tRNA_aa)
+
+    # add excised portions
+    for transcription_data in itertools.islice(me_model.transcription_data,
+                                               original_transcription_count,
+                                               None):
+        if len(transcription_data.RNA_products) == 0:
+            continue
+        RNA_types = {me_model.metabolites.get_by_id(i).RNA_type for i in
+                     transcription_data.RNA_products}
+        if RNA_types == set(["mRNA"]):
+            continue
+        seq = transcription_data.nucleotide_sequence
+        counts = {i: seq.count(i) for i in ("A", "T", "G", "C")}
+        for product_id in transcription_data.RNA_products:
+            gene_seq = me_model.metabolites.get_by_id(product_id).nucleotide_sequence
+            for b in ("A", "T", "G", "C"):
+                counts[b] -= gene_seq.count(b)
+        # excised bases
+        # First base being a triphosphate will be handled by the reaction
+        # producing an extra ppi during transcription. But generally, we add
+        # triphosphate bases when transcribing, but excise monophosphate bases.
+        monophosphate_counts = {dogma.transcription_table[k].replace("tp_c",
+                                                                     "mp_c"): v
+                                for k, v in iteritems(counts)}
+        transcription_data.excised_bases = monophosphate_counts
 
     # update reactions
     for r in me_model.reactions:
