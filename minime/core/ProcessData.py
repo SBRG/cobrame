@@ -133,8 +133,40 @@ class TranscriptionData(ProcessData):
                 for i in ["A", "T", "G", "C"]}
 
     @property
+    def RNA_types(self):
+        return (self._model.metabolites.get_by_id(i).RNA_type for i in
+                self.RNA_products)
+
+    @property
     def mass(self):
         return compute_RNA_mass(self.nucleotide_sequence, self.excised_bases)
+
+
+class GenericData(ProcessData):
+    def __init__(self, id, model, component_list):
+        if not id.startswith("generic_"):
+            warn("best practice for generic id to start with generic_")
+        ProcessData.__init__(self, id, model)
+        model.generic_data.append(self)
+        self.component_list = component_list
+
+    def create_reactions(self):
+        model = self._model
+        try:
+            generic_metabolite = model.metabolites.get_by_id(self.id)
+        except KeyError:
+            generic_metabolite = GenericComponent(self.id)
+            model.add_metabolites([generic_metabolite])
+        for c_id in self.component_list:
+            reaction_id = c_id + "_to_" + self.id
+            try:
+                reaction = model.reactions.get_by_id(reaction_id)
+            except KeyError:
+                reaction = GenericFormationReaction(reaction_id)
+                model.add_reaction(reaction)
+            stoic = {generic_metabolite: 1,
+                     model.metabolites.get_by_id(c_id): -1}
+            reaction.add_metabolites(stoic, combine=False)
 
 
 class TranslationData(ProcessData):

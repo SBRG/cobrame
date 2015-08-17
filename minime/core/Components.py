@@ -28,6 +28,10 @@ class Ribosome(Complex):
     pass
 
 
+class GenericComponent(Component):
+    pass
+
+
 class GenerictRNA(Component):
     pass
 

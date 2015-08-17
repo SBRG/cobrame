@@ -193,8 +193,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
                                                None):
         if len(transcription_data.RNA_products) == 0:
             continue
-        RNA_types = {me_model.metabolites.get_by_id(i).RNA_type for i in
-                     transcription_data.RNA_products}
+        RNA_types = set(transcription_data.RNA_types)
         if RNA_types == set(["mRNA"]):
             continue
         seq = transcription_data.nucleotide_sequence

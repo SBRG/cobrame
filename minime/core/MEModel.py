@@ -15,6 +15,7 @@ class MEmodel(Model):
         self.modification_data = DictList()
         self.translation_data = DictList()
         self.transcription_data = DictList()
+        self.generic_data = DictList()
         self.tRNA_data = DictList()
         self.translocation_pathways = DictList()
         # create the biomass/dilution constraint

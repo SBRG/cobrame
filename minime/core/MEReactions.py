@@ -197,6 +197,10 @@ class TranscriptionReaction(Reaction):
                              combine=False, add_to_container_model=False)
 
 
+class GenericFormationReaction(Reaction):
+    None
+
+
 class TranslationReaction(Reaction):
     """Translation of a TranscribedGene to a TranslatedGene"""
     _translation_data = None
