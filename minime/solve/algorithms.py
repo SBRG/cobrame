@@ -82,12 +82,12 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
             print("mu\t\tstatus")
 
     def try_mu(mu):
-        substitute_mu(lp, mu, compiled_expressions)
+        substitute_mu(lp, mu, compiled_expressions, solver)
         if debug:
             lp.write(filename_base % mu)
             has_basis = lp.hasBasis
-        lp.solve_problem()
-        status = lp.get_status()
+        solver.solve_problem(lp)
+        status = solver.get_status(lp)
         if debug:
             obj = str(lp.get_objective_value()) \
                 if status == "optimal" else ""
@@ -140,7 +140,7 @@ def create_lP_at_growth_rate(me_model, growth_rate, compiled_expressions=None,
     # substitute in values
     if compiled_expressions is None:
         compiled_expressions = compile_expressions(me_model)
-    substitute_mu(lp, growth_rate, compiled_expressions)
+    substitute_mu(lp, growth_rate, compiled_expressions, solver)
     return (lp, solver)
 
 

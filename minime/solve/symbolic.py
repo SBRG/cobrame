@@ -45,13 +45,19 @@ def compile_expressions(me_model):
     return expressions
 
 
-def substitute_mu(lp, mu, compiled_exressions):
+def substitute_mu(lp, mu, compiled_exressions, solver_module=None):
     """substitute mu into a constructed LP"""
+    # This only works for object-oriented solver interfaces. For other
+    # solvers, need to pass in solver_module
+    if solver_module is None:
+        solver_module = lp.__class__
     for index, expr in iteritems(compiled_exressions):
         if index[0] is None:  # reaction bounds
-            lp.change_variable_bounds(index[1],
-                                      _eval(expr[0], mu), _eval(expr[1], mu))
+            solver_module.change_variable_bounds(
+                lp, index[1], _eval(expr[0], mu), _eval(expr[1], mu))
         elif index[1] is None:  # metabolite _bound
-            lp.change_constraint(index[0], expr[1], _eval(expr[0], mu))
+            solver_module.change_constraint(lp, index[0], expr[1],
+                                            _eval(expr[0], mu))
         else:  # stoichiometry
-            lp.change_coefficient(index[0], index[1], _eval(expr, mu))
+            solver_module.change_coefficient(lp, index[0], index[1],
+                                             _eval(expr, mu))
