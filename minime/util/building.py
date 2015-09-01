@@ -736,6 +736,8 @@ def add_and_update_metabolic_reaction(me_model, reaction_data, complex_id,
         complex_data = me_model.complex_data.get_by_id(complex_id)
     else:
         complex_data = None
+    if not hasattr(reaction_data, "id"):
+        reaction_data = me_model.stoichiometric_data.get_by_id(reaction_data)
 
     direction = "_REV_" if reverse_flag is True else "_FWD_"
 
