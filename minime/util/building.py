@@ -10,6 +10,16 @@ from ecolime.ecoli_k12 import *
 import cobra
 import itertools
 
+print "Building a full ME model. Run prepare_for_minime() to make minimal " \
+      "model"
+macromolecules = True
+
+
+def prepare_for_minime():
+    global macromolecules
+    macromolecules = False
+    print "Creating minimal me model"
+
 
 def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
                                update=True):
@@ -20,6 +30,8 @@ def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
     transcription.transcription_data.nucleotide_sequence = sequence
     transcription.transcription_data.RNA_products = {"RNA_" + i
                                                      for i in locus_ids}
+    if not macromolecules:
+        transcription.transcription_data.using_RNAP = False
     me_model.add_reaction(transcription)
     if update:
         transcription.update()
@@ -54,7 +66,8 @@ def add_translation_reaction(me_model, bnum, amino_acid_sequence=None,
             amino_acid_sequence.replace("U", "C")  # TODO selenocystine
     elif dna_sequence is not None:
         translation.translation_data.compute_sequence_from_DNA(dna_sequence)
-
+    if not macromolecules:
+        translation.translation_data.using_ribosome = False
     if update:
         translation.update()
 
@@ -88,7 +101,6 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa):
         charging_reaction.tRNAData = tRNA_data
         me_model.add_reaction(charging_reaction)
         charging_reaction.update()
-
 
 
 def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
@@ -185,7 +197,8 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         for TU_id in parent_TU:
             me_model.transcription_data.get_by_id(TU_id).RNA_products.add("RNA_" + bnum)
 
-    convert_aa_codes_and_add_charging(me_model, tRNA_aa)
+    if macromolecules:
+        convert_aa_codes_and_add_charging(me_model, tRNA_aa)
 
     # add excised portions
     for transcription_data in itertools.islice(me_model.transcription_data,
@@ -707,11 +720,11 @@ def add_complex_modification_data(me_model, modification_dict):
             add_modication_data(me_model, mod_id, {mod_comp: -1})
 
 
-def add_complex(me_model, modifcation_dict, ME_complex_dict):
+def add_complex(me_model, ME_complex_dict,  modification_dict):
 
     add_complex_stoichiometry_data(me_model, ME_complex_dict)
 
-    add_complex_modification_data(me_model, modifcation_dict)
+    add_complex_modification_data(me_model, modification_dict)
 
 
 def find_associated_complexes(rxnToModCplxDict, reaction_data,

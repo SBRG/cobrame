@@ -126,6 +126,8 @@ class TranscriptionData(ProcessData):
         self.excised_bases = {}
         # {ModificationData.id : number}
         self.modifications = {}
+        # Used if not creating a "MiniME" model
+        self.using_RNAP = True
 
     @property
     def nucleotide_count(self):
@@ -179,6 +181,8 @@ class TranslationData(ProcessData):
         model.translation_data.append(self)
         self.mRNA = mRNA
         self.protein = protein
+		# Used if not creating a "MiniME" model
+        self.using_ribosome = True
 
     def compute_sequence_from_DNA(self, dna_sequence):
         codons = (dna_sequence[i: i + 3]

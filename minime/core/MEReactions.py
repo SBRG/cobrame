@@ -147,14 +147,16 @@ class TranscriptionReaction(Reaction):
         new_stoichiometry = defaultdict(int)
         TU_length = len(self.transcription_data.nucleotide_sequence)
         metabolites = self._model.metabolites
-        try:
-            RNAP = self._model.metabolites.get_by_id("RNA_Polymerase")
-        except KeyError:
-            warn("RNA Polymerase not found")
-        else:
-            k_RNAP = (mu * 22.7 / (mu + 0.391))*3  # 3*k_ribo
-            coupling = -TU_length * mu / k_RNAP / 3600
-            new_stoichiometry[RNAP] = coupling
+
+        if self.transcription_data.using_RNAP:
+            try:
+                RNAP = self._model.metabolites.get_by_id("RNA_Polymerase")
+            except KeyError:
+                warn("RNA Polymerase not found")
+            else:
+                k_RNAP = (mu * 22.7 / (mu + 0.391))*3  # 3*k_ribo
+                coupling = -TU_length * mu / k_RNAP / 3600
+                new_stoichiometry[RNAP] = coupling
 
         for transcript_id in self.transcription_data.RNA_products:
             if transcript_id not in self._model.metabolites:
@@ -220,14 +222,15 @@ class TranslationReaction(Reaction):
         protein_length = len(self.translation_data.amino_acid_sequence)
         metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(int)
-        try:
-            ribosome = self._model.metabolites.get_by_id("ribosome")
-        except KeyError:
-            warn("ribosome not found")
-        else:
-            k_ribo = mu * 22.7 / (mu + 0.391)
-            coupling = -protein_length * mu / k_ribo / 3600
-            new_stoichiometry[ribosome] = coupling
+        if self.translation_data.using_ribosome:
+            try:
+                ribosome = self._model.metabolites.get_by_id("ribosome")
+            except KeyError:
+                warn("ribosome not found")
+            else:
+                k_ribo = mu * 22.7 / (mu + 0.391)
+                coupling = -protein_length * mu / k_ribo / 3600
+                new_stoichiometry[ribosome] = coupling
         try:
             transcript = metabolites.get_by_id(mRNA_id)
         except KeyError:
@@ -254,14 +257,15 @@ class TranslationReaction(Reaction):
         # of this generic tRNA represents the production of enough of any tRNA
         # (according to its keff) for that amino acid to catalyze addition
         # of a single amino acid to a growing peptide.
-
-        for aa, count in iteritems(aa_count):
-            try:
-                tRNA = self._model.metabolites.get_by_id("generic_tRNA_" + aa)
-            except KeyError:
-                warn("tRNA for '%s' not found" % aa)
-            else:
-                new_stoichiometry[tRNA] -= count
+        if self.translation_data.using_ribosome:
+            for aa, count in iteritems(aa_count):
+                try:
+                    tRNA = self._model.metabolites.get_by_id("generic_tRNA_"
+                                                             + aa)
+                except KeyError:
+                    warn("tRNA for '%s' not found" % aa)
+                else:
+                    new_stoichiometry[tRNA] -= count
 
         # TODO: how many protons/water molecules are exchanged when making the
         # peptide bond?
