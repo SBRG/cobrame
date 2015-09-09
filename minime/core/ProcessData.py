@@ -172,7 +172,7 @@ class GenericData(ProcessData):
 
 
 class TranslationData(ProcessData):
-    protein_per_mRNA = 50000000
+    protein_per_mRNA = .5  # per second
     amino_acid_sequence = ""
     mRNA = None
 
@@ -181,7 +181,7 @@ class TranslationData(ProcessData):
         model.translation_data.append(self)
         self.mRNA = mRNA
         self.protein = protein
-		# Used if not creating a "MiniME" model
+        # Used if not creating a "MiniME" model
         self.using_ribosome = True
 
     def compute_sequence_from_DNA(self, dna_sequence):

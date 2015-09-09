@@ -37,6 +37,7 @@ class MetabolicReaction(Reaction):
 
     keff = 65.  # in per second
     reverse = False
+    complex_dilution_list = set()
 
     def update(self, create_new=False):
         metabolites = self._model.metabolites
@@ -59,6 +60,8 @@ class MetabolicReaction(Reaction):
             if component not in new_stoichiometry:
                 new_stoichiometry[component] = 0
             new_stoichiometry[component] += value * sign
+            if component.id in self.complex_dilution_list:
+                new_stoichiometry[component] += - mu / self.keff / 3600.
         # replace old stoichiometry with new one
         # TODO prune out old metabolites
         # doing checks for relationship every time is unnecessary. don't do.
@@ -229,7 +232,7 @@ class TranslationReaction(Reaction):
                 warn("ribosome not found")
             else:
                 k_ribo = mu * 22.7 / (mu + 0.391)
-                coupling = -protein_length * mu / k_ribo / 3600
+                coupling = -protein_length * mu / k_ribo / 3600.
                 new_stoichiometry[ribosome] = coupling
         try:
             transcript = metabolites.get_by_id(mRNA_id)
@@ -237,8 +240,8 @@ class TranslationReaction(Reaction):
             warn("transcript '%s' not found" % mRNA_id)
             transcript = TranscribedGene(mRNA_id)
             self._model.add_metabolites(transcript)
-        new_stoichiometry[transcript] = -1. / \
-            self.translation_data.protein_per_mRNA
+        k_mRNA = mu * self.translation_data.protein_per_mRNA / (mu + 0.391)
+        new_stoichiometry[transcript] = -mu / k_mRNA / 3600.
         try:
             protein = metabolites.get_by_id(protein_id)
         except KeyError:
