@@ -18,6 +18,7 @@ class MEmodel(Model):
         self.generic_data = DictList()
         self.tRNA_data = DictList()
         self.translocation_pathways = DictList()
+        self.subreaction_data = DictList()
         # create the biomass/dilution constraint
         self._biomass = Constraint("biomass")
         self._biomass_dilution = SummaryVariable("biomass_dilution")

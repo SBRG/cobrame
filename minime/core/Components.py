@@ -13,7 +13,7 @@ class TranscribedGene(Component):
         self.right_pos = None
         self.strand = None
         self.RNA_type = ''
-        self.seq = ''
+        self.nucleotide_sequence = ''
 
 
 class TranslatedGene(Component):

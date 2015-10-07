@@ -68,6 +68,20 @@ class ModificationData(ProcessData):
                 yield i
 
 
+class SubreactionData(ProcessData):
+    def __init__(self, id, model):
+        ProcessData.__init__(self, id, model)
+        model.subreaction_data.append(self)
+        self.stoichiometry = {}
+        self.enzyme = None
+        self.keff = 65
+
+    def get_complex_data(self):
+        for i in self._model.complex_data:
+            if self.id in i.modifications:
+                yield i
+
+
 class ComplexData(ProcessData):
 
     @property
@@ -174,6 +188,7 @@ class GenericData(ProcessData):
 class TranslationData(ProcessData):
     protein_per_mRNA = .5  # per second
     amino_acid_sequence = ""
+    last_codon = ""
     mRNA = None
 
     def __init__(self, id, model, mRNA, protein):
@@ -189,6 +204,16 @@ class TranslationData(ProcessData):
                   for i in range(0, (len(dna_sequence)), 3))
         self.amino_acid_sequence = ''.join(codon_table[i] for i in codons)
         self.amino_acid_sequence = self.amino_acid_sequence.rstrip("*")
+
+    def get_last_codon_from_DNA(self, dna_sequence):
+        if 'TAA' in dna_sequence:
+            self.last_codon = 'UAA'
+        elif 'TGA' in dna_sequence:
+            self.last_codon = 'UGA'
+        elif 'TAG' in dna_sequence:
+            self.last_codon = 'UAG'
+        else:
+            raise NameError('Stop codon not present in DNA sequence')
 
     @property
     def amino_acid_count(self):

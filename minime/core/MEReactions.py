@@ -11,6 +11,8 @@ from minime.util.mass import *
 from minime.util import mu
 from minime.core.Components import *
 
+from ecolime.ribosome import translation_stop_dict
+
 
 class MetabolicReaction(Reaction):
     """Metabolic reaction including required enzymatic complex"""
@@ -225,6 +227,7 @@ class TranslationReaction(Reaction):
         protein_length = len(self.translation_data.amino_acid_sequence)
         metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(int)
+
         if self.translation_data.using_ribosome:
             try:
                 ribosome = self._model.metabolites.get_by_id("ribosome")
@@ -234,14 +237,17 @@ class TranslationReaction(Reaction):
                 k_ribo = mu * 22.7 / (mu + 0.391)
                 coupling = -protein_length * mu / k_ribo / 3600.
                 new_stoichiometry[ribosome] = coupling
+
         try:
             transcript = metabolites.get_by_id(mRNA_id)
         except KeyError:
             warn("transcript '%s' not found" % mRNA_id)
             transcript = TranscribedGene(mRNA_id)
             self._model.add_metabolites(transcript)
+
         k_mRNA = mu * self.translation_data.protein_per_mRNA / (mu + 0.391)
         new_stoichiometry[transcript] = -mu / k_mRNA / 3600.
+
         try:
             protein = metabolites.get_by_id(protein_id)
         except KeyError:
@@ -250,11 +256,11 @@ class TranslationReaction(Reaction):
         new_stoichiometry[protein] = 1
         # count just the amino acids
 
-        aa_count = self.translation_data.amino_acid_count
-
         # update stoichiometry
+        aa_count = self.translation_data.amino_acid_count
         for aa_name, value in iteritems(aa_count):
             new_stoichiometry[metabolites.get_by_id(aa_name)] = -value
+
         # add in the tRNA's for each of the amino acids
         # We add in a "generic tRNA" for each amino acid. The production
         # of this generic tRNA represents the production of enough of any tRNA
@@ -277,6 +283,8 @@ class TranslationReaction(Reaction):
         # (len(protein) - 1). Initiation and termination also each need
         # one GTP each. Therefore, the GTP hydrolysis resulting from
         # translation is 2 * len(protein)
+
+        # tRNA + GTP -> tRNA_GTP
         new_stoichiometry[metabolites.get_by_id("h2o_c")] -= 4 * protein_length
         new_stoichiometry[metabolites.get_by_id("h_c")] += 4 * protein_length
         new_stoichiometry[metabolites.get_by_id("pi_c")] += 4 * protein_length
@@ -284,6 +292,22 @@ class TranslationReaction(Reaction):
         new_stoichiometry[metabolites.get_by_id("gdp_c")] += 2 * protein_length
         new_stoichiometry[metabolites.get_by_id("atp_c")] -= 2 * protein_length
         new_stoichiometry[metabolites.get_by_id("adp_c")] += 2 * protein_length
+
+        # Add transcription termination at subprocessdata so keff can be
+        # modified
+        all_subreactions = self._model.subreaction_data
+
+        term_enzyme = translation_stop_dict.get(
+            self.translation_data.last_codon)
+        term_subreaction_data = all_subreactions.get_by_id(
+            term_enzyme + '_' + 'mediated_termination')
+        try:
+            new_stoichiometry[metabolites.get_by_id(
+                term_subreaction_data.enzyme)] -= \
+                mu / term_subreaction_data.keff / 3600.
+        except:
+            warn('Term Enzyme %s not in model')
+
         self.add_metabolites(new_stoichiometry,
                              combine=False, add_to_container_model=False)
 

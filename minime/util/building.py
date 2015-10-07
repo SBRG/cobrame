@@ -7,6 +7,7 @@ from minime.util import dogma
 from minime import *
 from cobra.core import Reaction
 from ecolime.ecoli_k12 import *
+from ecolime import ribosome
 import cobra
 import itertools
 
@@ -61,6 +62,8 @@ def add_translation_reaction(me_model, bnum, amino_acid_sequence=None,
     translation.translation_data = \
         TranslationData(bnum, me_model, "RNA_" + bnum,
                         "protein_" + bnum)
+
+    translation.translation_data.get_last_codon_from_DNA(dna_sequence)
     if amino_acid_sequence is not None:
         translation.translation_data.amino_acid_sequence = \
             amino_acid_sequence.replace("U", "C")  # TODO selenocystine
@@ -164,7 +167,8 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
                 warn("No translated sequence found for " + bnum)
                 continue
             else:
-                add_translation_reaction(me_model, bnum, amino_acid_sequence)
+                add_translation_reaction(me_model, bnum, amino_acid_sequence,
+                                         seq)
 
         # tRNA_aa = {'amino_acid':'tRNA'}
         elif feature.type == "tRNA":
@@ -299,7 +303,35 @@ def add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme=None):
     return mod
 
 
-def add_ribosomes(me_model):
+def add_ribosome(me_model):
+    ribosome_complex = ComplexData("ribosome", me_model)
+    ribosome_components = ribosome_complex.stoichiometry
+    ribosome_modifications = ribosome_complex.modifications
+
+    add_generic_rRNAs(me_model)
+    mod_dict = ribosome.ribosome_modifications
+    for mod_id in mod_dict:
+        mod_stoich = mod_dict[mod_id]['stoich']
+        mod_enzyme = mod_dict[mod_id]['enzyme']
+        num_mods = mod_dict[mod_id]['num_mods']
+        mod = add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme)
+        ribosome_modifications[mod.id] = -num_mods
+
+    ribosome_assembly = ribosome.ribosome_stoich
+    for process in ribosome_assembly:
+        for protein, amount in ribosome_assembly[process]['stoich'].items():
+            try:
+                me_model.add_metabolites([Complex(protein)])
+            except:
+                pass
+            try:
+                ribosome_components[protein] += amount
+            except:
+                ribosome_components[protein] = amount
+
+
+
+def add_ribosomes_old(me_model):
     ribosome_complex = ComplexData("ribosome", me_model)
     ribosome_components = ribosome_complex.stoichiometry
     ribosome_modifications = ribosome_complex.modifications
@@ -599,7 +631,7 @@ def count_and_add_excisions(me_model, pieces, transcription_data):
 
 def splice_TUs(me_model, TU_pieces, generic_flag=False):
 
-    add_generic_RNase(me_model, generic_flag=generic_flag)
+    # add_generic_RNase(me_model, generic_flag=generic_flag)
     add_excision_machinery(me_model)
 
     for TU, combos_of_pieces in TU_pieces.iteritems():
