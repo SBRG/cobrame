@@ -62,7 +62,9 @@ def add_translation_reaction(me_model, bnum, amino_acid_sequence=None,
     translation.translation_data = \
         TranslationData(bnum, me_model, "RNA_" + bnum,
                         "protein_" + bnum)
-
+    print bnum
+    translation.translation_data.nucleotide_sequence = dna_sequence
+    # translation.translation_data.get_codon_count_from_DNA(dna_sequence)
     translation.translation_data.get_last_codon_from_DNA(dna_sequence)
     if amino_acid_sequence is not None:
         translation.translation_data.amino_acid_sequence = \
@@ -99,11 +101,14 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa):
 
     # add in all the tRNA charging reactions
     for tRNA, aa in tRNA_aa.items():
-        tRNA_data = tRNAData("tRNA_" + tRNA, me_model, aa.id, "RNA_" + tRNA)
-        charging_reaction = tRNAChargingReaction("charging_tRNA_" + tRNA)
-        charging_reaction.tRNAData = tRNA_data
-        me_model.add_reaction(charging_reaction)
-        charging_reaction.update()
+        for codon in tRNA_to_codon[tRNA]:
+            tRNA_data = tRNAData("tRNA_" + tRNA + "_" + codon, me_model, aa.id,
+                                 "RNA_" + tRNA, codon)
+            charging_reaction = tRNAChargingReaction("charging_tRNA_" + tRNA +
+                                                     "_" + codon)
+            charging_reaction.tRNAData = tRNA_data
+            me_model.add_reaction(charging_reaction)
+            charging_reaction.update()
 
 
 def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,

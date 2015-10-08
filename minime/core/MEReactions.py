@@ -305,8 +305,8 @@ class TranslationReaction(Reaction):
             new_stoichiometry[metabolites.get_by_id(
                 term_subreaction_data.enzyme)] -= \
                 mu / term_subreaction_data.keff / 3600.
-        except:
-            warn('Term Enzyme %s not in model')
+        except KeyError:
+            warn('Term Enzyme not in model')
 
         self.add_metabolites(new_stoichiometry,
                              combine=False, add_to_container_model=False)
@@ -328,9 +328,11 @@ class tRNAChargingReaction(Reaction):
         # If the generic tRNA does not exist, create it now. The meaning of
         # a generic tRNA is described in the TranslationReaction comments
         try:
-            generic_tRNA = mets.get_by_id("generic_tRNA_" + data.amino_acid)
+            generic_tRNA = mets.get_by_id("generic_tRNA_" + data.codon + "_" +
+                                          data.amino_acid)
         except KeyError:
-            generic_tRNA = GenerictRNA("generic_tRNA_" + data.amino_acid)
+            generic_tRNA = GenerictRNA("generic_tRNA_" + data.codon + "_" +
+                                       data.amino_acid)
             self._model.add_metabolites([generic_tRNA])
         stoic[generic_tRNA] = 1
         self.add_metabolites(stoic)

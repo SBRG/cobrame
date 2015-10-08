@@ -190,6 +190,7 @@ class TranslationData(ProcessData):
     amino_acid_sequence = ""
     last_codon = ""
     mRNA = None
+    nucleotide_sequence = ""
 
     def __init__(self, id, model, mRNA, protein):
         ProcessData.__init__(self, id, model)
@@ -199,12 +200,14 @@ class TranslationData(ProcessData):
         # Used if not creating a "MiniME" model
         self.using_ribosome = True
 
+    # not necessary because tRNA usage is now codon based
     def compute_sequence_from_DNA(self, dna_sequence):
         codons = (dna_sequence[i: i + 3]
                   for i in range(0, (len(dna_sequence)), 3))
         self.amino_acid_sequence = ''.join(codon_table[i] for i in codons)
         self.amino_acid_sequence = self.amino_acid_sequence.rstrip("*")
 
+    # depreciated by codon count
     def get_last_codon_from_DNA(self, dna_sequence):
         if 'TAA' in dna_sequence:
             self.last_codon = 'UAA'
@@ -214,6 +217,27 @@ class TranslationData(ProcessData):
             self.last_codon = 'UAG'
         else:
             raise NameError('Stop codon not present in DNA sequence')
+
+    @property
+    def codon_count(self):
+        stop_codons = {'TAA': 'UAA', 'TGA': 'UGA', 'TAG': 'UAG'}
+        codons = (self.nucleotide_sequence[i: i + 3]
+                  for i in range(0, (len(self.nucleotide_sequence)), 3))
+        codon_count = defaultdict(int)
+        for i in codons:
+            if i in stop_codons:
+                codon_count[stop_codons.get(i)] += 1
+                break
+            else:
+                codon_count[i.replace('T', 'U')] += 1
+
+        # add start codon and remove one methionine (AUG) from codon count
+        codon_count['START'] = 1
+        if 'AUG' in codon_count:
+            codon_count['AUG'] -= 1
+        else:
+            raise NameError('No start codon in DNA sequence')
+        return codon_count
 
     @property
     def amino_acid_count(self):
@@ -233,9 +257,10 @@ class tRNAData(ProcessData):
     synthetase = None
     synthetase_keff = 65.
 
-    def __init__(self, id, model, amino_acid, RNA):
+    def __init__(self, id, model, amino_acid, RNA, codon):
         ProcessData.__init__(self, id, model)
         model.tRNA_data.append(self)
+        self.codon = codon
         self.amino_acid = amino_acid
         self.RNA = RNA
         self.tRNA_keff = 2.39 * mu / (mu + 0.391)
