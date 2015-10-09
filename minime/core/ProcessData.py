@@ -199,13 +199,9 @@ class TranslationData(ProcessData):
         self.protein = protein
         # Used if not creating a "MiniME" model
         self.using_ribosome = True
+        self.subreactions = {}
 
-    # not necessary because tRNA usage is now codon based
-    def compute_sequence_from_DNA(self, dna_sequence):
-        codons = (dna_sequence[i: i + 3]
-                  for i in range(0, (len(dna_sequence)), 3))
-        self.amino_acid_sequence = ''.join(codon_table[i] for i in codons)
-        self.amino_acid_sequence = self.amino_acid_sequence.rstrip("*")
+
 
     # depreciated by codon count
     def get_last_codon_from_DNA(self, dna_sequence):
@@ -216,7 +212,16 @@ class TranslationData(ProcessData):
         elif 'TAG' in dna_sequence:
             self.last_codon = 'UAG'
         else:
-            raise NameError('Stop codon not present in DNA sequence')
+            warn('Stop codon not present in DNA sequence')
+
+    # not necessary because tRNA usage is now codon based, only
+    @property
+    def compute_sequence_from_DNA(self):
+        codons = (self.nucleotide_sequence[i: i + 3]
+                  for i in range(0, (len(self.nucleotide_sequence)), 3))
+        self.amino_acid_sequence = ''.join(codon_table[i] for i in codons)
+        self.amino_acid_sequence = self.amino_acid_sequence.rstrip("*")
+        return self.amino_acid_sequence
 
     @property
     def codon_count(self):
@@ -226,18 +231,28 @@ class TranslationData(ProcessData):
         codon_count = defaultdict(int)
         for i in codons:
             if i in stop_codons:
-                codon_count[stop_codons.get(i)] += 1
+                # TODO handle this like start codons? and deal with selenocystein
+                #codon_count[stop_codons.get(i)] += 1
                 break
             else:
                 codon_count[i.replace('T', 'U')] += 1
 
         # add start codon and remove one methionine (AUG) from codon count
         codon_count['START'] = 1
-        if 'AUG' in codon_count:
+        if self.nucleotide_sequence.startswith('ATG'):
             codon_count['AUG'] -= 1
+        elif self.nucleotide_sequence.startswith('GTG'):
+            codon_count['GUG'] -= 1
+        elif self.nucleotide_sequence.startswith('TTG'):
+            codon_count['UUG'] -= 1
+        elif self.nucleotide_sequence.startswith('ATT'):
+            codon_count['AUU'] -= 1
+        elif self.nucleotide_sequence.startswith('CTG'):
+            codon_count['CUG'] -= 1
         else:
-            raise NameError('No start codon in DNA sequence')
+            raise NameError('No start codon in DNA sequence %s' %self.mRNA)
         return codon_count
+
 
     @property
     def amino_acid_count(self):

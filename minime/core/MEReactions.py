@@ -266,15 +266,26 @@ class TranslationReaction(Reaction):
         # of this generic tRNA represents the production of enough of any tRNA
         # (according to its keff) for that amino acid to catalyze addition
         # of a single amino acid to a growing peptide.
+
+        # Add transcription termination at subprocessdata so keff can be
+        # modified
+        all_subreactions = self._model.subreaction_data
+
         if self.translation_data.using_ribosome:
-            for aa, count in iteritems(aa_count):
+            for codon, count in self.translation_data.codon_count.items():
+                if codon == 'UGA':  # TODO selenocystein
+                    continue
                 try:
-                    tRNA = self._model.metabolites.get_by_id("generic_tRNA_"
-                                                             + aa)
-                except KeyError:
-                    warn("tRNA for '%s' not found" % aa)
-                else:
-                    new_stoichiometry[tRNA] -= count
+                    codon_subreaction_data = all_subreactions.query(codon)[0]
+                    if codon_subreaction_data.enzyme:
+                        new_stoichiometry[metabolites.get_by_id(
+                            codon_subreaction_data.enzyme)] -= \
+                            mu / codon_subreaction_data.keff / 3600.
+                    for met, stoich in codon_subreaction_data.stoichiometry.items():
+                        new_stoichiometry[metabolites.get_by_id(met)] += \
+                            count * stoich
+                except IndexError:
+                    warn('subreaction for codon %s not added' % codon)
 
         # TODO: how many protons/water molecules are exchanged when making the
         # peptide bond?
@@ -285,20 +296,18 @@ class TranslationReaction(Reaction):
         # translation is 2 * len(protein)
 
         # tRNA + GTP -> tRNA_GTP
-        new_stoichiometry[metabolites.get_by_id("h2o_c")] -= 4 * protein_length
-        new_stoichiometry[metabolites.get_by_id("h_c")] += 4 * protein_length
-        new_stoichiometry[metabolites.get_by_id("pi_c")] += 4 * protein_length
+        new_stoichiometry[metabolites.get_by_id("h2o_c")] -= 3 * protein_length
+        new_stoichiometry[metabolites.get_by_id("h_c")] += 3 * protein_length
+        new_stoichiometry[metabolites.get_by_id("pi_c")] += 3 * protein_length
         new_stoichiometry[metabolites.get_by_id("gtp_c")] -= 2 * protein_length
         new_stoichiometry[metabolites.get_by_id("gdp_c")] += 2 * protein_length
-        new_stoichiometry[metabolites.get_by_id("atp_c")] -= 2 * protein_length
-        new_stoichiometry[metabolites.get_by_id("adp_c")] += 2 * protein_length
+        new_stoichiometry[metabolites.get_by_id("atp_c")] -= 1 * protein_length
+        new_stoichiometry[metabolites.get_by_id("adp_c")] += 1 * protein_length
 
-        # Add transcription termination at subprocessdata so keff can be
-        # modified
-        all_subreactions = self._model.subreaction_data
+
 
         term_enzyme = translation_stop_dict.get(
-            self.translation_data.last_codon)
+            self.translation_data.nucleotide_sequence[-3:].replace('T','U'))
         term_subreaction_data = all_subreactions.get_by_id(
             term_enzyme + '_' + 'mediated_termination')
         try:

@@ -62,15 +62,19 @@ def add_translation_reaction(me_model, bnum, amino_acid_sequence=None,
     translation.translation_data = \
         TranslationData(bnum, me_model, "RNA_" + bnum,
                         "protein_" + bnum)
-    print bnum
+
     translation.translation_data.nucleotide_sequence = dna_sequence
     # translation.translation_data.get_codon_count_from_DNA(dna_sequence)
     translation.translation_data.get_last_codon_from_DNA(dna_sequence)
+
+    #if 'U' in amino_acid_sequence:
+    #    print bnum
+    amino_acid_sequence = None
     if amino_acid_sequence is not None:
         translation.translation_data.amino_acid_sequence = \
-            amino_acid_sequence.replace("U", "C")  # TODO selenocystine
-    elif dna_sequence is not None:
-        translation.translation_data.compute_sequence_from_DNA(dna_sequence)
+            amino_acid_sequence # .replace("U", "C")  # TODO selenocystine
+    # elif dna_sequence is not None:
+    #    translation.translation_data.compute_sequence_from_DNA(dna_sequence)
     if not macromolecules:
         translation.translation_data.using_ribosome = False
     if update:
@@ -701,7 +705,7 @@ def add_TUs_and_translation(me_model, filename, TU_frame=None,
     splice_TUs(me_model, TU_pieces, generic_flag=generic_flag)
 
 
-def add_dummy_reactions(me_model, dna_seq):
+def add_dummy_reactions(me_model, dna_seq, update=True):
     dummy = StoichiometricData("dummy_reaction", me_model)
     dummy.lower_bound = 0
     dummy.upper_bound = 1000
@@ -711,7 +715,7 @@ def add_dummy_reactions(me_model, dna_seq):
 
     me_model.add_metabolites(TranslatedGene("protein_" + "dummy"))
     add_translation_reaction(me_model, "dummy", dna_sequence=dna_seq,
-                             update=True)
+                             update=update)
 
     complex_data = ComplexData("CPLX_dummy", me_model)
     complex_data.stoichiometry = {}
