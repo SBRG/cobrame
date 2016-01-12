@@ -304,17 +304,15 @@ class TranslationReaction(Reaction):
         new_stoichiometry[metabolites.get_by_id("atp_c")] -= 1 * protein_length
         new_stoichiometry[metabolites.get_by_id("adp_c")] += 1 * protein_length
 
-
-
-        term_enzyme = translation_stop_dict.get(
-            self.translation_data.nucleotide_sequence[-3:].replace('T','U'))
-        term_subreaction_data = all_subreactions.get_by_id(
-            term_enzyme + '_' + 'mediated_termination')
         try:
+            term_enzyme = translation_stop_dict.get(
+                self.translation_data.nucleotide_sequence[-3:].replace('T', 'U'))
+            term_subreaction_data = all_subreactions.get_by_id(
+                term_enzyme + '_' + 'mediated_termination')
             new_stoichiometry[metabolites.get_by_id(
                 term_subreaction_data.enzyme)] -= \
                 mu / term_subreaction_data.keff / 3600.
-        except KeyError:
+        except:
             warn('Term Enzyme not in model')
 
         self.add_metabolites(new_stoichiometry,

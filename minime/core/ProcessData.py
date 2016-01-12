@@ -216,12 +216,18 @@ class TranslationData(ProcessData):
 
     # not necessary because tRNA usage is now codon based, only
     @property
-    def compute_sequence_from_DNA(self):
+    def amino_acid_sequence(self):
+        if len(self.nucleotide_sequence) % 3 != 0:
+            self.nucleotide_sequence = self.nucleotide_sequence[:-1]
+            print self.id, ' Needs frameshift?'
         codons = (self.nucleotide_sequence[i: i + 3]
                   for i in range(0, (len(self.nucleotide_sequence)), 3))
-        self.amino_acid_sequence = ''.join(codon_table[i] for i in codons)
-        self.amino_acid_sequence = self.amino_acid_sequence.rstrip("*")
-        return self.amino_acid_sequence
+        amino_acid_sequence = ''.join(codon_table[i] for i in codons)
+        amino_acid_sequence = amino_acid_sequence.rstrip("*")
+        if "*" in amino_acid_sequence:
+            print self.id, 'TODO selenocysteine'
+            amino_acid_sequence = amino_acid_sequence.replace('*', 'C')
+        return amino_acid_sequence
 
     @property
     def codon_count(self):
@@ -230,6 +236,9 @@ class TranslationData(ProcessData):
                   for i in range(0, (len(self.nucleotide_sequence)), 3))
         codon_count = defaultdict(int)
         for i in codons:
+            if len(i) % 3 != 0:
+                print self.id, 'Needs Frameshift?'
+                continue
             if i in stop_codons:
                 # TODO handle this like start codons? and deal with selenocystein
                 #codon_count[stop_codons.get(i)] += 1
@@ -252,7 +261,6 @@ class TranslationData(ProcessData):
         else:
             raise NameError('No start codon in DNA sequence %s' %self.mRNA)
         return codon_count
-
 
     @property
     def amino_acid_count(self):
