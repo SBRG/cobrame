@@ -6,6 +6,7 @@ from minime import util
 from minime.util import dogma
 from minime import *
 from cobra.core import Reaction
+from ecolime import ecoli_k12
 from ecolime.ecoli_k12 import *
 from ecolime import ribosome
 import cobra
@@ -55,7 +56,8 @@ def create_transcribed_gene(me_model, bnum, left_pos, right_pos, seq,
 
 def add_translation_reaction(me_model, bnum, amino_acid_sequence=None,
                              dna_sequence=None, update=False):
-
+    if not amino_acid_sequence and not dna_sequence:
+        print 'Transltion reactions require sequences for', bnum
     translation = TranslationReaction("translation_" + bnum)
     me_model.add_reaction(translation)
 
@@ -67,13 +69,10 @@ def add_translation_reaction(me_model, bnum, amino_acid_sequence=None,
     # translation.translation_data.get_codon_count_from_DNA(dna_sequence)
     translation.translation_data.get_last_codon_from_DNA(dna_sequence)
 
-    #if 'U' in amino_acid_sequence:
-    #    print bnum
     amino_acid_sequence = None
     if amino_acid_sequence is not None:
         translation.translation_data.amino_acid_sequence = \
             amino_acid_sequence # .replace("U", "C")  # TODO selenocystine
-    # elif dna_sequence is not None:
     #    translation.translation_data.compute_sequence_from_DNA(dna_sequence)
     if not macromolecules:
         translation.translation_data.using_ribosome = False
@@ -95,7 +94,8 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa):
         if aa == "OTHER":
             tRNA_aa.pop(tRNA)
         elif aa == "Sec":
-            print "TODO deal with selenocystine"
+            #Charge with precursor to selenocysteine
+            #tRNA_aa[tRNA] = me_model.metabolites.get_by_id('cys__L_c')
             tRNA_aa.pop(tRNA)
         elif aa == "Gly":
             tRNA_aa[tRNA] = me_model.metabolites.get_by_id("gly_c")
@@ -125,6 +125,8 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
     gb_file = SeqIO.read(gb_filename, 'gb')
     full_seq = str(gb_file.seq)
 
+    # Determine initial amount of transcripts in model for
+    # itertools.islice [start] value
     original_transcription_count = len(me_model.transcription_data)
 
     using_TUs = TU_frame is not None
@@ -132,17 +134,17 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         # generate a new TU frame where each mRNA gets its own TU
         TU_frame = pandas.DataFrame.from_dict(
             {"TU_" + i.qualifiers["locus_tag"][0]:
-                 {"start": int(i.location.start),
-                  "stop": int(i.location.end),
-                  "strand": "+" if i.strand == 1 else "-"}
+                {"start": int(i.location.start),
+                 "stop": int(i.location.end),
+                 "strand": "+" if i.strand == 1 else "-"}
              for i in gb_file.features if
              i.type in element_types},
             orient="index")
 
     tRNA_aa = {}
-    genome_pos_dict = {}
 
-    # create transcription reactions for each TU
+    # Create transcription reactions for each TU and DNA sequence.
+    # RNA_products will be added so no need to update now
     for TU_id in TU_frame.index:
         sequence = dogma.extract_sequence(full_seq, TU_frame.start[TU_id],
                                           TU_frame.stop[TU_id],
@@ -150,11 +152,11 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         add_transcription_reaction(me_model, TU_id, set(), sequence,
                                    update=False)
 
-    # associate each feature with a TU and add translation
+    # Associate each feature (RNA_product) with a TU and add translation
+    # reactions and demands
     for feature in gb_file.features:
 
         # Skip if not a gene used in ME construction
-        # add_list = ['CDS', 'rRNA', 'tRNA', 'ncRNA']
         if feature.type not in element_types or 'pseudo' in feature.qualifiers:
             continue
 
@@ -164,37 +166,40 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         right_pos = int(feature.location.end)
         RNA_type = 'mRNA' if feature.type == 'CDS' else feature.type
         strand = '+' if feature.strand == 1 else '-'
-        seq = full_seq[feature.location.start:feature.location.end]
-        if strand == "-":
-                seq = reverse_transcribe(seq)
+        # every genetic entity gets transcription
+        seq = dogma.extract_sequence(full_seq, left_pos, right_pos, strand)
+
+        # Deal with genes that require a frameshift mutation
+        frameshift_dict= ribosome.frameshift_dict
+        frameshift_string = frameshift_dict.get(bnum)
+        if len(seq) % 3 != 0 and frameshift_string:
+            print 'Applying frameshift on %s' % bnum
+            # Subtract 1 from start position to account for 0 indexing
+            seq = dogma.return_frameshift_sequence(full_seq, frameshift_string)
+            if strand == '-':
+                seq = dogma.reverse_transcribe(seq)
+
 
         # Add translation reaction for mRNA
         if RNA_type == "mRNA":
-            try:
-                amino_acid_sequence = feature.qualifiers["translation"][0]
-            except KeyError as e:
-                warn("No translated sequence found for " + bnum)
-                continue
-            else:
-                add_translation_reaction(me_model, bnum, amino_acid_sequence,
-                                         seq)
+            amino_acid_sequence = dogma.get_amino_acid_sequence_from_DNA(seq)
+            add_translation_reaction(me_model, bnum, amino_acid_sequence,
+                                     seq)
 
         # tRNA_aa = {'amino_acid':'tRNA'}
         elif feature.type == "tRNA":
             tRNA_aa[bnum] = feature.qualifiers["product"][0].split("-")[1]
 
-        # every genetic entity gets transcription
-        gene_seq = dogma.extract_sequence(full_seq, left_pos, right_pos, strand)
         gene = create_transcribed_gene(me_model, bnum, left_pos,
-                                       right_pos, gene_seq, strand, RNA_type)
+                                       right_pos, seq, strand, RNA_type)
+
         # Add in a demand reaction for each mRNA in case the TU makes
         # multiple products and one needs a sink. If the demand reaction is
         # used, it means the mRNA doesn't count towards biomass
-
         demand_reaction = cobra.Reaction("DM_" + gene.id)
         me_model.add_reaction(demand_reaction)
         demand_reaction.add_metabolites(
-            {gene: -1, me_model._biomass: -compute_RNA_mass(gene_seq)})
+            {gene: -1, me_model._biomass: -compute_RNA_mass(seq)})
 
         # associate with TU's
         parent_TU = TU_frame[
@@ -202,7 +207,8 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             TU_frame.strand == strand)].index
 
         if len(parent_TU) == 0:
-            warn('No TU found for %s %s' % (RNA_type, bnum))
+            if bnum not in ecoli_k12.no_TU_list:
+                warn('No TU found for %s %s' % (RNA_type, bnum))
             TU_id = "TU_" + bnum
             parent_TU = [TU_id]
             add_transcription_reaction(me_model, TU_id, set(), seq, update=False)
@@ -220,7 +226,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         if len(transcription_data.RNA_products) == 0:
             continue
         RNA_types = set(transcription_data.RNA_types)
-        if RNA_types == set(["mRNA"]):
+        if RNA_types == {"mRNA"}:
             continue
         seq = transcription_data.nucleotide_sequence
         counts = {i: seq.count(i) for i in ("A", "T", "G", "C")}
@@ -329,16 +335,19 @@ def add_ribosome(me_model):
     ribosome_assembly = ribosome.ribosome_stoich
     for process in ribosome_assembly:
         for protein, amount in ribosome_assembly[process]['stoich'].items():
-            try:
-                me_model.add_metabolites([Complex(protein)])
-            except:
-                pass
-            try:
-                ribosome_components[protein] += amount
-            except:
-                ribosome_components[protein] = amount
+            #try:
+            #    me_model.metabolites.get_by_id(protein)
+            #except KeyError:
+            #    me_model.add_metabolites([Complex(protein)])
+            #    print "added", protein, "to ME model"
 
+            ribosome_components[protein] += amount
+            #try:
+            #    ribosome_components[protein] += amount
+            #except KeyError:
+            #    ribosome_components[protein] = amount
 
+    ribosome_complex.create_complex_formation()
 
 def add_ribosomes_old(me_model):
     ribosome_complex = ComplexData("ribosome", me_model)

@@ -214,7 +214,6 @@ class TranslationData(ProcessData):
         else:
             warn('Stop codon not present in DNA sequence')
 
-    # not necessary because tRNA usage is now codon based, only
     @property
     def amino_acid_sequence(self):
         if len(self.nucleotide_sequence) % 3 != 0:
@@ -225,26 +224,27 @@ class TranslationData(ProcessData):
         amino_acid_sequence = ''.join(codon_table[i] for i in codons)
         amino_acid_sequence = amino_acid_sequence.rstrip("*")
         if "*" in amino_acid_sequence:
-            print self.id, 'TODO selenocysteine'
-            amino_acid_sequence = amino_acid_sequence.replace('*', 'C')
+            print self.id, 'working on selenocysteine'
+            amino_acid_sequence = amino_acid_sequence.replace('*', 'U')
         return amino_acid_sequence
+
 
     @property
     def codon_count(self):
         stop_codons = {'TAA': 'UAA', 'TGA': 'UGA', 'TAG': 'UAG'}
+        # exclude the last three stop codons from count
         codons = (self.nucleotide_sequence[i: i + 3]
-                  for i in range(0, (len(self.nucleotide_sequence)), 3))
+                  for i in range(0, (len(self.nucleotide_sequence)-3), 3))
         codon_count = defaultdict(int)
         for i in codons:
             if len(i) % 3 != 0:
-                print self.id, 'Needs Frameshift?'
+                print self.id, 'Needs Frameshift2?'
                 continue
-            if i in stop_codons:
-                # TODO handle this like start codons? and deal with selenocystein
-                #codon_count[stop_codons.get(i)] += 1
-                break
-            else:
-                codon_count[i.replace('T', 'U')] += 1
+            #    # TODO handle this like start codons? and deal with selenocystein
+            #    #codon_count[stop_codons.get(i)] += 1
+            #    break
+            #else:
+            codon_count[i.replace('T', 'U')] += 1
 
         # add start codon and remove one methionine (AUG) from codon count
         codon_count['START'] = 1

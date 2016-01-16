@@ -228,6 +228,7 @@ class TranslationReaction(Reaction):
         metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(int)
 
+        # If ribosome is not added to model, warn user but do not raise error
         if self.translation_data.using_ribosome:
             try:
                 ribosome = self._model.metabolites.get_by_id("ribosome")
@@ -238,6 +239,7 @@ class TranslationReaction(Reaction):
                 coupling = -protein_length * mu / k_ribo / 3600.
                 new_stoichiometry[ribosome] = coupling
 
+        # Not all genes have annotated TUs. For these add TU as the bnumber
         try:
             transcript = metabolites.get_by_id(mRNA_id)
         except KeyError:
@@ -248,18 +250,19 @@ class TranslationReaction(Reaction):
         k_mRNA = mu * self.translation_data.protein_per_mRNA / (mu + 0.391)
         new_stoichiometry[transcript] = -mu / k_mRNA / 3600.
 
+        # Added protein to model if not already included
         try:
             protein = metabolites.get_by_id(protein_id)
         except KeyError:
             protein = TranslatedGene(protein_id)
             self._model.add_metabolites(protein)
         new_stoichiometry[protein] = 1
-        # count just the amino acids
 
+        # ------------------ Elongation Reactions------------------------
         # update stoichiometry
         aa_count = self.translation_data.amino_acid_count
         for aa_name, value in iteritems(aa_count):
-            new_stoichiometry[metabolites.get_by_id(aa_name)] = -value
+            new_stoichiometry[metabolites.get_by_id(aa_name)] -= value
 
         # add in the tRNA's for each of the amino acids
         # We add in a "generic tRNA" for each amino acid. The production
@@ -267,25 +270,33 @@ class TranslationReaction(Reaction):
         # (according to its keff) for that amino acid to catalyze addition
         # of a single amino acid to a growing peptide.
 
-        # Add transcription termination at subprocessdata so keff can be
+        # Add transcription termination as subprocessdata so keff can be
         # modified
         all_subreactions = self._model.subreaction_data
-
         if self.translation_data.using_ribosome:
             for codon, count in self.translation_data.codon_count.items():
-                if codon == 'UGA':  # TODO selenocystein
+                if codon == 'UGA':
                     continue
+                    print 'finish seleno here: dealing with seleno for %s' % self.id
+                    #codon_subreaction_data = all_subreactions.get_by_id('sec_addition_at_UGA')
+                else:
+                    try:
+                        codon_subreaction_data = all_subreactions.query(codon)[0]
+                    except IndexError:
+                        warn('subreaction for codon %s not added' % codon)
                 try:
-                    codon_subreaction_data = all_subreactions.query(codon)[0]
-                    if codon_subreaction_data.enzyme:
-                        new_stoichiometry[metabolites.get_by_id(
-                            codon_subreaction_data.enzyme)] -= \
-                            mu / codon_subreaction_data.keff / 3600.
-                    for met, stoich in codon_subreaction_data.stoichiometry.items():
-                        new_stoichiometry[metabolites.get_by_id(met)] += \
-                            count * stoich
-                except IndexError:
-                    warn('subreaction for codon %s not added' % codon)
+                    enzyme = metabolites.get_by_id(
+                            codon_subreaction_data.enzyme)
+                except KeyError:
+                    enzyme = Complex(codon_subreaction_data.enzyme)
+                    self._model.add_metabolites([enzyme])
+                    warn('Added enzyme %s' % enzyme.id)
+                new_stoichiometry[enzyme] -= \
+                    mu / codon_subreaction_data.keff / 3600.
+
+                for met, stoich in codon_subreaction_data.stoichiometry.items():
+                    new_stoichiometry[metabolites.get_by_id(met)] += \
+                        count * stoich
 
         # TODO: how many protons/water molecules are exchanged when making the
         # peptide bond?
@@ -304,16 +315,18 @@ class TranslationReaction(Reaction):
         new_stoichiometry[metabolites.get_by_id("atp_c")] -= 1 * protein_length
         new_stoichiometry[metabolites.get_by_id("adp_c")] += 1 * protein_length
 
+        last_codon = \
+            self.translation_data.nucleotide_sequence[-3:].replace('T', 'U')
+
+        term_enzyme = translation_stop_dict.get(last_codon)
         try:
-            term_enzyme = translation_stop_dict.get(
-                self.translation_data.nucleotide_sequence[-3:].replace('T', 'U'))
             term_subreaction_data = all_subreactions.get_by_id(
-                term_enzyme + '_' + 'mediated_termination')
+                last_codon + '_' + term_enzyme + '_mediated_termination')
             new_stoichiometry[metabolites.get_by_id(
                 term_subreaction_data.enzyme)] -= \
                 mu / term_subreaction_data.keff / 3600.
         except:
-            warn('Term Enzyme not in model')
+            warn('Term Enzyme not in model for %s' % self.id)
 
         self.add_metabolites(new_stoichiometry,
                              combine=False, add_to_container_model=False)

@@ -18,7 +18,8 @@ amino_acids = {
     "T": "thr__L_c",
     "W": "trp__L_c",
     "Y": "tyr__L_c",
-    "V": "val__L_c"
+    "V": "val__L_c",
+    "U": "cys__L_c"  # precursor to selenocysteine
 }
 
 codon_table = {"TTT": "F", "TTC": "F", "TTA": "L", "TTG": "L", "TCT": "S",
@@ -44,6 +45,12 @@ def reverse_transcribe(seq):
     return ''.join(base_pairs[i] for i in reversed(seq))
 
 
+def return_frameshift_sequence(full_seq, frameshift_string):
+    seq = reduce(lambda x, y: x + y,
+             [full_seq[int(x.split(':')[0])-1:int(x.split(':')[1])]
+              for x in frameshift_string.replace(' ', '').split(',')])
+    return seq
+
 def extract_sequence(full_seq, left_pos, right_pos, strand):
     seq = full_seq[left_pos:right_pos]
     if strand == "+":
@@ -52,6 +59,19 @@ def extract_sequence(full_seq, left_pos, right_pos, strand):
         return reverse_transcribe(seq)
     else:
         raise ValueError("strand must be either '+' or '-'")
+
+
+def get_amino_acid_sequence_from_DNA(dna_seq):
+    if len(dna_seq) % 3 != 0:
+        print 'TODO frameshifts!'
+        dna_seq = dna_seq[:-1]
+    codons = (dna_seq[i: i + 3]
+              for i in range(0, (len(dna_seq)), 3))
+    amino_acid_sequence = ''.join(codon_table[i] for i in codons)
+    amino_acid_sequence = amino_acid_sequence.rstrip("*")
+    if "*" in amino_acid_sequence:
+        amino_acid_sequence = amino_acid_sequence.replace('*', 'C')
+    return amino_acid_sequence
 
 
 tRNA_to_codon = {'b2691': ['CGU', 'CGC', 'CGA'],
