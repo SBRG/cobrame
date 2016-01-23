@@ -6,9 +6,21 @@ from minime import util
 from minime.util import dogma
 from minime import *
 from cobra.core import Reaction
+from ecolime import ecoli_k12
 from ecolime.ecoli_k12 import *
+from ecolime import ribosome
 import cobra
 import itertools
+
+print "Building a full ME model. Run prepare_for_minime() to make minimal " \
+      "model"
+macromolecules = True
+
+
+def prepare_for_minime():
+    global macromolecules
+    macromolecules = False
+    print "Creating minimal me model"
 
 
 def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
@@ -20,6 +32,8 @@ def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
     transcription.transcription_data.nucleotide_sequence = sequence
     transcription.transcription_data.RNA_products = {"RNA_" + i
                                                      for i in locus_ids}
+    if not macromolecules:
+        transcription.transcription_data.using_RNAP = False
     me_model.add_reaction(transcription)
     if update:
         transcription.update()
@@ -42,19 +56,26 @@ def create_transcribed_gene(me_model, bnum, left_pos, right_pos, seq,
 
 def add_translation_reaction(me_model, bnum, amino_acid_sequence=None,
                              dna_sequence=None, update=False):
-
+    if not amino_acid_sequence and not dna_sequence:
+        print 'Transltion reactions require sequences for', bnum
     translation = TranslationReaction("translation_" + bnum)
     me_model.add_reaction(translation)
 
     translation.translation_data = \
         TranslationData(bnum, me_model, "RNA_" + bnum,
                         "protein_" + bnum)
+
+    translation.translation_data.nucleotide_sequence = dna_sequence
+    # translation.translation_data.get_codon_count_from_DNA(dna_sequence)
+    translation.translation_data.get_last_codon_from_DNA(dna_sequence)
+
+    amino_acid_sequence = None
     if amino_acid_sequence is not None:
         translation.translation_data.amino_acid_sequence = \
-            amino_acid_sequence.replace("U", "C")  # TODO selenocystine
-    elif dna_sequence is not None:
-        translation.translation_data.compute_sequence_from_DNA(dna_sequence)
-
+            amino_acid_sequence # .replace("U", "C")  # TODO selenocystine
+    #    translation.translation_data.compute_sequence_from_DNA(dna_sequence)
+    if not macromolecules:
+        translation.translation_data.using_ribosome = False
     if update:
         translation.update()
 
@@ -67,14 +88,15 @@ def add_demand_reaction(me_model, bnum):
     #r.reaction = 'RNA_' + bnum + ' -> '
 
 
-def convert_aa_codes_and_add_charging(me_model, tRNA_aa):
+def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_modifications,
+                                      verbose=True):
     # convert amino acid 3 letter codes to metabolites
     for tRNA, aa in list(tRNA_aa.items()):
         if aa == "OTHER":
             tRNA_aa.pop(tRNA)
         elif aa == "Sec":
-            print "TODO deal with selenocystine"
-            tRNA_aa.pop(tRNA)
+            # Charge with precursor to selenocysteine
+            tRNA_aa[tRNA] = me_model.metabolites.get_by_id('cys__L_c')
         elif aa == "Gly":
             tRNA_aa[tRNA] = me_model.metabolites.get_by_id("gly_c")
         else:
@@ -83,16 +105,21 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa):
 
     # add in all the tRNA charging reactions
     for tRNA, aa in tRNA_aa.items():
-        tRNA_data = tRNAData("tRNA_" + tRNA, me_model, aa.id, "RNA_" + tRNA)
-        charging_reaction = tRNAChargingReaction("charging_tRNA_" + tRNA)
-        charging_reaction.tRNAData = tRNA_data
-        me_model.add_reaction(charging_reaction)
-        charging_reaction.update()
+        for codon in tRNA_to_codon[tRNA]:
+            tRNA_data = tRNAData("tRNA_" + tRNA + "_" + codon, me_model, aa.id,
+                                 "RNA_" + tRNA, codon)
+            charging_reaction = tRNAChargingReaction("charging_tRNA_" + tRNA +
+                                                     "_" + codon)
+            charging_reaction.tRNAData = tRNA_data
+            tRNA_data.modifications = tRNA_modifications[tRNA]
 
+            me_model.add_reaction(charging_reaction)
+            charging_reaction.update(verbose=verbose)
 
 
 def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
-                                 element_types={"CDS", "rRNA", "tRNA", "ncRNA"}):
+                                 element_types={'CDS', 'rRNA', 'tRNA', 'ncRNA'},
+                                 tRNA_modifications=None, verbose=True):
 
     # TODO handle special RNAse without type ('b3123')
     """create transcription and translation reactions from a genbank file
@@ -101,6 +128,8 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
     gb_file = SeqIO.read(gb_filename, 'gb')
     full_seq = str(gb_file.seq)
 
+    # Determine initial amount of transcripts in model for
+    # itertools.islice [start] value
     original_transcription_count = len(me_model.transcription_data)
 
     using_TUs = TU_frame is not None
@@ -108,17 +137,17 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         # generate a new TU frame where each mRNA gets its own TU
         TU_frame = pandas.DataFrame.from_dict(
             {"TU_" + i.qualifiers["locus_tag"][0]:
-                 {"start": int(i.location.start),
-                  "stop": int(i.location.end),
-                  "strand": "+" if i.strand == 1 else "-"}
+                {"start": int(i.location.start),
+                 "stop": int(i.location.end),
+                 "strand": "+" if i.strand == 1 else "-"}
              for i in gb_file.features if
              i.type in element_types},
             orient="index")
 
     tRNA_aa = {}
-    genome_pos_dict = {}
 
-    # create transcription reactions for each TU
+    # Create transcription reactions for each TU and DNA sequence.
+    # RNA_products will be added so no need to update now
     for TU_id in TU_frame.index:
         sequence = dogma.extract_sequence(full_seq, TU_frame.start[TU_id],
                                           TU_frame.stop[TU_id],
@@ -126,11 +155,11 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         add_transcription_reaction(me_model, TU_id, set(), sequence,
                                    update=False)
 
-    # associate each feature with a TU and add translation
+    # Associate each feature (RNA_product) with a TU and add translation
+    # reactions and demands
     for feature in gb_file.features:
 
         # Skip if not a gene used in ME construction
-        # add_list = ['CDS', 'rRNA', 'tRNA', 'ncRNA']
         if feature.type not in element_types or 'pseudo' in feature.qualifiers:
             continue
 
@@ -140,36 +169,40 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         right_pos = int(feature.location.end)
         RNA_type = 'mRNA' if feature.type == 'CDS' else feature.type
         strand = '+' if feature.strand == 1 else '-'
-        seq = full_seq[feature.location.start:feature.location.end]
-        if strand == "-":
-                seq = reverse_transcribe(seq)
+        # every genetic entity gets transcription
+        seq = dogma.extract_sequence(full_seq, left_pos, right_pos, strand)
+
+        # Deal with genes that require a frameshift mutation
+        frameshift_dict= ribosome.frameshift_dict
+        frameshift_string = frameshift_dict.get(bnum)
+        if len(seq) % 3 != 0 and frameshift_string:
+            print 'Applying frameshift on %s' % bnum
+            # Subtract 1 from start position to account for 0 indexing
+            seq = dogma.return_frameshift_sequence(full_seq, frameshift_string)
+            if strand == '-':
+                seq = dogma.reverse_transcribe(seq)
+
 
         # Add translation reaction for mRNA
         if RNA_type == "mRNA":
-            try:
-                amino_acid_sequence = feature.qualifiers["translation"][0]
-            except KeyError as e:
-                warn("No translated sequence found for " + bnum)
-                continue
-            else:
-                add_translation_reaction(me_model, bnum, amino_acid_sequence)
+            amino_acid_sequence = dogma.get_amino_acid_sequence_from_DNA(seq)
+            add_translation_reaction(me_model, bnum, amino_acid_sequence,
+                                     seq)
 
         # tRNA_aa = {'amino_acid':'tRNA'}
         elif feature.type == "tRNA":
             tRNA_aa[bnum] = feature.qualifiers["product"][0].split("-")[1]
 
-        # every genetic entity gets transcription
-        gene_seq = dogma.extract_sequence(full_seq, left_pos, right_pos, strand)
         gene = create_transcribed_gene(me_model, bnum, left_pos,
-                                       right_pos, gene_seq, strand, RNA_type)
+                                       right_pos, seq, strand, RNA_type)
+
         # Add in a demand reaction for each mRNA in case the TU makes
         # multiple products and one needs a sink. If the demand reaction is
         # used, it means the mRNA doesn't count towards biomass
-
         demand_reaction = cobra.Reaction("DM_" + gene.id)
         me_model.add_reaction(demand_reaction)
         demand_reaction.add_metabolites(
-            {gene: -1, me_model._biomass: -compute_RNA_mass(gene_seq)})
+            {gene: -1, me_model._biomass: -compute_RNA_mass(seq)})
 
         # associate with TU's
         parent_TU = TU_frame[
@@ -177,7 +210,8 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             TU_frame.strand == strand)].index
 
         if len(parent_TU) == 0:
-            warn('No TU found for %s %s' % (RNA_type, bnum))
+            if bnum not in ecoli_k12.no_TU_list:
+                warn('No TU found for %s %s' % (RNA_type, bnum))
             TU_id = "TU_" + bnum
             parent_TU = [TU_id]
             add_transcription_reaction(me_model, TU_id, set(), seq, update=False)
@@ -185,7 +219,9 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         for TU_id in parent_TU:
             me_model.transcription_data.get_by_id(TU_id).RNA_products.add("RNA_" + bnum)
 
-    convert_aa_codes_and_add_charging(me_model, tRNA_aa)
+    if macromolecules:
+        convert_aa_codes_and_add_charging(me_model, tRNA_aa,
+                                          tRNA_modifications, verbose=verbose)
 
     # add excised portions
     for transcription_data in itertools.islice(me_model.transcription_data,
@@ -194,7 +230,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         if len(transcription_data.RNA_products) == 0:
             continue
         RNA_types = set(transcription_data.RNA_types)
-        if RNA_types == set(["mRNA"]):
+        if RNA_types == {"mRNA"}:
             continue
         seq = transcription_data.nucleotide_sequence
         counts = {i: seq.count(i) for i in ("A", "T", "G", "C")}
@@ -258,8 +294,10 @@ def add_generic_rRNAs(me_model):
 
     for rRNA_type in rRNA_type_list:
         for rRNA in eval(rRNA_type):
+
             rRNA_id = 'RNA_' + rRNA
             me_model.add_metabolites([TranscribedGene(rRNA_type)])
+            me_model.add_metabolites([TranscribedGene(rRNA_id)])
             new_rxn = cobra.Reaction("rRNA_" + rRNA + '_to_generic')
             me_model.add_reaction(new_rxn)
             new_rxn.reaction = rRNA_id + ' <=> ' + rRNA_type
@@ -286,13 +324,13 @@ def add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme=None):
     return mod
 
 
-def add_ribosomes(me_model):
+def add_ribosome(me_model, verbose=True):
     ribosome_complex = ComplexData("ribosome", me_model)
     ribosome_components = ribosome_complex.stoichiometry
     ribosome_modifications = ribosome_complex.modifications
 
     add_generic_rRNAs(me_model)
-    mod_dict = eval('Ribosome_modifications_phase1')
+    mod_dict = ribosome.ribosome_modifications
     for mod_id in mod_dict:
         mod_stoich = mod_dict[mod_id]['stoich']
         mod_enzyme = mod_dict[mod_id]['enzyme']
@@ -300,45 +338,12 @@ def add_ribosomes(me_model):
         mod = add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme)
         ribosome_modifications[mod.id] = -num_mods
 
-    ribosome_components['generic_16s_rRNAs'] = 1
+    ribosome_assembly = ribosome.ribosome_stoich
+    for process in ribosome_assembly:
+        for protein, amount in ribosome_assembly[process]['stoich'].items():
+            ribosome_components[protein] += amount
 
-    # 30S Listed as [rpsA -rpsU], sra, [rplA-rplF],
-    # rplI, [rplK-rplY], [rpmA-rpmJ]
-
-    # 50S listed as [rplA-rplF],rplJ, rplI, rplK [rplM-rplY], [rpmA-rpmJ]
-
-    ribosome_subunit_list = ['Ribosome_30s_proteins', 'Ribosome_50s_proteins']
-
-    for ribosome_subunit in ribosome_subunit_list:
-        protein_dict = eval(ribosome_subunit)
-        for protein, amount in protein_dict.items():
-            try:
-                me_model.add_metabolites([Complex(protein)])
-            except:
-                pass
-            ribosome_components[protein] = amount
-
-    ribosome_components['mg2_c'] = 60
-
-    # 50s reactions
-    ribosome_components['generic_23s_rRNAs'] = 1
-    ribosome_components['generic_5s_rRNAs'] = 1
-    ribosome_components['mg2_c'] += 111
-
-    # get ribosome ready for translation
-    # ribosome_50 + ribosome_30 + trigger_factor -> rib_70
-    ribosome_components['Tig_mono'] = 1
-
-    # rib_70 + If_1 + If_3 -> rib_50_trigger_factor + rib30_if1_if3
-    ribosome_components['InfA_mono'] = 1
-    ribosome_components['InfC_mono'] = 1
-
-    # 1 b3168_assumedMonomer_gtp(InfB_mono) + 1 rib_30_IF1_IF3 --> 1 rib_30_ini
-    ribosome_components['InfB_mono'] = 1
-    ribosome_components['gtp_c'] = 1
-
-    # rib_30_ini + rib_50_trigger_factor -> ribsome_complex
-    ribosome_complex.create_complex_formation()
+    ribosome_complex.create_complex_formation(verbose=verbose)
 
 
 def add_RNA_polymerase(me_model):
@@ -586,7 +591,7 @@ def count_and_add_excisions(me_model, pieces, transcription_data):
 
 def splice_TUs(me_model, TU_pieces, generic_flag=False):
 
-    add_generic_RNase(me_model, generic_flag=generic_flag)
+    # add_generic_RNase(me_model, generic_flag=generic_flag)
     add_excision_machinery(me_model)
 
     for TU, combos_of_pieces in TU_pieces.iteritems():
@@ -651,17 +656,17 @@ def add_TUs_and_translation(me_model, filename, TU_frame=None,
     splice_TUs(me_model, TU_pieces, generic_flag=generic_flag)
 
 
-def add_dummy_reactions(me_model, dna_seq):
+def add_dummy_reactions(me_model, dna_seq, update=True):
     dummy = StoichiometricData("dummy_reaction", me_model)
     dummy.lower_bound = 0
     dummy.upper_bound = 1000
     dummy._stoichiometry = {}
 
-    add_transcription_reaction(me_model, "dummy", {"dummy"}, dna_seq)
+    add_transcription_reaction(me_model, "RNA_dummy", {"dummy"}, dna_seq)
 
     me_model.add_metabolites(TranslatedGene("protein_" + "dummy"))
     add_translation_reaction(me_model, "dummy", dna_sequence=dna_seq,
-                             update=True)
+                             update=update)
 
     complex_data = ComplexData("CPLX_dummy", me_model)
     complex_data.stoichiometry = {}
@@ -707,11 +712,11 @@ def add_complex_modification_data(me_model, modification_dict):
             add_modication_data(me_model, mod_id, {mod_comp: -1})
 
 
-def add_complex(me_model, modifcation_dict, ME_complex_dict):
+def add_complex(me_model, ME_complex_dict,  modification_dict):
 
     add_complex_stoichiometry_data(me_model, ME_complex_dict)
 
-    add_complex_modification_data(me_model, modifcation_dict)
+    add_complex_modification_data(me_model, modification_dict)
 
 
 def find_associated_complexes(rxnToModCplxDict, reaction_data,
@@ -774,6 +779,7 @@ def add_complexes_and_rxn_data(me_model, reaction_data, complexes_list,
 def add_metabolic_reactions(me_model, reaction_data, rxnToModCplxDict,
                             rxn_info, update=False,
                             create_new=False):
+    # TODO document better and rename
 
     complexes_list = find_associated_complexes(rxnToModCplxDict,
                                                reaction_data, rxn_info)

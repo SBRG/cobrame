@@ -19,6 +19,7 @@ class ProcessData(object):
         # parents need to be updated every time the process is updated
         # a parent must have an update method
         self._parent_reactions = set()
+        model.process_data.append(self)
 
     @property
     def model(self):
@@ -59,7 +60,20 @@ class ModificationData(ProcessData):
         model.modification_data.append(self)
         self.stoichiometry = {}
         self.enzyme = None
-        self.modification_keff = None
+        self.keff = 65
+
+    def get_complex_data(self):
+        for i in self._model.complex_data:
+            if self.id in i.modifications:
+                yield i
+
+
+class SubreactionData(ProcessData):
+    def __init__(self, id, model):
+        ProcessData.__init__(self, id, model)
+        model.subreaction_data.append(self)
+        self.stoichiometry = {}
+        self.enzyme = None
         self.keff = 65
 
     def get_complex_data(self):
@@ -102,7 +116,7 @@ class ComplexData(ProcessData):
         self.modifications = {}
         self._complex_id = None  # assumed to be the same as id if None
 
-    def create_complex_formation(self):
+    def create_complex_formation(self, verbose=True):
         """creates a complex formation reaction
 
         This assumes none exists already. Will create a reaction (prefixed by
@@ -113,7 +127,7 @@ class ComplexData(ProcessData):
         formation = ComplexFormation(formation_id)
         formation._complex_id = self.complex_id
         self._model.add_reaction(formation)
-        formation.update()
+        formation.update(verbose=verbose)
 
 
 class TranscriptionData(ProcessData):
@@ -125,7 +139,9 @@ class TranscriptionData(ProcessData):
         # i.e. {"amp_c": 10, "gmp_c": 11, "ump_c": 9, "cmp_c": 11}
         self.excised_bases = {}
         # {ModificationData.id : number}
-        self.modifications = {}
+        self.modifications = defaultdict(int)
+        # Used if not creating a "MiniME" model
+        self.using_RNAP = True
 
     @property
     def nucleotide_count(self):
@@ -170,21 +186,80 @@ class GenericData(ProcessData):
 
 
 class TranslationData(ProcessData):
-    protein_per_mRNA = 50000000
+    protein_per_mRNA = .5  # per second
     amino_acid_sequence = ""
+    last_codon = ""
     mRNA = None
+    nucleotide_sequence = ""
 
     def __init__(self, id, model, mRNA, protein):
         ProcessData.__init__(self, id, model)
         model.translation_data.append(self)
         self.mRNA = mRNA
         self.protein = protein
+        # Used if not creating a "MiniME" model
+        self.using_ribosome = True
+        self.subreactions = defaultdict(int)
 
-    def compute_sequence_from_DNA(self, dna_sequence):
-        codons = (dna_sequence[i: i + 3]
-                  for i in range(0, (len(dna_sequence)), 3))
-        self.amino_acid_sequence = ''.join(codon_table[i] for i in codons)
-        self.amino_acid_sequence = self.amino_acid_sequence.rstrip("*")
+
+
+    # depreciated by codon count
+    def get_last_codon_from_DNA(self, dna_sequence):
+        if 'TAA' in dna_sequence:
+            self.last_codon = 'UAA'
+        elif 'TGA' in dna_sequence:
+            self.last_codon = 'UGA'
+        elif 'TAG' in dna_sequence:
+            self.last_codon = 'UAG'
+        else:
+            warn('Stop codon not present in DNA sequence')
+
+    @property
+    def amino_acid_sequence(self):
+        if len(self.nucleotide_sequence) % 3 != 0:
+            self.nucleotide_sequence = self.nucleotide_sequence[:-1]
+            print self.id, ' Needs frameshift?'
+        codons = (self.nucleotide_sequence[i: i + 3]
+                  for i in range(0, (len(self.nucleotide_sequence)), 3))
+        amino_acid_sequence = ''.join(codon_table[i] for i in codons)
+        amino_acid_sequence = amino_acid_sequence.rstrip("*")
+        if "*" in amino_acid_sequence:
+            amino_acid_sequence = amino_acid_sequence.replace('*', 'U')
+        return amino_acid_sequence
+
+
+    @property
+    def codon_count(self):
+        stop_codons = {'TAA': 'UAA', 'TGA': 'UGA', 'TAG': 'UAG'}
+        # exclude the last three stop codons from count
+        codons = (self.nucleotide_sequence[i: i + 3]
+                  for i in range(0, (len(self.nucleotide_sequence)-3), 3))
+        codon_count = defaultdict(int)
+        for i in codons:
+            if len(i) % 3 != 0:
+                print self.id, 'Needs Frameshift2?'
+                continue
+            #    # TODO handle this like start codons? and deal with selenocystein
+            #    #codon_count[stop_codons.get(i)] += 1
+            #    break
+            #else:
+            codon_count[i.replace('T', 'U')] += 1
+
+        # add start codon and remove one methionine (AUG) from codon count
+        #codon_count['START'] = 1
+        if self.nucleotide_sequence.startswith('ATG'):
+            codon_count['AUG'] -= 1
+        elif self.nucleotide_sequence.startswith('GTG'):
+            codon_count['GUG'] -= 1
+        elif self.nucleotide_sequence.startswith('TTG'):
+            codon_count['UUG'] -= 1
+        elif self.nucleotide_sequence.startswith('ATT'):
+            codon_count['AUU'] -= 1
+        elif self.nucleotide_sequence.startswith('CTG'):
+            codon_count['CUG'] -= 1
+        else:
+            raise NameError('No start codon in DNA sequence %s' %self.mRNA)
+        return codon_count
 
     @property
     def amino_acid_count(self):
@@ -204,9 +279,10 @@ class tRNAData(ProcessData):
     synthetase = None
     synthetase_keff = 65.
 
-    def __init__(self, id, model, amino_acid, RNA):
+    def __init__(self, id, model, amino_acid, RNA, codon):
         ProcessData.__init__(self, id, model)
         model.tRNA_data.append(self)
+        self.codon = codon
         self.amino_acid = amino_acid
         self.RNA = RNA
         self.tRNA_keff = 2.39 * mu / (mu + 0.391)
