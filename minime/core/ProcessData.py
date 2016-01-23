@@ -19,6 +19,7 @@ class ProcessData(object):
         # parents need to be updated every time the process is updated
         # a parent must have an update method
         self._parent_reactions = set()
+        model.process_data.append(self)
 
     @property
     def model(self):
@@ -59,7 +60,6 @@ class ModificationData(ProcessData):
         model.modification_data.append(self)
         self.stoichiometry = {}
         self.enzyme = None
-        self.modification_keff = None
         self.keff = 65
 
     def get_complex_data(self):
@@ -116,7 +116,7 @@ class ComplexData(ProcessData):
         self.modifications = {}
         self._complex_id = None  # assumed to be the same as id if None
 
-    def create_complex_formation(self):
+    def create_complex_formation(self, verbose=True):
         """creates a complex formation reaction
 
         This assumes none exists already. Will create a reaction (prefixed by
@@ -127,7 +127,7 @@ class ComplexData(ProcessData):
         formation = ComplexFormation(formation_id)
         formation._complex_id = self.complex_id
         self._model.add_reaction(formation)
-        formation.update()
+        formation.update(verbose=verbose)
 
 
 class TranscriptionData(ProcessData):
@@ -139,7 +139,7 @@ class TranscriptionData(ProcessData):
         # i.e. {"amp_c": 10, "gmp_c": 11, "ump_c": 9, "cmp_c": 11}
         self.excised_bases = {}
         # {ModificationData.id : number}
-        self.modifications = {}
+        self.modifications = defaultdict(int)
         # Used if not creating a "MiniME" model
         self.using_RNAP = True
 
@@ -199,7 +199,7 @@ class TranslationData(ProcessData):
         self.protein = protein
         # Used if not creating a "MiniME" model
         self.using_ribosome = True
-        self.subreactions = {}
+        self.subreactions = defaultdict(int)
 
 
 
@@ -224,7 +224,6 @@ class TranslationData(ProcessData):
         amino_acid_sequence = ''.join(codon_table[i] for i in codons)
         amino_acid_sequence = amino_acid_sequence.rstrip("*")
         if "*" in amino_acid_sequence:
-            print self.id, 'working on selenocysteine'
             amino_acid_sequence = amino_acid_sequence.replace('*', 'U')
         return amino_acid_sequence
 
@@ -247,7 +246,7 @@ class TranslationData(ProcessData):
             codon_count[i.replace('T', 'U')] += 1
 
         # add start codon and remove one methionine (AUG) from codon count
-        codon_count['START'] = 1
+        #codon_count['START'] = 1
         if self.nucleotide_sequence.startswith('ATG'):
             codon_count['AUG'] -= 1
         elif self.nucleotide_sequence.startswith('GTG'):

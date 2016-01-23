@@ -88,15 +88,15 @@ def add_demand_reaction(me_model, bnum):
     #r.reaction = 'RNA_' + bnum + ' -> '
 
 
-def convert_aa_codes_and_add_charging(me_model, tRNA_aa):
+def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_modifications,
+                                      verbose=True):
     # convert amino acid 3 letter codes to metabolites
     for tRNA, aa in list(tRNA_aa.items()):
         if aa == "OTHER":
             tRNA_aa.pop(tRNA)
         elif aa == "Sec":
-            #Charge with precursor to selenocysteine
-            #tRNA_aa[tRNA] = me_model.metabolites.get_by_id('cys__L_c')
-            tRNA_aa.pop(tRNA)
+            # Charge with precursor to selenocysteine
+            tRNA_aa[tRNA] = me_model.metabolites.get_by_id('cys__L_c')
         elif aa == "Gly":
             tRNA_aa[tRNA] = me_model.metabolites.get_by_id("gly_c")
         else:
@@ -111,12 +111,15 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa):
             charging_reaction = tRNAChargingReaction("charging_tRNA_" + tRNA +
                                                      "_" + codon)
             charging_reaction.tRNAData = tRNA_data
+            tRNA_data.modifications = tRNA_modifications[tRNA]
+
             me_model.add_reaction(charging_reaction)
-            charging_reaction.update()
+            charging_reaction.update(verbose=verbose)
 
 
 def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
-                                 element_types={"CDS", "rRNA", "tRNA", "ncRNA"}):
+                                 element_types={'CDS', 'rRNA', 'tRNA', 'ncRNA'},
+                                 tRNA_modifications=None, verbose=True):
 
     # TODO handle special RNAse without type ('b3123')
     """create transcription and translation reactions from a genbank file
@@ -217,7 +220,8 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             me_model.transcription_data.get_by_id(TU_id).RNA_products.add("RNA_" + bnum)
 
     if macromolecules:
-        convert_aa_codes_and_add_charging(me_model, tRNA_aa)
+        convert_aa_codes_and_add_charging(me_model, tRNA_aa,
+                                          tRNA_modifications, verbose=verbose)
 
     # add excised portions
     for transcription_data in itertools.islice(me_model.transcription_data,
@@ -290,8 +294,10 @@ def add_generic_rRNAs(me_model):
 
     for rRNA_type in rRNA_type_list:
         for rRNA in eval(rRNA_type):
+
             rRNA_id = 'RNA_' + rRNA
             me_model.add_metabolites([TranscribedGene(rRNA_type)])
+            me_model.add_metabolites([TranscribedGene(rRNA_id)])
             new_rxn = cobra.Reaction("rRNA_" + rRNA + '_to_generic')
             me_model.add_reaction(new_rxn)
             new_rxn.reaction = rRNA_id + ' <=> ' + rRNA_type
@@ -318,7 +324,7 @@ def add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme=None):
     return mod
 
 
-def add_ribosome(me_model):
+def add_ribosome(me_model, verbose=True):
     ribosome_complex = ComplexData("ribosome", me_model)
     ribosome_components = ribosome_complex.stoichiometry
     ribosome_modifications = ribosome_complex.modifications
@@ -335,73 +341,9 @@ def add_ribosome(me_model):
     ribosome_assembly = ribosome.ribosome_stoich
     for process in ribosome_assembly:
         for protein, amount in ribosome_assembly[process]['stoich'].items():
-            #try:
-            #    me_model.metabolites.get_by_id(protein)
-            #except KeyError:
-            #    me_model.add_metabolites([Complex(protein)])
-            #    print "added", protein, "to ME model"
-
             ribosome_components[protein] += amount
-            #try:
-            #    ribosome_components[protein] += amount
-            #except KeyError:
-            #    ribosome_components[protein] = amount
 
-    ribosome_complex.create_complex_formation()
-
-def add_ribosomes_old(me_model):
-    ribosome_complex = ComplexData("ribosome", me_model)
-    ribosome_components = ribosome_complex.stoichiometry
-    ribosome_modifications = ribosome_complex.modifications
-
-    add_generic_rRNAs(me_model)
-    mod_dict = eval('Ribosome_modifications_phase1')
-    for mod_id in mod_dict:
-        mod_stoich = mod_dict[mod_id]['stoich']
-        mod_enzyme = mod_dict[mod_id]['enzyme']
-        num_mods = mod_dict[mod_id]['num_mods']
-        mod = add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme)
-        ribosome_modifications[mod.id] = -num_mods
-
-    ribosome_components['generic_16s_rRNAs'] = 1
-
-    # 30S Listed as [rpsA -rpsU], sra, [rplA-rplF],
-    # rplI, [rplK-rplY], [rpmA-rpmJ]
-
-    # 50S listed as [rplA-rplF],rplJ, rplI, rplK [rplM-rplY], [rpmA-rpmJ]
-
-    ribosome_subunit_list = ['Ribosome_30s_proteins', 'Ribosome_50s_proteins']
-
-    for ribosome_subunit in ribosome_subunit_list:
-        protein_dict = eval(ribosome_subunit)
-        for protein, amount in protein_dict.items():
-            try:
-                me_model.add_metabolites([Complex(protein)])
-            except:
-                pass
-            ribosome_components[protein] = amount
-
-    ribosome_components['mg2_c'] = 60
-
-    # 50s reactions
-    ribosome_components['generic_23s_rRNAs'] = 1
-    ribosome_components['generic_5s_rRNAs'] = 1
-    ribosome_components['mg2_c'] += 111
-
-    # get ribosome ready for translation
-    # ribosome_50 + ribosome_30 + trigger_factor -> rib_70
-    ribosome_components['Tig_mono'] = 1
-
-    # rib_70 + If_1 + If_3 -> rib_50_trigger_factor + rib30_if1_if3
-    ribosome_components['InfA_mono'] = 1
-    ribosome_components['InfC_mono'] = 1
-
-    # 1 b3168_assumedMonomer_gtp(InfB_mono) + 1 rib_30_IF1_IF3 --> 1 rib_30_ini
-    ribosome_components['InfB_mono'] = 1
-    ribosome_components['gtp_c'] = 1
-
-    # rib_30_ini + rib_50_trigger_factor -> ribsome_complex
-    ribosome_complex.create_complex_formation()
+    ribosome_complex.create_complex_formation(verbose=verbose)
 
 
 def add_RNA_polymerase(me_model):
@@ -720,7 +662,7 @@ def add_dummy_reactions(me_model, dna_seq, update=True):
     dummy.upper_bound = 1000
     dummy._stoichiometry = {}
 
-    add_transcription_reaction(me_model, "dummy", {"dummy"}, dna_seq)
+    add_transcription_reaction(me_model, "RNA_dummy", {"dummy"}, dna_seq)
 
     me_model.add_metabolites(TranslatedGene("protein_" + "dummy"))
     add_translation_reaction(me_model, "dummy", dna_sequence=dna_seq,
@@ -837,6 +779,7 @@ def add_complexes_and_rxn_data(me_model, reaction_data, complexes_list,
 def add_metabolic_reactions(me_model, reaction_data, rxnToModCplxDict,
                             rxn_info, update=False,
                             create_new=False):
+    # TODO document better and rename
 
     complexes_list = find_associated_complexes(rxnToModCplxDict,
                                                reaction_data, rxn_info)

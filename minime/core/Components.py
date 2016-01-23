@@ -61,5 +61,7 @@ def create_component(component_id, default_type=Component):
         return Ribosome(component_id)
     elif component_id.startswith("RNA_Polymerase"):
         return RNAP(component_id)
+    elif component_id.startswith("generic_tRNA"):
+        return GenerictRNA(component_id)
     else:
         return default_type(component_id)

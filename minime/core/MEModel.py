@@ -19,6 +19,7 @@ class MEmodel(Model):
         self.tRNA_data = DictList()
         self.translocation_pathways = DictList()
         self.subreaction_data = DictList()
+        self.process_data = DictList()
         # create the biomass/dilution constraint
         self._biomass = Constraint("biomass")
         self._biomass_dilution = SummaryVariable("biomass_dilution")
@@ -113,3 +114,53 @@ class MEmodel(Model):
         lb_err = min(x - lb)
         errors["lower_bound_error"] = abs(lb_err) if lb_err < 0 else 0
         return errors
+
+    def update(self):
+        """updates all component reactions"""
+        for r in self.reactions:
+            if hasattr(r, "update"):
+                r.update()
+
+    def prune(self):
+        """remove all unused metabolites and reactions
+
+        This should be run after the model is fully built. It will be
+        difficult to add new content to the model once this has been run.
+
+        """
+        for c_d in self.complex_data:
+            c = c_d.complex
+            if len(c.reactions) == 1:
+                list(c.reactions)[0].delete(remove_orphans=True)
+
+        for p in self.metabolites.query("protein"):
+            delete = True
+            for rxn in p._reaction:
+                try:
+                    if p in rxn.reactants:
+                        delete = False
+                except Exception as e:
+                    print(rxn)
+                    raise e
+            if delete:
+                while len(p._reaction) > 0:
+                    list(p._reaction)[0].delete(remove_orphans=True)
+
+        for m in self.metabolites.query("RNA"):
+            delete = True
+            for rxn in m._reaction:
+                if m in rxn.reactants and not rxn.id.startswith('DM_'):
+                    delete = False
+            if delete:
+                self.reactions.get_by_id('DM_' + m.id).remove_from_model(
+                        remove_orphans=True)
+                m.remove_from_model(method='subtractive')
+
+        for t in self.reactions.query('transcription_TU'):
+            delete = True
+            for product in t.products:
+                if isinstance(product, TranscribedGene):
+                    delete = False
+            if delete:
+                t.remove_from_model(remove_orphans=True)
+
