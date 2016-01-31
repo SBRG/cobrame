@@ -68,6 +68,8 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
     # String formatting for display
     str_places = int(abs(round(log(mu_accuracy)/log(10)))) + 1
     num_format = "%." + str(str_places) + "f"
+    if solver is not None:
+        debug = False  # other solvers can't handle debug mode
     if debug:
         verbose = True
         save_dir = mkdtemp()
@@ -77,7 +79,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
         success_str_base = Green + num_format + "\t+" + Normal
         failure_str_base = Red + num_format + "\t-" + Normal
         if debug:
-            print("mu\t\tstatus\tbasis\ttime\titer\tobj")
+            print("mu\t\tstatus\treset\ttime\titer\tobj")
         else:
             print("mu\t\tstatus")
 
@@ -85,14 +87,14 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
         substitute_mu(lp, mu, compiled_expressions, solver)
         if debug:
             lp.write(filename_base % mu)
-            has_basis = lp.hasBasis
         solver.solve_problem(lp)
         status = solver.get_status(lp)
         if debug:
+            reset_basis = lp.reset_basis
             obj = str(lp.get_objective_value()) \
                 if status == "optimal" else ""
             debug_str = "\t%s\t%.2f\t%d\t%s" % \
-                (has_basis, lp.solveTime, lp.numIterations, obj)
+                (reset_basis, lp.solveTime, lp.numIterations, obj)
         else:
             debug_str = ""
         if status == "optimal":
