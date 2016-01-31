@@ -51,6 +51,8 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
     compiled_expressions: precompiled symbolic expressions in the model
 
     """
+    if solver is not None:
+        debug = False  # other solvers can't handle debug mode
     solver = get_ME_solver(solver)
     lp = solver.create_problem(me_model)
     # reset the objective for faster feasibility solving
@@ -68,8 +70,6 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
     # String formatting for display
     str_places = int(abs(round(log(mu_accuracy)/log(10)))) + 1
     num_format = "%." + str(str_places) + "f"
-    if solver is not None:
-        debug = False  # other solvers can't handle debug mode
     if debug:
         verbose = True
         save_dir = mkdtemp()
