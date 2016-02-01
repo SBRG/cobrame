@@ -15,7 +15,35 @@ from ecolime.ribosome import translation_stop_dict
 
 
 class MEReaction(Reaction):
+    """
+    MEReaction is a general reaction class from which all ME-Model reactions
+    will inherit
+
+    This class contains functions used by all ME-model reactions
+
+
+    """
     def add_modifications(self, process_data_id, stoichiometry):
+        """
+        Function to add modification process data to reaction stoichiometry
+
+
+        process_data_id: String
+            ID of the process data associated with the metabolic reaction.
+
+            For example, if the modifications are being added to a complex
+            formation reaction, the process data id would be the name of the
+            complex.
+
+
+        stoichiometry: Dictionary {metabolite_id: float} or
+                                  {metabolite_id: float * (sympy.Symbol)}
+
+
+        return: stoichiometry
+            The dictionary with updated entries
+        """
+
         all_modifications = self._model.modification_data
         process_info = self._model.process_data.get_by_id(process_data_id)
         for modification_id, count in iteritems(process_info.modifications):
@@ -34,6 +62,25 @@ class MEReaction(Reaction):
         return stoichiometry
 
     def add_subreactions(self, process_data_id, stoichiometry):
+        """
+        Function to add modification process data to reaction stoichiometry
+
+        process_data_id: String
+            ID of the process data associated with the metabolic reaction.
+
+            For example, if the modifications are being added to a complex
+            formation reaction, the process data id would be the name of the
+            complex.
+
+
+        stoichiometry: Dictionary {metabolite_id: float} or
+                                  {metabolite_id: float * (sympy.Symbol)}
+
+
+        return: stoichiometry
+            The dictionary with updated entries
+        """
+
         all_subreactions = self._model.subreaction_data
         process_info = self._model.process_data.get_by_id(process_data_id)
         for subreaction_id, count in iteritems(process_info.subreactions):
@@ -53,6 +100,27 @@ class MEReaction(Reaction):
 
     def get_components_from_ids(self, id_stoichiometry,
                                 default_type=Component, verbose=True):
+        """
+        Function to convert stoichiometry dictionary entries from strings to
+        cobra objects.
+
+        {metabolite_id: value} to {cobra.core.Metabolite: value}
+
+        id_stoichiometry: Dict {string: float}
+            Input Dict of {metabolite_id: value}
+
+        default_type: String
+            The type of cobra.Metabolite to default to if the metabolite is not
+             yet present in the model
+
+        verbose: Boolean
+            If True, print metabolites added to model if not yet present in
+            model
+
+        return: object_stoichiometry
+            {cobra.core.Metabolite: value}
+        """
+
         stoic = id_stoichiometry
         object_stoichiometry = {}
         mets = self._model.metabolites
@@ -329,9 +397,7 @@ class TranslationReaction(MEReaction):
 
         self.add_subreactions(self.translation_data.id, new_stoichiometry)
 
-
-        # TODO: how many protons/water molecules are exchanged when making the
-        # peptide bond?
+        # TODO: how many h/h2o molecules are exchanged when making peptide bond
         # tRNA charging requires 2 ATP per amino acid. TODO: tRNA demand
         # Translocation and elongation each use one GTP per event
         # (len(protein) - 1). Initiation and termination also each need
@@ -347,9 +413,9 @@ class TranslationReaction(MEReaction):
         new_stoichiometry["atp_c"] -= 1 * protein_length
         new_stoichiometry["adp_c"] += 1 * protein_length
 
-        last_codon = \
+        self.translation_data.last_codon = \
             self.translation_data.nucleotide_sequence[-3:].replace('T', 'U')
-
+        last_codon = self.translation_data.last_codon
         term_enzyme = translation_stop_dict.get(last_codon)
         try:
             term_subreaction_data = all_subreactions.get_by_id(

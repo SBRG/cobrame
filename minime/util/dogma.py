@@ -51,6 +51,7 @@ def return_frameshift_sequence(full_seq, frameshift_string):
               for x in frameshift_string.replace(' ', '').split(',')])
     return seq
 
+
 def extract_sequence(full_seq, left_pos, right_pos, strand):
     seq = full_seq[left_pos:right_pos]
     if strand == "+":
