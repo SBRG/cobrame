@@ -135,6 +135,12 @@ def add_translation_reaction(me_model, locus_id, amino_acid_sequence=None,
         update: Boolean
             If True, use TranslationReaction's update function to update and add
             reaction stoichiometry
+
+        terminator_dict: Dict
+            {stop_codon: release_factor}
+
+            Used to determine which ProcessData.SubReaction to add to the
+            TranslationReaction to account for termination of peptide
     """
 
     # Create TranslationData
@@ -142,7 +148,7 @@ def add_translation_reaction(me_model, locus_id, amino_acid_sequence=None,
                                        "protein_" + locus_id)
     translation_data.nucleotide_sequence = dna_sequence
     translation_data.term_enzyme = terminator_dict.get(
-        translation_data.last_codon)
+            translation_data.last_codon)
 
     # TODO find a better way of creating "miniMEs"
     if not macromolecules:
@@ -213,7 +219,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
                                  element_types={'CDS', 'rRNA', 'tRNA', 'ncRNA'},
                                  tRNA_modifications=None, verbose=True,
                                  translation_terminators={},
-                                 frameshift_dict={}):
+                                 frameshift_dict={}, update=True):
 
     # TODO handle special RNAse without type ('b3123')
     # TODO allow overriding amino acid names
@@ -254,6 +260,18 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             If True, display metabolites that were not previously added to the
             model and were thus added when creating charging reactions
 
+        translation_terminators: Dict
+            {stop_codon: release_factor}
+
+            Used to determine which ProcessData.SubReaction to add to the
+            TranslationReaction to account for termination of peptide
+
+        frameshift_dict: Dict
+            {locus_id: genome_position_of_TU}
+
+            If a locus_id is in the frameshift_dict, update it's nucleotide
+            sequence to account of the frameshift
+
     """
 
     # Load genbank file and extract DNA sequence
@@ -263,10 +281,6 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
     # Dictionary of tRNA locus ID to the 3 letter code for the amino acid it
     # contributes
     tRNA_aa = {}
-
-    # Determine initial amount of transcripts in model for
-    # itertools.islice [start] value
-    original_transcription_count = len(me_model.transcription_data)
 
     # If no TU_frame is provided generate a new TU frame where each mRNA gets
     # its own TU
@@ -306,8 +320,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         strand = '+' if feature.strand == 1 else '-'
         seq = dogma.extract_sequence(full_seq, left_pos, right_pos, strand)
 
-        # ---- Deal with genes that require a frameshift mutation ----
-        # frameshift_dict = {locus_id: genome_position_of_TU}
+        # ---- Add gene metabolites and apply frameshift mutations----
         frameshift_string = frameshift_dict.get(bnum)
         if len(seq) % 3 != 0 and frameshift_string:
             print 'Applying frameshift on %s' % bnum
@@ -316,19 +329,20 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             if strand == '-':
                 seq = dogma.reverse_transcribe(seq)
 
-        # Add translation reaction for mRNA
+        # Add TranscribedGene metabolite
+        gene = create_transcribed_gene(me_model, bnum, left_pos,
+                                       right_pos, seq, strand, RNA_type)
+
+        # ---- Add translation reaction for mRNA ----
         if RNA_type == "mRNA":
             amino_acid_sequence = dogma.get_amino_acid_sequence_from_DNA(seq)
             add_translation_reaction(me_model, bnum, amino_acid_sequence, seq,
                                      terminator_dict=translation_terminators)
 
+        # ---- Create dict to use for adding tRNAChargingReactions ----
         # tRNA_aa = {'amino_acid':'tRNA'}
         elif feature.type == "tRNA":
-            # tRNA_aa = {'amino_acid':'tRNA'}
             tRNA_aa[bnum] = feature.qualifiers["product"][0].split("-")[1]
-
-        gene = create_transcribed_gene(me_model, bnum, left_pos,
-                                       right_pos, seq, strand, RNA_type)
 
         # ---- Add in a demand reaction for each mRNA ---
         # This is in case the TU makes multiple products and one needs a sink.
@@ -339,7 +353,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         demand_reaction.add_metabolites(
                 {gene: -1, me_model._biomass: -compute_RNA_mass(seq)})
 
-        # associate with TU's
+        # ---- Associate TranscribedGene to a TU ----
         parent_TU = TU_frame[
             (TU_frame.start <= left_pos + 1) & (TU_frame.stop >= right_pos) & (
             TU_frame.strand == strand)].index
@@ -349,43 +363,21 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
                 warn('No TU found for %s %s' % (RNA_type, bnum))
             TU_id = "TU_" + bnum
             parent_TU = [TU_id]
-            add_transcription_reaction(me_model, TU_id, set(), seq, update=False)
+            add_transcription_reaction(me_model, TU_id, set(), seq,
+                                       update=False)
 
         for TU_id in parent_TU:
-            me_model.transcription_data.get_by_id(TU_id).RNA_products.add("RNA_" + bnum)
+            me_model.transcription_data.get_by_id(TU_id).RNA_products.add(
+                    "RNA_" + bnum)
 
     if macromolecules:
         convert_aa_codes_and_add_charging(me_model, tRNA_aa,
                                           tRNA_modifications, verbose=verbose)
 
-    # add excised portions
-    for transcription_data in itertools.islice(me_model.transcription_data,
-                                               original_transcription_count,
-                                               None):
-        if len(transcription_data.RNA_products) == 0:
-            continue
-        RNA_types = set(transcription_data.RNA_types)
-        if RNA_types == {"mRNA"}:
-            continue
-        seq = transcription_data.nucleotide_sequence
-        counts = {i: seq.count(i) for i in ("A", "T", "G", "C")}
-        for product_id in transcription_data.RNA_products:
-            gene_seq = me_model.metabolites.get_by_id(product_id).nucleotide_sequence
-            for b in ("A", "T", "G", "C"):
-                counts[b] -= gene_seq.count(b)
-        # excised bases
-        # First base being a triphosphate will be handled by the reaction
-        # producing an extra ppi during transcription. But generally, we add
-        # triphosphate bases when transcribing, but excise monophosphate bases.
-        monophosphate_counts = {dogma.transcription_table[k].replace("tp_c",
-                                                                     "mp_c"): v
-                                for k, v in iteritems(counts)}
-        transcription_data.excised_bases = monophosphate_counts
-
-    # update reactions
-    for r in me_model.reactions:
-        if isinstance(r, (TranscriptionReaction, TranslationReaction)):
-            r.update()
+    if update:
+        for r in me_model.reactions:
+            if isinstance(r, (TranscriptionReaction, TranslationReaction)):
+                r.update()
 
 
 def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
@@ -420,7 +412,6 @@ def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
             reaction_data.upper_bound = reaction.upper_bound
             reaction_data._stoichiometry = {k.id: v for k, v
                                             in iteritems(reaction.metabolites)}
-
 
 
 def add_generic_RNase(me_model, generic_flag=False):

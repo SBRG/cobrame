@@ -136,8 +136,6 @@ class TranscriptionData(ProcessData):
         model.transcription_data.append(self)
         self.nucleotide_sequence = ''
         self.RNA_products = RNA_products
-        # i.e. {"amp_c": 10, "gmp_c": 11, "ump_c": 9, "cmp_c": 11}
-        self.excised_bases = {}
         # {ModificationData.id : number}
         self.modifications = defaultdict(int)
         # Used if not creating a "MiniME" model
@@ -156,6 +154,39 @@ class TranscriptionData(ProcessData):
     @property
     def mass(self):
         return compute_RNA_mass(self.nucleotide_sequence, self.excised_bases)
+
+    # Bases to be excised due to splicing tRNA, rRNA, or ncRNA in RNA_products
+    # i.e. {"amp_c": 10, "gmp_c": 11, "ump_c": 9, "cmp_c": 11}
+    @property
+    def excised_bases(self):
+        # Skip if TU does not have any annotated RNA Products
+        if len(self.RNA_products) == 0:
+            return {}
+
+        # Skip if TU only codes for mRNA
+        RNA_types = set(self.RNA_types)
+        if RNA_types == {"mRNA"}:
+            return {}
+
+        # Get dictionary of all nucleotide counts for TU
+        seq = self.nucleotide_sequence
+        counts = {i: seq.count(i) for i in ("A", "T", "G", "C")}
+
+        # Subtract bases contained in RNA_product from dictionary
+        metabolites = self._model.metabolites
+        for product_id in self.RNA_products:
+            gene_seq = metabolites.get_by_id(product_id).nucleotide_sequence
+            for b in ("A", "T", "G", "C"):
+                counts[b] -= gene_seq.count(b)
+
+        # First base being a triphosphate will be handled by the reaction
+        # producing an extra ppi during transcription. But generally, we add
+        # triphosphate bases when transcribing, but excise monophosphate bases.
+        monophosphate_counts = {dogma.transcription_table[k].replace("tp_c",
+                                                                     "mp_c"): v
+                                for k, v in iteritems(counts)}
+
+        return monophosphate_counts
 
 
 class GenericData(ProcessData):

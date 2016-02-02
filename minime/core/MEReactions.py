@@ -211,6 +211,7 @@ class ComplexFormation(MEReaction):
         return self._model.metabolites.get_by_id(self._complex_id)
 
     def update(self, verbose=True):
+        stoichiometry = defaultdict(float)
         metabolites = self._model.metabolites
         complex_info = self._model.complex_data.get_by_id(self._complex_id)
         try:
@@ -219,7 +220,6 @@ class ComplexFormation(MEReaction):
             complex_met = create_component(self._complex_id,
                                            default_type=Complex)
             self._model.add_metabolites([complex_met])
-        stoichiometry = defaultdict(float)
         stoichiometry[complex_met.id] = 1
 
         # build the complex itself
@@ -236,7 +236,7 @@ class ComplexFormation(MEReaction):
                              add_to_container_model=True)
 
 
-class TranscriptionReaction(Reaction):
+class TranscriptionReaction(MEReaction):
     """Transcription of a TU to produced TranscribedGene"""
     _transcription_data = None
 
@@ -249,11 +249,10 @@ class TranscriptionReaction(Reaction):
         self._transcription_data = process_data
         process_data._parent_reactions.add(self.id)
 
-    def update(self):
-        protein_id = self.transcription_data.id
-        new_stoichiometry = defaultdict(int)
+    def update(self, verbose=True):
+        TU_id = self.transcription_data.id
+        stoichiometry = defaultdict(int)
         TU_length = len(self.transcription_data.nucleotide_sequence)
-        metabolites = self._model.metabolites
 
         if self.transcription_data.using_RNAP:
             try:
@@ -263,41 +262,39 @@ class TranscriptionReaction(Reaction):
             else:
                 k_RNAP = (mu * 22.7 / (mu + 0.391))*3  # 3*k_ribo
                 coupling = -TU_length * mu / k_RNAP / 3600
-                new_stoichiometry[RNAP] = coupling
+                stoichiometry[RNAP.id] = coupling
 
+        # This is necessary as opposed to using get_components_from_ids in
+        # so that self.excised_bases can be used for "dummy_RNA"
+        # TODO Can we fix this?
         for transcript_id in self.transcription_data.RNA_products:
             if transcript_id not in self._model.metabolites:
                 transcript = TranscribedGene(transcript_id)
                 self._model.add_metabolites([transcript])
             else:
-                transcript = metabolites.get_by_id(transcript_id)
-            new_stoichiometry[transcript] += 1
+                transcript = self._model.metabolites.get_by_id(transcript_id)
+            stoichiometry[transcript.id] += 1
 
         # add in the modifications
-        all_modifications = self._model.modification_data
-        for modification_id, count in iteritems(
-                self.transcription_data.modifications):
-            modification = all_modifications.get_by_id(modification_id)
-            for mod_comp, mod_count in iteritems(modification.stoichiometry):
-                new_stoichiometry[metabolites.get_by_id(mod_comp)] += count * mod_count
-            if modification.enzyme is not None:
-                new_stoichiometry[metabolites.get_by_id(modification.enzyme)] -= \
-                    mu / modification.keff / 3600.
+        stoichiometry = self.add_modifications(TU_id, stoichiometry)
 
         base_counts = self.transcription_data.nucleotide_count
-
         for base, count in iteritems(base_counts):
-            new_stoichiometry[metabolites.get_by_id(base)] -= count
+            stoichiometry[base] -= count
         for base, count in iteritems(self.transcription_data.excised_bases):
-            new_stoichiometry[metabolites.get_by_id(base)] += count
+            stoichiometry[base] += count
 
-        new_stoichiometry[metabolites.get_by_id("ppi_c")] += TU_length - 1
+        stoichiometry["ppi_c"] += TU_length - 1
         # 5' had a triphosphate, but this is removed when excising
         # Is this universally true?
         if sum(self.transcription_data.excised_bases.values()) > 0:
-            new_stoichiometry[metabolites.get_by_id("ppi_c")] += 1
+            stoichiometry["ppi_c"] += 1
 
-        self.add_metabolites(new_stoichiometry, combine=False,
+        new_stoich = \
+            self.get_components_from_ids(stoichiometry, verbose=verbose,
+                                         default_type=TranscribedGene)
+
+        self.add_metabolites(new_stoich, combine=False,
                              add_to_container_model=False)
 
         # add to biomass
@@ -447,7 +444,7 @@ class tRNAChargingReaction(MEReaction):
     def update(self, verbose=True):
         stoic = defaultdict(int)
         data = self.tRNAData
-        mets = self._model.metabolites
+
         # If the generic tRNA does not exist, create it now. The meaning of
         # a generic tRNA is described in the TranslationReaction comments
         generic_tRNA = "generic_tRNA_" + data.codon + "_" + data.amino_acid
