@@ -60,7 +60,7 @@ class ModificationData(ProcessData):
         model.modification_data.append(self)
         self.stoichiometry = {}
         self.enzyme = None
-        self.keff = 65
+        self.keff = 65.
 
     def get_complex_data(self):
         for i in self._model.complex_data:
@@ -74,7 +74,7 @@ class SubreactionData(ProcessData):
         model.subreaction_data.append(self)
         self.stoichiometry = {}
         self.enzyme = None
-        self.keff = 65
+        self.keff = 65.
 
     def get_complex_data(self):
         for i in self._model.complex_data:
@@ -188,7 +188,6 @@ class GenericData(ProcessData):
 class TranslationData(ProcessData):
     protein_per_mRNA = .5  # per second
     amino_acid_sequence = ""
-    last_codon = ""
     mRNA = None
     nucleotide_sequence = ""
 
@@ -201,18 +200,6 @@ class TranslationData(ProcessData):
         self.using_ribosome = True
         self.subreactions = defaultdict(int)
 
-
-
-    # depreciated by codon count
-    def get_last_codon_from_DNA(self, dna_sequence):
-        if 'TAA' in dna_sequence:
-            self.last_codon = 'UAA'
-        elif 'TGA' in dna_sequence:
-            self.last_codon = 'UGA'
-        elif 'TAG' in dna_sequence:
-            self.last_codon = 'UAG'
-        else:
-            warn('Stop codon not present in DNA sequence')
 
     @property
     def amino_acid_sequence(self):
@@ -227,26 +214,20 @@ class TranslationData(ProcessData):
             amino_acid_sequence = amino_acid_sequence.replace('*', 'U')
         return amino_acid_sequence
 
-
     @property
     def codon_count(self):
-        stop_codons = {'TAA': 'UAA', 'TGA': 'UGA', 'TAG': 'UAG'}
         # exclude the last three stop codons from count
         codons = (self.nucleotide_sequence[i: i + 3]
                   for i in range(0, (len(self.nucleotide_sequence)-3), 3))
         codon_count = defaultdict(int)
         for i in codons:
             if len(i) % 3 != 0:
-                print self.id, 'Needs Frameshift2?'
+                print self.id, 'Needs Frameshift?'
                 continue
-            #    # TODO handle this like start codons? and deal with selenocystein
-            #    #codon_count[stop_codons.get(i)] += 1
-            #    break
-            #else:
             codon_count[i.replace('T', 'U')] += 1
 
-        # add start codon and remove one methionine (AUG) from codon count
-        #codon_count['START'] = 1
+        # Remove one methionine (AUG) from codon count to account for start
+
         if self.nucleotide_sequence.startswith('ATG'):
             codon_count['AUG'] -= 1
         elif self.nucleotide_sequence.startswith('GTG'):

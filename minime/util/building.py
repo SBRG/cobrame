@@ -25,7 +25,31 @@ def prepare_for_minime():
 
 def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
                                update=True):
-    """add a transcription reaction"""
+    """
+    Create TranscriptionReaction object and add it to ME-Model.
+    This includes the necessary transcription data.
+
+    me_model: cobra.model.MEModel
+        The MEModel object to which the reaction will be added
+
+    TU_name: String
+        ID of TU being transcribed.
+        The TranscriptionReaction will be added as "transcription_+TU_name"
+        The TranscriptionData will be added as just "TU_name"
+
+    locus_ids: Set
+        Set of locus IDs that the TU transcribes
+
+    sequence: String
+        Nucleotide sequence of the TU.
+
+    update: Boolean
+        If True, use TranscriptionReaction's update function to update and add
+        reaction stoichiometry
+
+    return: cobra.core.Reaction.TranscriptionReaction
+        Return TranscriptionReaction for the TU
+    """
 
     transcription = TranscriptionReaction("transcription_" + TU_name)
     transcription.transcription_data = TranscriptionData(TU_name, me_model)
@@ -40,10 +64,43 @@ def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
     return transcription
 
 
-def create_transcribed_gene(me_model, bnum, left_pos, right_pos, seq,
+def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
                             strand, RNA_type):
-    """creates a TranscribedGene object and adds it to the model"""
-    gene = TranscribedGene('RNA_' + bnum)
+    """
+     Creates a TranscribedGene metabolite object and adds it to the ME-model
+
+    Args:
+        me_model: cobra.model.MEModel
+            The MEModel object to which the reaction will be added
+
+        locus_id: String
+            Locus ID of RNA product.
+            The TranscribedGene will be added as "RNA_ + locus_id"
+
+        left_pos: Integer
+            Left position of gene on the sequence of the (+) strain
+
+        right_pos: Integer
+            Right position of gene on the sequence of the (+) strain
+
+        seq: String
+            Nucleotide sequence of RNA product.
+            Amino acid sequence, codon counts, etc. will be calculated based on
+            this string.
+
+        strand: String
+            (+) if the RNA product is on the leading strand
+            (-) if the RNA product is on the complementary strand
+
+        RNA_type: String
+            Type of RNA of the product.
+            tRNA, rRNA, or mRNA
+            Used for determining how RNA product will be processed.
+
+    Returns:
+        cobra.core.Metabolite.TranscribedGene object for the RNA product
+    """
+    gene = TranscribedGene('RNA_' + locus_id)
     gene.left_pos = left_pos
     gene.right_pos = right_pos
     gene.RNA_type = RNA_type
@@ -54,42 +111,76 @@ def create_transcribed_gene(me_model, bnum, left_pos, right_pos, seq,
     return gene
 
 
-def add_translation_reaction(me_model, bnum, amino_acid_sequence=None,
-                             dna_sequence=None, update=False):
-    if not amino_acid_sequence and not dna_sequence:
-        print 'Transltion reactions require sequences for', bnum
-    translation = TranslationReaction("translation_" + bnum)
-    me_model.add_reaction(translation)
+def add_translation_reaction(me_model, locus_id, dna_sequence=None,
+                             update=False):
+    """
+    Creates and adds a TranslationReaction to the ME-model as well as the
+    associated TranslationData
 
-    translation.translation_data = \
-        TranslationData(bnum, me_model, "RNA_" + bnum,
-                        "protein_" + bnum)
+    Either a dna_sequence or amino_acid_sequence is required in order to add a
+    TranslationReaction to the ME-model
 
-    translation.translation_data.nucleotide_sequence = dna_sequence
-    # translation.translation_data.get_codon_count_from_DNA(dna_sequence)
-    translation.translation_data.get_last_codon_from_DNA(dna_sequence)
+    Args:
+        me_model: cobra.model.MEModel
+            The MEModel object to which the reaction will be added
 
-    amino_acid_sequence = None
-    if amino_acid_sequence is not None:
-        translation.translation_data.amino_acid_sequence = \
-            amino_acid_sequence # .replace("U", "C")  # TODO selenocystine
-    #    translation.translation_data.compute_sequence_from_DNA(dna_sequence)
+        locus_id: String
+            Locus ID of RNA product.
+            The TranslationReaction will be added as "translation_ + locus_id"
+            The TranslationData will be added as "locus_id"
+
+        dna_sequence: String
+            DNA sequence of the RNA product. This string should be reverse
+            transcribed if it originates on the complement strand.
+
+        update: Boolean
+            If True, use TranslationReaction's update function to update and add
+            reaction stoichiometry
+    """
+
+    # Create TranslationData
+    translation_data = TranslationData(locus_id, me_model, "RNA_" + locus_id,
+                                       "protein_" + locus_id)
+    translation_data.nucleotide_sequence = dna_sequence
+
+    # TODO find a better way of creating "miniMEs"
     if not macromolecules:
-        translation.translation_data.using_ribosome = False
+        translation_data.using_ribosome = False
+
+    # Create and add TranslationReaction with TranslationData
+    translation_reaction = TranslationReaction("translation_" + locus_id)
+    me_model.add_reaction(translation_reaction)
+    translation_reaction.translation_data = translation_data
+
     if update:
-        translation.update()
-
-
-def add_demand_reaction(me_model, bnum):
-    warn("deprecated")
-
-    #r = Reaction('DM_RNA'_+ bnum)
-    #me_model.add_reaction(r)
-    #r.reaction = 'RNA_' + bnum + ' -> '
+        translation_reaction.update()
 
 
 def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_modifications,
                                       verbose=True):
+    """
+    Adds tRNA charging reactions for all tRNAs in ME-model
+
+    Args:
+        me_model: cobra.model.MEModel
+            The MEModel object to which the reaction will be added
+
+        tRNA_aa: Dict
+            Dictionary of tRNA locus ID to 3 letter codes of the amino acid
+            that the tRNA contributes
+
+            {locus_id: amino_acid_3_letter_code}
+
+        tRNA_modifications: collections.defaultdict
+            Defaultdict of tRNA locus ID to dictionary of modification ID to
+            number of modifications needed
+
+            {locus_id: {modification_id: value}}
+
+        verbose: Boolean
+            If True, display metabolites that were not previously added to the
+            model and were thus added when creating charging reactions
+    """
     # convert amino acid 3 letter codes to metabolites
     for tRNA, aa in list(tRNA_aa.items()):
         if aa == "OTHER":
@@ -122,19 +213,62 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
                                  tRNA_modifications=None, verbose=True):
 
     # TODO handle special RNAse without type ('b3123')
-    """create transcription and translation reactions from a genbank file
+    # TODO allow overriding amino acid names
+    """Creates and adds transcription and translation reactions using genomic
+     information from the organism's genbank file
 
-    TODO allow overriding amino acid names"""
+    Args:
+        me_model: cobra.model.MEModel
+            The MEModel object to which the reaction will be added
+
+        gb_filename: String
+            Local name of the genbank file that will be used for ME-model
+            construction
+
+        TU_frame: pandas.DataFrame
+            DataFrame with indexes of the transcription unit name and columns
+            containing the transcription unit starting and stopping location on
+            the genome and whether the transcription unit is found on the
+            main (+) strand or complementary (-) strand.
+
+            If no transcription unit DataFrame is passed into the function,
+            transcription units are added corresponding to each transcribed
+            gene in the genbank file.
+
+        element_types: Set
+            Transcription reactions will be added to the ME-model for all RNA
+            feature.types in this set. This uses the nomenclature of the
+            genbank file (gb_filename)
+
+        tRNA_modifications: collections.defaultdict
+            Defaultdict of tRNA locus ID to dictionary of modification ID to
+            number of modifications needed. If None then no modifications will
+            be added to the tRNA
+
+            {locus_id: {modification_id: value}}
+
+        verbose: Boolean
+            If True, display metabolites that were not previously added to the
+            model and were thus added when creating charging reactions
+
+    """
+
+    # Load genbank file and extract DNA sequence
     gb_file = SeqIO.read(gb_filename, 'gb')
     full_seq = str(gb_file.seq)
+
+    # Dictionary of tRNA locus ID to the 3 letter code for the amino acid it
+    # contributes
+    tRNA_aa = {}
 
     # Determine initial amount of transcripts in model for
     # itertools.islice [start] value
     original_transcription_count = len(me_model.transcription_data)
 
+    # If no TU_frame is provided generate a new TU frame where each mRNA gets
+    # its own TU
     using_TUs = TU_frame is not None
     if not using_TUs:
-        # generate a new TU frame where each mRNA gets its own TU
         TU_frame = pandas.DataFrame.from_dict(
             {"TU_" + i.qualifiers["locus_tag"][0]:
                 {"start": int(i.location.start),
@@ -143,8 +277,6 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
              for i in gb_file.features if
              i.type in element_types},
             orient="index")
-
-    tRNA_aa = {}
 
     # Create transcription reactions for each TU and DNA sequence.
     # RNA_products will be added so no need to update now
@@ -163,17 +295,17 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         if feature.type not in element_types or 'pseudo' in feature.qualifiers:
             continue
 
-        # Assign values for all important gene attributes
+        # ---- Assign values for all important gene attributes ----
         bnum = feature.qualifiers["locus_tag"][0]
         left_pos = int(feature.location.start)
         right_pos = int(feature.location.end)
         RNA_type = 'mRNA' if feature.type == 'CDS' else feature.type
         strand = '+' if feature.strand == 1 else '-'
-        # every genetic entity gets transcription
         seq = dogma.extract_sequence(full_seq, left_pos, right_pos, strand)
 
-        # Deal with genes that require a frameshift mutation
-        frameshift_dict= ribosome.frameshift_dict
+        # ---- Deal with genes that require a frameshift mutation ----
+        # frameshift_dict = {locus_id: genome_position_of_TU}
+        frameshift_dict = ribosome.frameshift_dict
         frameshift_string = frameshift_dict.get(bnum)
         if len(seq) % 3 != 0 and frameshift_string:
             print 'Applying frameshift on %s' % bnum
@@ -182,27 +314,24 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             if strand == '-':
                 seq = dogma.reverse_transcribe(seq)
 
-
         # Add translation reaction for mRNA
         if RNA_type == "mRNA":
-            amino_acid_sequence = dogma.get_amino_acid_sequence_from_DNA(seq)
-            add_translation_reaction(me_model, bnum, amino_acid_sequence,
-                                     seq)
-
-        # tRNA_aa = {'amino_acid':'tRNA'}
+            add_translation_reaction(me_model, bnum, seq)
         elif feature.type == "tRNA":
+            # tRNA_aa = {'amino_acid':'tRNA'}
             tRNA_aa[bnum] = feature.qualifiers["product"][0].split("-")[1]
 
         gene = create_transcribed_gene(me_model, bnum, left_pos,
                                        right_pos, seq, strand, RNA_type)
 
-        # Add in a demand reaction for each mRNA in case the TU makes
-        # multiple products and one needs a sink. If the demand reaction is
-        # used, it means the mRNA doesn't count towards biomass
+        # ---- Add in a demand reaction for each mRNA ---
+        # This is in case the TU makes multiple products and one needs a sink.
+        # If the demand reaction is used, it means the mRNA doesn't count
+        # towards biomass
         demand_reaction = cobra.Reaction("DM_" + gene.id)
         me_model.add_reaction(demand_reaction)
         demand_reaction.add_metabolites(
-            {gene: -1, me_model._biomass: -compute_RNA_mass(seq)})
+                {gene: -1, me_model._biomass: -compute_RNA_mass(seq)})
 
         # associate with TU's
         parent_TU = TU_frame[
