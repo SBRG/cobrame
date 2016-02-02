@@ -11,8 +11,6 @@ from minime.util.mass import *
 from minime.util import mu, dogma
 from minime.core.Components import *
 
-from ecolime.ribosome import translation_stop_dict
-
 
 class MEReaction(Reaction):
     """
@@ -413,17 +411,22 @@ class TranslationReaction(MEReaction):
         new_stoichiometry["atp_c"] -= 1 * protein_length
         new_stoichiometry["adp_c"] += 1 * protein_length
 
-        self.translation_data.last_codon = \
-            self.translation_data.nucleotide_sequence[-3:].replace('T', 'U')
         last_codon = self.translation_data.last_codon
-        term_enzyme = translation_stop_dict.get(last_codon)
-        try:
-            term_subreaction_data = all_subreactions.get_by_id(
-                last_codon + '_' + term_enzyme + '_mediated_termination')
-            new_stoichiometry[term_subreaction_data.enzyme] -= \
-                mu / term_subreaction_data.keff / 3600.
-        except:
-            warn('Term Enzyme not in model for %s' % self.id)
+        term_enzyme = self.translation_data.term_enzyme
+        if term_enzyme is not None:
+            termination_subreaction_id = last_codon + '_' + term_enzyme + \
+                '_mediated_termination'
+            try:
+                term_subreaction_data = \
+                    all_subreactions.get_by_id(termination_subreaction_id)
+            except KeyError as e:
+                if verbose:
+                    print("Termination subreaction '%s' for '%s' not found" %
+                          (termination_subreaction_id, self.id))
+
+            else:
+                new_stoichiometry[term_subreaction_data.enzyme] -= \
+                    mu / term_subreaction_data.keff / 3600.
 
         object_stoichiometry = self.get_components_from_ids(new_stoichiometry,
                                                             verbose=verbose)

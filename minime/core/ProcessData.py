@@ -190,6 +190,7 @@ class TranslationData(ProcessData):
     amino_acid_sequence = ""
     mRNA = None
     nucleotide_sequence = ""
+    term_enzyme = None
 
     def __init__(self, id, model, mRNA, protein):
         ProcessData.__init__(self, id, model)
@@ -199,7 +200,6 @@ class TranslationData(ProcessData):
         # Used if not creating a "MiniME" model
         self.using_ribosome = True
         self.subreactions = defaultdict(int)
-
 
     @property
     def amino_acid_sequence(self):
@@ -213,6 +213,10 @@ class TranslationData(ProcessData):
         if "*" in amino_acid_sequence:
             amino_acid_sequence = amino_acid_sequence.replace('*', 'U')
         return amino_acid_sequence
+
+    @property
+    def last_codon(self):
+        return self.nucleotide_sequence[-3:].replace('T', 'U')
 
     @property
     def codon_count(self):

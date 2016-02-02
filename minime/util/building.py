@@ -6,9 +6,7 @@ from minime import util
 from minime.util import dogma
 from minime import *
 from cobra.core import Reaction
-from ecolime import ecoli_k12
 from ecolime.ecoli_k12 import *
-from ecolime import ribosome
 import cobra
 import itertools
 
@@ -111,8 +109,9 @@ def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
     return gene
 
 
-def add_translation_reaction(me_model, locus_id, dna_sequence=None,
-                             update=False):
+def add_translation_reaction(me_model, locus_id, amino_acid_sequence=None,
+                             dna_sequence=None, update=False,
+                             terminator_dict={}):
     """
     Creates and adds a TranslationReaction to the ME-model as well as the
     associated TranslationData
@@ -142,6 +141,8 @@ def add_translation_reaction(me_model, locus_id, dna_sequence=None,
     translation_data = TranslationData(locus_id, me_model, "RNA_" + locus_id,
                                        "protein_" + locus_id)
     translation_data.nucleotide_sequence = dna_sequence
+    translation_data.term_enzyme = terminator_dict.get(
+        translation_data.last_codon)
 
     # TODO find a better way of creating "miniMEs"
     if not macromolecules:
@@ -210,7 +211,9 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_modifications,
 
 def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
                                  element_types={'CDS', 'rRNA', 'tRNA', 'ncRNA'},
-                                 tRNA_modifications=None, verbose=True):
+                                 tRNA_modifications=None, verbose=True,
+                                 translation_terminators={},
+                                 frameshift_dict={}):
 
     # TODO handle special RNAse without type ('b3123')
     # TODO allow overriding amino acid names
@@ -305,7 +308,6 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
 
         # ---- Deal with genes that require a frameshift mutation ----
         # frameshift_dict = {locus_id: genome_position_of_TU}
-        frameshift_dict = ribosome.frameshift_dict
         frameshift_string = frameshift_dict.get(bnum)
         if len(seq) % 3 != 0 and frameshift_string:
             print 'Applying frameshift on %s' % bnum
@@ -316,7 +318,11 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
 
         # Add translation reaction for mRNA
         if RNA_type == "mRNA":
-            add_translation_reaction(me_model, bnum, seq)
+            amino_acid_sequence = dogma.get_amino_acid_sequence_from_DNA(seq)
+            add_translation_reaction(me_model, bnum, amino_acid_sequence, seq,
+                                     terminator_dict=translation_terminators)
+
+        # tRNA_aa = {'amino_acid':'tRNA'}
         elif feature.type == "tRNA":
             # tRNA_aa = {'amino_acid':'tRNA'}
             tRNA_aa[bnum] = feature.qualifiers["product"][0].split("-")[1]
@@ -339,7 +345,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             TU_frame.strand == strand)].index
 
         if len(parent_TU) == 0:
-            if bnum not in ecoli_k12.no_TU_list:
+            if verbose:
                 warn('No TU found for %s %s' % (RNA_type, bnum))
             TU_id = "TU_" + bnum
             parent_TU = [TU_id]
@@ -416,21 +422,6 @@ def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
                                             in iteritems(reaction.metabolites)}
 
 
-def add_generic_rRNAs(me_model):
-
-    rRNA_type_list = ['generic_16s_rRNAs', 'generic_23s_rRNAs',
-                      'generic_5s_rRNAs']
-
-    for rRNA_type in rRNA_type_list:
-        for rRNA in eval(rRNA_type):
-
-            rRNA_id = 'RNA_' + rRNA
-            me_model.add_metabolites([TranscribedGene(rRNA_type)])
-            me_model.add_metabolites([TranscribedGene(rRNA_id)])
-            new_rxn = cobra.Reaction("rRNA_" + rRNA + '_to_generic')
-            me_model.add_reaction(new_rxn)
-            new_rxn.reaction = rRNA_id + ' <=> ' + rRNA_type
-
 
 def add_generic_RNase(me_model, generic_flag=False):
 
@@ -451,38 +442,6 @@ def add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme=None):
     mod.stoichiometry = mod_stoich
     mod.enzyme = mod_enzyme
     return mod
-
-
-def add_ribosome(me_model, verbose=True):
-    ribosome_complex = ComplexData("ribosome", me_model)
-    ribosome_components = ribosome_complex.stoichiometry
-    ribosome_modifications = ribosome_complex.modifications
-
-    add_generic_rRNAs(me_model)
-    mod_dict = ribosome.ribosome_modifications
-    for mod_id in mod_dict:
-        mod_stoich = mod_dict[mod_id]['stoich']
-        mod_enzyme = mod_dict[mod_id]['enzyme']
-        num_mods = mod_dict[mod_id]['num_mods']
-        mod = add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme)
-        ribosome_modifications[mod.id] = -num_mods
-
-    ribosome_assembly = ribosome.ribosome_stoich
-    for process in ribosome_assembly:
-        for protein, amount in ribosome_assembly[process]['stoich'].items():
-            ribosome_components[protein] += amount
-
-    ribosome_complex.create_complex_formation(verbose=verbose)
-
-
-def add_RNA_polymerase(me_model):
-    RNAP_complex = ComplexData("RNA_Polymerase", me_model)
-    RNAP_components = RNAP_complex.stoichiometry
-
-    # for component, value in eval('RNA_polymerase_core').items():
-    #    RNAP_components[component] = value
-    RNAP_components['hRNAP'] = 1
-    RNAP_complex.create_complex_formation()
 
 
 def find_genes_within_TU(me_model, TU, RNA_pos_dict):
