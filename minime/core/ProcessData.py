@@ -136,8 +136,11 @@ class TranscriptionData(ProcessData):
         model.transcription_data.append(self)
         self.nucleotide_sequence = ''
         self.RNA_products = RNA_products
+        self.RNA_polymerase = ''
+        self.rho_dependent = False
         # {ModificationData.id : number}
         self.modifications = defaultdict(int)
+        self.subreactions = defaultdict(int)
         # Used if not creating a "MiniME" model
         self.using_RNAP = True
 
@@ -187,6 +190,20 @@ class TranscriptionData(ProcessData):
                                 for k, v in iteritems(counts)}
 
         return monophosphate_counts
+
+    @property
+    def codes_stable_rna(self):
+        # Return true if a stable RNA is in RNA_products
+        has_stable_rna = False
+        for RNA in self.RNA_products:
+            try:
+                gene = self._model.metabolites.get_by_id(RNA)
+            except KeyError:
+                pass
+            else:
+                if gene.RNA_type in ['tRNA', 'rRNA', 'ncRNA']:
+                    has_stable_rna = True
+        return has_stable_rna
 
 
 class GenericData(ProcessData):
