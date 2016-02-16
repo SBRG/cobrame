@@ -22,30 +22,32 @@ def prepare_for_minime():
 
 
 def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
-                               update=True):
+                               rho_dependent=False,
+                               rna_polymerase='RNAP70-CPLX', update=True):
     """
     Create TranscriptionReaction object and add it to ME-Model.
     This includes the necessary transcription data.
 
-    me_model: cobra.model.MEModel
-        The MEModel object to which the reaction will be added
+    Args:
+        me_model: cobra.model.MEModel
+            The MEModel object to which the reaction will be added
 
-    TU_name: String
-        ID of TU being transcribed.
-        The TranscriptionReaction will be added as "transcription_+TU_name"
-        The TranscriptionData will be added as just "TU_name"
+        TU_name: String
+            ID of TU being transcribed.
+            The TranscriptionReaction will be added as "transcription_+TU_name"
+            The TranscriptionData will be added as just "TU_name"
 
-    locus_ids: Set
-        Set of locus IDs that the TU transcribes
+        locus_ids: Set
+            Set of locus IDs that the TU transcribes
 
-    sequence: String
-        Nucleotide sequence of the TU.
+        sequence: String
+            Nucleotide sequence of the TU.
 
-    update: Boolean
-        If True, use TranscriptionReaction's update function to update and add
-        reaction stoichiometry
+        update: Boolean
+            If True, use TranscriptionReaction's update function to update and
+            add reaction stoichiometry
 
-    return: cobra.core.Reaction.TranscriptionReaction
+    Returns: cobra.core.Reaction.TranscriptionReaction
         Return TranscriptionReaction for the TU
     """
 
@@ -54,6 +56,10 @@ def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
     transcription.transcription_data.nucleotide_sequence = sequence
     transcription.transcription_data.RNA_products = {"RNA_" + i
                                                      for i in locus_ids}
+    transcription.transcription_data.rho_dependent = rho_dependent
+
+    transcription.transcription_data.RNA_polymerase = rna_polymerase
+
     if not macromolecules:
         transcription.transcription_data.using_RNAP = False
     me_model.add_reaction(transcription)
@@ -111,7 +117,8 @@ def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
 
 def add_translation_reaction(me_model, locus_id, amino_acid_sequence=None,
                              dna_sequence=None, update=False,
-                             terminator_dict={}):
+                             terminator_dict={}, methionine_cleaved=[],
+                             folding_dict={}):
     """
     Creates and adds a TranslationReaction to the ME-model as well as the
     associated TranslationData
@@ -149,6 +156,17 @@ def add_translation_reaction(me_model, locus_id, amino_acid_sequence=None,
     translation_data.nucleotide_sequence = dna_sequence
     translation_data.term_enzyme = terminator_dict.get(
             translation_data.last_codon)
+
+    if locus_id in methionine_cleaved:
+        translation_data.subreactions['N_terminal_methionine_cleavage'] = 1
+
+    for folding_type in folding_dict:
+        if locus_id in folding_dict[folding_type]:
+            translation_data.subreactions[folding_type] = 1
+
+    translation_data.subreactions['peptide_deformylase_processing'] = 1
+    translation_data.subreactions['peptide_chain_release'] = 1
+    translation_data.subreactions['ribosome_recycler'] = 1
 
     # TODO find a better way of creating "miniMEs"
     if not macromolecules:
@@ -218,7 +236,8 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_modifications,
 def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
                                  element_types={'CDS', 'rRNA', 'tRNA', 'ncRNA'},
                                  tRNA_modifications=None, verbose=True,
-                                 translation_terminators={},
+                                 translation_terminators={}, sigma_to_RNAP_dict={},
+                                 methionine_cleaved=[], folding_dict={},
                                  frameshift_dict={}, update=True):
 
     # TODO handle special RNAse without type ('b3123')
@@ -301,8 +320,12 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         sequence = dogma.extract_sequence(full_seq, TU_frame.start[TU_id],
                                           TU_frame.stop[TU_id],
                                           TU_frame.strand[TU_id])
+        rho_dependent = TU_frame.rho_dependent[TU_id]
+        sigma = TU_frame.sigma[TU_id]
+        rna_polymerase = sigma_to_RNAP_dict[sigma]
         add_transcription_reaction(me_model, TU_id, set(), sequence,
-                                   update=False)
+                                   rho_dependent=rho_dependent,
+                                   rna_polymerase=rna_polymerase, update=False)
 
     # Associate each feature (RNA_product) with a TU and add translation
     # reactions and demands
@@ -337,7 +360,9 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         if RNA_type == "mRNA":
             amino_acid_sequence = dogma.get_amino_acid_sequence_from_DNA(seq)
             add_translation_reaction(me_model, bnum, amino_acid_sequence, seq,
-                                     terminator_dict=translation_terminators)
+                                     terminator_dict=translation_terminators,
+                                     methionine_cleaved=methionine_cleaved,
+                                     folding_dict=folding_dict)
 
         # ---- Create dict to use for adding tRNAChargingReactions ----
         # tRNA_aa = {'amino_acid':'tRNA'}
@@ -369,6 +394,20 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         for TU_id in parent_TU:
             me_model.transcription_data.get_by_id(TU_id).RNA_products.add(
                     "RNA_" + bnum)
+
+    # add transcription machinery based on contained RNA types
+    for transcription_data in me_model.transcription_data:
+        if transcription_data.rho_dependent:
+            rho = 'dependent'
+        else:
+            rho = 'independent'
+        if transcription_data.codes_stable_rna:
+            stable = 'stable'
+        else:
+            stable = 'normal'
+
+        transcription_data.subreactions['Transcription_%s_rho_%s' % (stable,
+                                                                     rho)] = 1
 
     if macromolecules:
         convert_aa_codes_and_add_charging(me_model, tRNA_aa,

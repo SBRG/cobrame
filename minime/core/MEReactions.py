@@ -205,6 +205,7 @@ class MetabolicReaction(Reaction):
 class ComplexFormation(MEReaction):
     """Formation of a protein complex"""
     _complex_id = None
+    complex_data_id = None
 
     @property
     def complex(self):
@@ -213,7 +214,7 @@ class ComplexFormation(MEReaction):
     def update(self, verbose=True):
         stoichiometry = defaultdict(float)
         metabolites = self._model.metabolites
-        complex_info = self._model.complex_data.get_by_id(self._complex_id)
+        complex_info = self._model.complex_data.get_by_id(self.complex_data_id)
         try:
             complex_met = metabolites.get_by_id(self._complex_id)
         except KeyError:
@@ -227,7 +228,7 @@ class ComplexFormation(MEReaction):
             stoichiometry[component_id] -= value
 
         # add in the modifications
-        stoichiometry = self.add_modifications(self._complex_id, stoichiometry)
+        stoichiometry = self.add_modifications(complex_info.id, stoichiometry)
 
         object_stoichiometry = self.get_components_from_ids(
                 stoichiometry, default_type=Complex, verbose=verbose)
@@ -238,6 +239,8 @@ class ComplexFormation(MEReaction):
 
 class TranscriptionReaction(MEReaction):
     """Transcription of a TU to produced TranscribedGene"""
+
+    # TODO double check how initiation use is used as well as ATP cost etc.
     _transcription_data = None
 
     @property
@@ -253,12 +256,14 @@ class TranscriptionReaction(MEReaction):
         TU_id = self.transcription_data.id
         stoichiometry = defaultdict(int)
         TU_length = len(self.transcription_data.nucleotide_sequence)
+        RNA_polymerase = self.transcription_data.RNA_polymerase
+        codes_stable_rna = self.transcription_data.codes_stable_rna
 
         if self.transcription_data.using_RNAP:
             try:
-                RNAP = self._model.metabolites.get_by_id("RNA_Polymerase")
+                RNAP = self._model.metabolites.get_by_id(RNA_polymerase)
             except KeyError:
-                warn("RNA Polymerase not found")
+                warn("RNA Polymerase (%s) not found" % RNA_polymerase)
             else:
                 k_RNAP = (mu * 22.7 / (mu + 0.391))*3  # 3*k_ribo
                 coupling = -TU_length * mu / k_RNAP / 3600
@@ -277,6 +282,7 @@ class TranscriptionReaction(MEReaction):
 
         # add in the modifications
         stoichiometry = self.add_modifications(TU_id, stoichiometry)
+        stoichiometry = self.add_subreactions(TU_id, stoichiometry)
 
         base_counts = self.transcription_data.nucleotide_count
         for base, count in iteritems(base_counts):
