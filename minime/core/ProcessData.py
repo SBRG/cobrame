@@ -125,6 +125,7 @@ class ComplexData(ProcessData):
         if formation_id in self._model.reactions:
             raise ValueError("reaction %s already in model" % formation_id)
         formation = ComplexFormation(formation_id)
+        formation.complex_data_id = self.id
         formation._complex_id = self.complex_id
         self._model.add_reaction(formation)
         formation.update(verbose=verbose)

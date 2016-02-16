@@ -205,6 +205,7 @@ class MetabolicReaction(Reaction):
 class ComplexFormation(MEReaction):
     """Formation of a protein complex"""
     _complex_id = None
+    complex_data_id = None
 
     @property
     def complex(self):
@@ -213,7 +214,7 @@ class ComplexFormation(MEReaction):
     def update(self, verbose=True):
         stoichiometry = defaultdict(float)
         metabolites = self._model.metabolites
-        complex_info = self._model.complex_data.get_by_id(self.id.replace('formation_',''))
+        complex_info = self._model.complex_data.get_by_id(self.complex_data_id)
         try:
             complex_met = metabolites.get_by_id(self._complex_id)
         except KeyError:
