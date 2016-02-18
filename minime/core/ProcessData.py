@@ -236,7 +236,7 @@ class GenericData(ProcessData):
 
 class TranslationData(ProcessData):
     protein_per_mRNA = .5  # per second
-    amino_acid_sequence = ""
+    _amino_acid_sequence = ""
     mRNA = None
     nucleotide_sequence = ""
     term_enzyme = None
@@ -252,6 +252,8 @@ class TranslationData(ProcessData):
 
     @property
     def amino_acid_sequence(self):
+        if len(self._amino_acid_sequence) > 0:
+            return self._amino_acid_sequence
         if len(self.nucleotide_sequence) % 3 != 0:
             self.nucleotide_sequence = self.nucleotide_sequence[:-1]
             print self.id, ' Needs frameshift?'
@@ -262,6 +264,10 @@ class TranslationData(ProcessData):
         if "*" in amino_acid_sequence:
             amino_acid_sequence = amino_acid_sequence.replace('*', 'U')
         return amino_acid_sequence
+
+    @amino_acid_sequence.setter
+    def amino_acid_sequence(self, value):
+        self._amino_acid_sequence = value
 
     @property
     def last_codon(self):
