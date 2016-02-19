@@ -146,7 +146,7 @@ class MEmodel(Model):
                 while len(p._reaction) > 0:
                     list(p._reaction)[0].delete(remove_orphans=True)
 
-        for m in self.metabolites.query("RNA"):
+        for m in list(self.metabolites.query("RNA")):
             delete = True
             for rxn in m._reaction:
                 if m in rxn.reactants and not rxn.id.startswith('DM_'):
@@ -154,7 +154,8 @@ class MEmodel(Model):
             if delete:
                 self.reactions.get_by_id('DM_' + m.id).remove_from_model(
                         remove_orphans=True)
-                m.remove_from_model(method='subtractive')
+                if m in self.metabolites:
+                    m.remove_from_model(method='subtractive')
 
         for t in self.reactions.query('transcription_TU'):
             delete = True
