@@ -10,16 +10,6 @@ from ecolime.ecoli_k12 import *
 import cobra
 import itertools
 
-print "Building a full ME model. Run prepare_for_minime() to make minimal " \
-      "model"
-macromolecules = True
-
-
-def prepare_for_minime():
-    global macromolecules
-    macromolecules = False
-    print "Creating minimal me model"
-
 
 def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
                                rho_dependent=False,
@@ -60,8 +50,6 @@ def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
 
     transcription.transcription_data.RNA_polymerase = rna_polymerase
 
-    if not macromolecules:
-        transcription.transcription_data.using_RNAP = False
     me_model.add_reaction(transcription)
     if update:
         transcription.update()
@@ -168,10 +156,6 @@ def add_translation_reaction(me_model, locus_id, amino_acid_sequence=None,
     translation_data.subreactions['peptide_chain_release'] = 1
     translation_data.subreactions['ribosome_recycler'] = 1
 
-    # TODO find a better way of creating "miniMEs"
-    if not macromolecules:
-        translation_data.using_ribosome = False
-
     # Create and add TranslationReaction with TranslationData
     translation_reaction = TranslationReaction("translation_" + locus_id)
     me_model.add_reaction(translation_reaction)
@@ -182,7 +166,7 @@ def add_translation_reaction(me_model, locus_id, amino_acid_sequence=None,
 
 
 def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_modifications,
-                                      verbose=True):
+                                      tRNA_to_codon, verbose=True):
     """
     Adds tRNA charging reactions for all tRNAs in ME-model
 
@@ -238,10 +222,10 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
                                  tRNA_modifications=None, verbose=True,
                                  translation_terminators={}, sigma_to_RNAP_dict={},
                                  methionine_cleaved=[], folding_dict={},
-                                 frameshift_dict={}, update=True):
+                                 frameshift_dict={}, tRNA_to_codon={}, update=True):
 
     # TODO handle special RNAse without type ('b3123')
-    # TODO allow overriding amino acid names
+    # TODO: move tRNA mods and folding its own function
     """Creates and adds transcription and translation reactions using genomic
      information from the organism's genbank file
 
@@ -309,7 +293,9 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             {"TU_" + i.qualifiers["locus_tag"][0]:
                 {"start": int(i.location.start),
                  "stop": int(i.location.end),
-                 "strand": "+" if i.strand == 1 else "-"}
+                 "strand": "+" if i.strand == 1 else "-",
+                 "sigma": "RpoD_mono",
+                 "rho_dependent": False}
              for i in gb_file.features if
              i.type in element_types},
             orient="index")
@@ -409,9 +395,9 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         transcription_data.subreactions['Transcription_%s_rho_%s' % (stable,
                                                                      rho)] = 1
 
-    if macromolecules:
-        convert_aa_codes_and_add_charging(me_model, tRNA_aa,
-                                          tRNA_modifications, verbose=verbose)
+    convert_aa_codes_and_add_charging(me_model, tRNA_aa,
+                                      tRNA_modifications, tRNA_to_codon,
+                                      verbose=verbose)
 
     if update:
         for r in me_model.reactions:

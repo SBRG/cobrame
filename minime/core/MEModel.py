@@ -10,6 +10,8 @@ from minime.util import mu
 class MEmodel(Model):
     def __init__(self, *args):
         Model.__init__(self, *args)
+        self.transcription_info = {}
+        self.translation_info = {}
         self.stoichiometric_data = DictList()
         self.complex_data = DictList()
         self.modification_data = DictList()
