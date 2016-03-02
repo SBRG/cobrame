@@ -252,11 +252,6 @@ class TranslationData(ProcessData):
 
     @property
     def amino_acid_sequence(self):
-        if len(self._amino_acid_sequence) > 0:
-            return self._amino_acid_sequence
-        if len(self.nucleotide_sequence) % 3 != 0:
-            self.nucleotide_sequence = self.nucleotide_sequence[:-1]
-            print self.id, ' Needs frameshift?'
         codons = (self.nucleotide_sequence[i: i + 3]
                   for i in range(0, (len(self.nucleotide_sequence)), 3))
         amino_acid_sequence = ''.join(codon_table[i] for i in codons)
@@ -265,13 +260,17 @@ class TranslationData(ProcessData):
             amino_acid_sequence = amino_acid_sequence.replace('*', 'U')
         return amino_acid_sequence
 
-    @amino_acid_sequence.setter
-    def amino_acid_sequence(self, value):
-        self._amino_acid_sequence = value
-
     @property
     def last_codon(self):
         return self.nucleotide_sequence[-3:].replace('T', 'U')
+
+    @property
+    def first_codon(self):
+        return self.nucleotide_sequence[:3].replace('T', 'U')
+
+    def _itercodons(self):
+        None
+        yield "AAU"
 
     @property
     def codon_count(self):
@@ -280,25 +279,15 @@ class TranslationData(ProcessData):
                   for i in range(0, (len(self.nucleotide_sequence)-3), 3))
         codon_count = defaultdict(int)
         for i in codons:
-            if len(i) % 3 != 0:
-                print self.id, 'Needs Frameshift?'
-                continue
             codon_count[i.replace('T', 'U')] += 1
 
         # Remove one methionine (AUG) from codon count to account for start
-
-        if self.nucleotide_sequence.startswith('ATG'):
-            codon_count['AUG'] -= 1
-        elif self.nucleotide_sequence.startswith('GTG'):
-            codon_count['GUG'] -= 1
-        elif self.nucleotide_sequence.startswith('TTG'):
-            codon_count['UUG'] -= 1
-        elif self.nucleotide_sequence.startswith('ATT'):
-            codon_count['AUU'] -= 1
-        elif self.nucleotide_sequence.startswith('CTG'):
-            codon_count['CUG'] -= 1
+        first_codon = self.first_codon
+        if first_codon in self._model.translation_info["met_start_codons"]:
+            codon_count[first_codon] -= 1
         else:
-            raise NameError('No start codon in DNA sequence %s' %self.mRNA)
+            warn("%s starts with '%s' which is not a start codon" %
+                 (self.mRNA, first_codon))
         return codon_count
 
     @property

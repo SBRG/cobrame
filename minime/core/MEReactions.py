@@ -257,17 +257,16 @@ class TranscriptionReaction(MEReaction):
         stoichiometry = defaultdict(int)
         TU_length = len(self.transcription_data.nucleotide_sequence)
         RNA_polymerase = self.transcription_data.RNA_polymerase
-        codes_stable_rna = self.transcription_data.codes_stable_rna
+        codes_stable_rna = self.transcription_data.codes_stable_rna  # TODO delete
 
-        if self.transcription_data.using_RNAP:
-            try:
-                RNAP = self._model.metabolites.get_by_id(RNA_polymerase)
-            except KeyError:
-                warn("RNA Polymerase (%s) not found" % RNA_polymerase)
-            else:
-                k_RNAP = (mu * 22.7 / (mu + 0.391))*3  # 3*k_ribo
-                coupling = -TU_length * mu / k_RNAP / 3600
-                stoichiometry[RNAP.id] = coupling
+        try:
+            RNAP = self._model.metabolites.get_by_id(RNA_polymerase)
+        except KeyError:
+            warn("RNA Polymerase (%s) not found" % RNA_polymerase)
+        else:
+            k_RNAP = (mu * 22.7 / (mu + 0.391))*3  # 3*k_ribo
+            coupling = -TU_length * mu / k_RNAP / 3600
+            stoichiometry[RNAP.id] = coupling
 
         # This is necessary as opposed to using get_components_from_ids in
         # so that self.excised_bases can be used for "dummy_RNA"
@@ -313,6 +312,9 @@ class GenericFormationReaction(Reaction):
     None
 
 
+def stringify(element, number):
+    return element if number == 1 else (element + str(number).rstrip("."))
+
 class TranslationReaction(MEReaction):
     """Translation of a TranscribedGene to a TranslatedGene"""
     _translation_data = None
@@ -330,19 +332,19 @@ class TranslationReaction(MEReaction):
         protein_id = self.translation_data.protein
         mRNA_id = self.translation_data.mRNA
         protein_length = len(self.translation_data.amino_acid_sequence)
+        model = self._model
         metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(int)
 
-        # If ribosome is not added to model, warn user but do not raise error
-        if self.translation_data.using_ribosome:
-            try:
-                ribosome = self._model.metabolites.get_by_id("ribosome")
-            except KeyError:
-                warn("ribosome not found")
-            else:
-                k_ribo = mu * 22.7 / (mu + 0.391)
-                coupling = -protein_length * mu / k_ribo / 3600.
-                new_stoichiometry[ribosome.id] = coupling
+
+        try:
+            ribosome = metabolites.get_by_id("ribosome")
+        except KeyError:
+            warn("ribosome not found")
+        else:
+            k_ribo = mu * 22.7 / (mu + 0.391)  # TODO move to translation_data
+            coupling = -protein_length * mu / k_ribo / 3600.
+            new_stoichiometry[ribosome.id] = coupling
 
         # Not all genes have annotated TUs. For these add TU as the bnumber
         try:
@@ -350,7 +352,7 @@ class TranslationReaction(MEReaction):
         except KeyError:
             warn("transcript '%s' not found" % mRNA_id)
             transcript = TranscribedGene(mRNA_id)
-            self._model.add_metabolites(transcript)
+            model.add_metabolites(transcript)
 
         k_mRNA = mu * self.translation_data.protein_per_mRNA / (mu + 0.391)
         new_stoichiometry[transcript.id] = -mu / k_mRNA / 3600.
@@ -360,14 +362,25 @@ class TranslationReaction(MEReaction):
             protein = metabolites.get_by_id(protein_id)
         except KeyError:
             protein = TranslatedGene(protein_id)
-            self._model.add_metabolites(protein)
+            model.add_metabolites(protein)
         new_stoichiometry[protein.id] = 1
 
         # ------------------ Elongation Reactions------------------------
         # update stoichiometry
         aa_count = self.translation_data.amino_acid_count
+        elements = defaultdict(int)
         for aa_name, value in iteritems(aa_count):
-            new_stoichiometry[aa_name] -= value
+            for e, n in iteritems(metabolites.get_by_id(aa_name).elements):
+                elements[e] += n * value
+        # subtract water from composition
+        elements["H"] -= (protein_length - 1) * 2
+        elements["O"] -= protein_length - 1
+        # methionine becomes formylmethionine
+        elements["C"] += 1
+        elements["O"] += 1
+
+        protein.formula = "".join(stringify(e, n)
+                                  for e, n in sorted(iteritems(elements)))
 
         # add in the tRNA's for each of the amino acids
         # We add in a "generic tRNA" for each amino acid. The production
@@ -378,21 +391,21 @@ class TranslationReaction(MEReaction):
         # Add transcription termination as subprocessdata so keff can be
         # modified
         all_subreactions = self._model.subreaction_data
-        if self.translation_data.using_ribosome:
-            for codon, count in self.translation_data.codon_count.items():
-                codon = codon.replace('U','T')
-                if codon == 'TGA':
-                    print 'Adding selenocystein for %s' % mRNA_id
-                    aa = 'sec'
-                else:
-                    abbreviated_aa = dogma.codon_table[codon]
-                    aa = dogma.amino_acids[abbreviated_aa].split('_')[0]
-                codon = codon.replace('T', 'U')
-                subreaction_id = aa + '_addition_at_' + codon
-                try:
-                    self.translation_data.subreactions[subreaction_id] = count
-                except KeyError:
-                    warn('subreaction %s not in model' % subreaction_id)
+
+        for codon, count in self.translation_data.codon_count.items():
+            codon = codon.replace('U', 'T')
+            if codon == 'TGA':
+                print 'Adding selenocystein for %s' % mRNA_id
+                aa = 'sec'
+            else:
+                abbreviated_aa = dogma.codon_table[codon]
+                aa = dogma.amino_acids[abbreviated_aa].split('_')[0]
+            codon = codon.replace('T', 'U')
+            subreaction_id = aa + '_addition_at_' + codon
+            try:
+                self.translation_data.subreactions[subreaction_id] = count
+            except KeyError:
+                warn('subreaction %s not in model' % subreaction_id)
 
         self.translation_data.subreactions['fmet_addition_at_START'] = 1
 
@@ -406,16 +419,18 @@ class TranslationReaction(MEReaction):
         # translation is 2 * len(protein)
 
         # tRNA + GTP -> tRNA_GTP
-        new_stoichiometry["h2o_c"] -= 3 * protein_length
-        new_stoichiometry["h_c"] += 3 * protein_length
-        new_stoichiometry["pi_c"] += 3 * protein_length
-        new_stoichiometry["gtp_c"] -= 2 * protein_length
-        new_stoichiometry["gdp_c"] += 2 * protein_length
-        new_stoichiometry["atp_c"] -= 1 * protein_length
-        new_stoichiometry["adp_c"] += 1 * protein_length
+        # TODO: audit the numbers below. Check with subreaction data
+        # TODO: handle in subreactions
+        #new_stoichiometry["h2o_c"] -= 3 * protein_length
+        #new_stoichiometry["h_c"] += 3 * protein_length
+        #new_stoichiometry["pi_c"] += 3 * protein_length
+        #new_stoichiometry["gtp_c"] -= 2 * protein_length
+        #new_stoichiometry["gdp_c"] += 2 * protein_length
+        #new_stoichiometry["atp_c"] -= 1 * protein_length
+        #new_stoichiometry["adp_c"] += 1 * protein_length
 
         last_codon = self.translation_data.last_codon
-        term_enzyme = self.translation_data.term_enzyme
+        term_enzyme = model.translation_info["translation_terminators"].get(last_codon)
         if term_enzyme is not None:
             termination_subreaction_id = last_codon + '_' + term_enzyme + \
                 '_mediated_termination'
@@ -438,7 +453,7 @@ class TranslationReaction(MEReaction):
                              combine=False, add_to_container_model=False)
 
         # add to biomass
-        protein_mass = compute_protein_mass(aa_count)  # kDa
+        protein_mass = protein.formula_weight / 1000.  # kDa
         self.add_metabolites({self._model._biomass: protein_mass},
                              combine=False, add_to_container_model=False)
 

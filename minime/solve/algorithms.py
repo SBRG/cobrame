@@ -76,7 +76,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
         print("LP files will be saved in " + save_dir)
         try:
             status_mapping = {i.real: i.name for i in soplex.STATUS}
-        except AttritubeError:
+        except AttributeError:
             print("soplex status mapping not made")
             status_mapping = {}
         filename_base = join(save_dir, "me_mu_" + num_format + ".lp")
