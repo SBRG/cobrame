@@ -1,4 +1,6 @@
 from cobra import Metabolite as Component
+from minime.util import dogma
+from six import iteritems
 
 
 class Metabolite(Component):
@@ -15,13 +17,36 @@ class TranscribedGene(Component):
         self.RNA_type = ''
         self.nucleotide_sequence = ''
 
+    @property
+    def nucleotide_count(self):
+        seq = self.nucleotide_sequence
+        counts = {i: seq.count(i) for i in ("A", "T", "G", "C")}
+        monophosphate_counts = {dogma.transcription_table[k].replace("tp_c",
+                                                                     "mp_c"): v
+                                for k, v in iteritems(counts)}
+        return monophosphate_counts
+
 
 class TranslatedGene(Component):
-    pass
+    @property
+    def complexes(self):
+        """read-only link to the complexes that the gene forms"""
+        complex_list = []
+        for reaction in self.reactions:
+            if reaction.__class__.__name__ == 'ComplexFormation':
+                complex_list.append(reaction.complex)
+        return complex_list
 
 
 class Complex(Component):
-    pass
+    @property
+    def metabolic_reactions(self):
+        """read-only link to MetabolicReactions"""
+        reaction_list = []
+        for reaction in self.reactions:
+            if reaction.__class__.__name__ == 'MetabolicReaction':
+                reaction_list.append(reaction)
+        return reaction_list
 
 
 class Ribosome(Complex):
