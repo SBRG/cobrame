@@ -439,16 +439,12 @@ def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
                                             in iteritems(reaction.metabolites)}
 
 
-def add_generic_RNase(me_model, generic_flag=False):
+def add_generic_RNase(me_model):
 
     generic_RNase_list = eval('generic_RNase_list')
-    if generic_flag:
-        generic_RNase_list = [R.replace('mg2', 'generic_divalent').
-                              replace('zn2', 'generic_divalent')
-                              for R in generic_RNase_list]
 
     for cplx in generic_RNase_list:
-        new_rxn = cobra.Reaction('complex_' + cplx + '_to_generic')
+        new_rxn = MEReaction('complex_' + cplx + '_to_generic')
         me_model.add_reaction(new_rxn)
         new_rxn.reaction = cplx + ' <=> generic_RNase'
 

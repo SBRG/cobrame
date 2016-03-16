@@ -4,6 +4,7 @@ from scipy.sparse import dok_matrix
 from cobra import Model, DictList
 
 from minime.core.MEReactions import *
+from minime.core.Components import Constraint
 from minime.util import mu
 
 
@@ -29,6 +30,16 @@ class MEmodel(Model):
         self.add_reaction(self._biomass_dilution)
         self._biomass_dilution.upper_bound = mu
         self._biomass_dilution.lower_bound = mu
+        # Unmodeled protein is handled by converting protein_biomass to
+        # biomass, and requiring production of the appropriate amount of dummy
+        # protein
+        self._protein_biomass = Constraint("protein_biomass")
+        self._unmodeled_protein_demand = SummaryVariable("unmodeld_protein_demand")
+        self._unmodeled_protein_demand.add_metabolites({
+            self._protein_biomass: -1,
+            self._biomass: 1,
+        })
+        self.add_reaction(self._unmodeled_protein_demand)
 
     def get_metabolic_flux(self, solution=None):
         """extract the flux state for metabolic reactions"""
@@ -130,10 +141,13 @@ class MEmodel(Model):
         difficult to add new content to the model once this has been run.
 
         """
-        for c_d in self.complex_data:
-            c = c_d.complex
-            if len(c.reactions) == 1:
-                list(c.reactions)[0].delete(remove_orphans=True)
+        complex_data_list = [i.id for i in self.complex_data]
+        for c_d in complex_data_list:
+            c = self.complex_data.get_by_id(c_d)
+            cplx = c.complex
+            if len(cplx.reactions) == 1:
+                list(cplx.reactions)[0].delete(remove_orphans=True)
+                self.complex_data.remove(self.complex_data.get_by_id(c_d))
 
         for p in self.metabolites.query("protein"):
             delete = True
@@ -147,6 +161,7 @@ class MEmodel(Model):
             if delete:
                 while len(p._reaction) > 0:
                     list(p._reaction)[0].delete(remove_orphans=True)
+                    self.translation_data.remove(p.id.replace('protein_', ''))
 
         for m in list(self.metabolites.query("RNA")):
             delete = True
@@ -166,4 +181,32 @@ class MEmodel(Model):
                     delete = False
             if delete:
                 t.remove_from_model(remove_orphans=True)
+                t_process_id = t.id.replace('transcription_', '')
+                self.transcription_data.remove(t_process_id)
 
+    def remove_genes_from_model(self, gene_list):
+        for gene in gene_list:
+            self.metabolites.get_by_id('RNA_'+gene).remove_from_model(method='subtractive')
+            protein = self.metabolites.get_by_id('protein_'+gene)
+            for cplx in protein.complexes:
+                print cplx
+                for rxn in cplx.metabolic_reactions:
+                    try:
+                        self.stoichiometric_data.remove(rxn.id.split('_')[0])
+                    except ValueError:
+                        pass
+                    rxn.remove_from_model()
+
+            protein.remove_from_model(method='destructive')
+
+        # Remove all transcription reactions that now do not form a used
+        # transcript
+        for t in self.reactions.query('transcription_TU'):
+            delete = True
+            for product in t.products:
+                if isinstance(product, TranscribedGene):
+                    delete = False
+            if delete:
+                t.remove_from_model(remove_orphans=True)
+                t_process_id = t.id.replace('transcription_', '')
+                self.transcription_data.remove(t_process_id)

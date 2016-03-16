@@ -9,6 +9,7 @@ from cobra import Reaction
 
 from minime.util.mass import *
 from minime.util import mu, dogma
+from sympy import Basic
 from minime.core.Components import *
 
 
@@ -21,7 +22,7 @@ class MEReaction(Reaction):
 
 
     """
-    def add_modifications(self, process_data_id, stoichiometry):
+    def add_modifications(self, process_data_id, stoichiometry, scale=1.):
         """
         Function to add modification process data to reaction stoichiometry
 
@@ -37,6 +38,10 @@ class MEReaction(Reaction):
         stoichiometry: Dictionary {metabolite_id: float} or
                                   {metabolite_id: float * (sympy.Symbol)}
 
+        scale: float
+           Some processes (ie. tRNA charging) are reformulated such other
+           involved metabolites need scaling
+
 
         return: stoichiometry
             The dictionary with updated entries
@@ -47,7 +52,7 @@ class MEReaction(Reaction):
         for modification_id, count in iteritems(process_info.modifications):
             modification = all_modifications.get_by_id(modification_id)
             for mod_comp, mod_count in iteritems(modification.stoichiometry):
-                stoichiometry[mod_comp] += count * mod_count
+                stoichiometry[mod_comp] += count * mod_count * scale
 
             if type(modification.enzyme) == list:
                 for enzyme in modification.enzyme:
@@ -134,8 +139,29 @@ class MEReaction(Reaction):
                 self._model.add_metabolites([new_met])
         return object_stoichiometry
 
+    def check_ME_mass_balance(self):
+        """Compute mass and charge balance for the reaction
 
-class MetabolicReaction(Reaction):
+        returns a dict of {element: amount} for unbalanced elements.
+        "charge" is treated as an element in this dict
+        This should be empty for balanced reactions.
+        """
+        reaction_element_dict = defaultdict(int)
+        for metabolite, coefficient in self._metabolites.items():
+            if metabolite.id == 'biomass':
+                continue
+            if isinstance(coefficient, Basic):
+                coefficient = coefficient.subs(mu, 0)
+            if metabolite.charge is not None:
+                reaction_element_dict["charge"] += \
+                    coefficient * metabolite.charge
+            for element, amount in iteritems(metabolite.elements):
+                reaction_element_dict[element] += coefficient * amount
+        # filter out 0 values
+        return {k: v for k, v in iteritems(reaction_element_dict) if v != 0}
+
+
+class MetabolicReaction(MEReaction):
     """Metabolic reaction including required enzymatic complex"""
 
     @property
@@ -233,6 +259,19 @@ class ComplexFormation(MEReaction):
         object_stoichiometry = self.get_components_from_ids(
                 stoichiometry, default_type=Complex, verbose=verbose)
 
+        # Add formula as sum of all protein and modification components
+        elements = defaultdict(int)
+        for component, value in iteritems(stoichiometry):
+            if isinstance(value, Basic):
+                value = value.subs(mu, 0)
+            if component == complex_met.id:
+                continue
+            for e, n in iteritems(metabolites.get_by_id(component).elements):
+                elements[e] += n * -int(value)
+
+        complex_met.formula = "".join(stringify(e, n)
+                                      for e, n in sorted(iteritems(elements)))
+
         self.add_metabolites(object_stoichiometry, combine=False,
                              add_to_container_model=True)
 
@@ -257,6 +296,7 @@ class TranscriptionReaction(MEReaction):
         stoichiometry = defaultdict(int)
         TU_length = len(self.transcription_data.nucleotide_sequence)
         RNA_polymerase = self.transcription_data.RNA_polymerase
+        metabolites = self.model.metabolites
         codes_stable_rna = self.transcription_data.codes_stable_rna  # TODO delete
 
         try:
@@ -279,6 +319,15 @@ class TranscriptionReaction(MEReaction):
                 transcript = self._model.metabolites.get_by_id(transcript_id)
             stoichiometry[transcript.id] += 1
 
+            # Add in formula for each transcript
+            elements = defaultdict(int)
+            for nucleotide, value in iteritems(transcript.nucleotide_count):
+                for e, n in iteritems(metabolites.get_by_id(nucleotide).elements):
+                    elements[e] += n * value
+
+            transcript.formula = "".join(stringify(e, n)
+                                         for e, n in sorted(iteritems(elements)))
+
         # add in the modifications
         stoichiometry = self.add_modifications(TU_id, stoichiometry)
         stoichiometry = self.add_subreactions(TU_id, stoichiometry)
@@ -290,6 +339,8 @@ class TranscriptionReaction(MEReaction):
             stoichiometry[base] += count
 
         stoichiometry["ppi_c"] += TU_length - 1
+        stoichiometry["h2o_c"] -= TU_length - 1
+        stoichiometry["h_c"] += TU_length - 1
         # 5' had a triphosphate, but this is removed when excising
         # Is this universally true?
         if sum(self.transcription_data.excised_bases.values()) > 0:
@@ -308,12 +359,13 @@ class TranscriptionReaction(MEReaction):
                              combine=False, add_to_container_model=False)
 
 
-class GenericFormationReaction(Reaction):
+class GenericFormationReaction(MEReaction):
     None
 
 
 def stringify(element, number):
     return element if number == 1 else (element + str(number).rstrip("."))
+
 
 class TranslationReaction(MEReaction):
     """Translation of a TranscribedGene to a TranslatedGene"""
@@ -335,7 +387,6 @@ class TranslationReaction(MEReaction):
         model = self._model
         metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(int)
-
 
         try:
             ribosome = metabolites.get_by_id("ribosome")
@@ -454,7 +505,7 @@ class TranslationReaction(MEReaction):
 
         # add to biomass
         protein_mass = protein.formula_weight / 1000.  # kDa
-        self.add_metabolites({self._model._biomass: protein_mass},
+        self.add_metabolites({self._model._protein_biomass: protein_mass},
                              combine=False, add_to_container_model=False)
 
 
@@ -481,7 +532,7 @@ class tRNAChargingReaction(MEReaction):
         if data.synthetase is not None:
             stoic[data.synthetase] = -synthetase_amount
 
-        stoic = self.add_modifications(self.tRNAData.id, stoic)
+        stoic = self.add_modifications(self.tRNAData.id, stoic, tRNA_amount)
 
         object_stoichiometry = self.get_components_from_ids(stoic,
                                                             verbose=verbose)
@@ -490,5 +541,5 @@ class tRNAChargingReaction(MEReaction):
                              add_to_container_model=False)
 
 
-class SummaryVariable(Reaction):
+class SummaryVariable(MEReaction):
     pass
