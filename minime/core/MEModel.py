@@ -33,13 +33,36 @@ class MEmodel(Model):
         # Unmodeled protein is handled by converting protein_biomass to
         # biomass, and requiring production of the appropriate amount of dummy
         # protein
+        self._unmodeled_protein_fraction = None
         self._protein_biomass = Constraint("protein_biomass")
-        self._unmodeled_protein_demand = SummaryVariable("unmodeld_protein_demand")
-        self._unmodeled_protein_demand.add_metabolites({
+        self._protein_biomass_dilution = SummaryVariable("protein_biomass_dilution")
+        self._protein_biomass_dilution.add_metabolites({
             self._protein_biomass: -1,
             self._biomass: 1,
         })
-        self.add_reaction(self._unmodeled_protein_demand)
+        self._RNA_biomass = Constraint("RNA_biomass")
+        self._RNA_biomass_dilution = SummaryVariable("RNA_biomass_dilution")
+        self._RNA_biomass_dilution.add_metabolites({
+            self._RNA_biomass: -1,
+            self._biomass: 1,
+        })
+        self.add_reactions((self._protein_biomass_dilution, self._RNA_biomass_dilution))
+
+    @property
+    def unmodeled_protein(self):
+        return self.metabolites.get_by_id("protein_dummy")
+
+    @property
+    def unmodeled_protein_fraction(self):
+        return self._unmodeled_protein_fraction
+
+    @unmodeled_protein_fraction.setter
+    def unmodeled_protein_fraction(self, value):
+        amount = value / (1 + value) / \
+                 (self.unmodeled_protein.formula_weight / 1000.)
+        self._protein_biomass_dilution.add_metabolites(
+                {self.unmodeled_protein: -amount}, combine=False)
+        self._unmodeled_protein_fraction = value
 
     def get_metabolic_flux(self, solution=None):
         """extract the flux state for metabolic reactions"""

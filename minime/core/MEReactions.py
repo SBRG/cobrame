@@ -14,6 +14,8 @@ from minime.core.Components import *
 
 
 class MEReaction(Reaction):
+
+    # TODO set _upper and _lower bounds as a property
     """
     MEReaction is a general reaction class from which all ME-Model reactions
     will inherit
@@ -353,10 +355,7 @@ class TranscriptionReaction(MEReaction):
         self.add_metabolites(new_stoich, combine=False,
                              add_to_container_model=False)
 
-        # add to biomass
-        RNA_mass = self.transcription_data.mass  # kDa
-        self.add_metabolites({self._model._biomass: RNA_mass},
-                             combine=False, add_to_container_model=False)
+        # biomass contribution handled in translation
 
 
 class GenericFormationReaction(MEReaction):
@@ -388,6 +387,8 @@ class TranslationReaction(MEReaction):
         metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(int)
 
+
+
         try:
             ribosome = metabolites.get_by_id("ribosome")
         except KeyError:
@@ -405,8 +406,35 @@ class TranslationReaction(MEReaction):
             transcript = TranscribedGene(mRNA_id)
             model.add_metabolites(transcript)
 
+        # Set Parameters
+        kt = 4.5
+        r0 = 0.087
+        c_ribo = 1700./0.109/0.86
+        m_aa = 0.109   # kDa
         k_mRNA = mu * self.translation_data.protein_per_mRNA / (mu + 0.391)
-        new_stoichiometry[transcript.id] = -mu / k_mRNA / 3600.
+        RNA_amount = mu / k_mRNA / 3600.
+
+        k_deg = 1.0/5. * 60.0  # 1/5 1/min 60 min/h # h-1 # TODO move to translation data
+        deg_fraction = 3. * k_deg / (3. * k_deg + mu)
+        deg_amount = deg_fraction * RNA_amount
+
+        # set stoichiometry
+        new_stoichiometry[transcript.id] = -RNA_amount
+        for nucleotide, count in transcript.nucleotide_count.items():
+            new_stoichiometry[nucleotide] += count * deg_amount
+        nucleotide_length = len(transcript.nucleotide_sequence)
+        # ATP hydrolysis required for cleaving
+        new_stoichiometry['atp_c'] -= (nucleotide_length-1) / 4. * deg_amount
+        new_stoichiometry['h2o_c'] -= (nucleotide_length-1) / 4. * deg_amount
+        new_stoichiometry['adp_c'] += (nucleotide_length-1) / 4. * deg_amount
+        new_stoichiometry['pi_c'] += (nucleotide_length-1) / 4. * deg_amount
+        new_stoichiometry['h_c'] += (nucleotide_length-1) / 4. * deg_amount
+        try:
+            RNA_degradosome = metabolites.get_by_id("RNA_degradosome")
+        except KeyError:
+            warn("RNA_degradosome not found")
+        else:
+            new_stoichiometry[RNA_degradosome.id] = -deg_amount * mu / (65. * 3600.) #keff of degradosome
 
         # Added protein to model if not already included
         try:
@@ -507,6 +535,12 @@ class TranslationReaction(MEReaction):
         protein_mass = protein.formula_weight / 1000.  # kDa
         self.add_metabolites({self._model._protein_biomass: protein_mass},
                              combine=False, add_to_container_model=False)
+        # RNA biomass
+        RNA_mass = transcript.formula_weight / 1000.  # kDa
+        self.add_metabolites(
+            {self._model._RNA_biomass:
+                 RNA_mass * (1 - deg_fraction) * RNA_amount},
+            combine=False, add_to_container_model=False)
 
 
 class tRNAChargingReaction(MEReaction):

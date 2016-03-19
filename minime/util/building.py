@@ -762,8 +762,9 @@ def add_dummy_reactions(me_model, dna_seq, update=True):
     dummy.upper_bound = 1000
     dummy._stoichiometry = {}
 
+    create_transcribed_gene(me_model, 'dummy', 0, len(dna_seq), dna_seq, '+',
+                            'mRNA')
     add_transcription_reaction(me_model, "RNA_dummy", {"dummy"}, dna_seq)
-
     me_model.add_metabolites(TranslatedGene("protein_" + "dummy"))
     add_translation_reaction(me_model, "dummy", dna_sequence=dna_seq,
                              update=update)
