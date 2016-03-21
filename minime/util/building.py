@@ -361,8 +361,12 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         # towards biomass
         demand_reaction = cobra.Reaction("DM_" + gene.id)
         me_model.add_reaction(demand_reaction)
-        demand_reaction.add_metabolites(
-                {gene: -1, me_model._biomass: -compute_RNA_mass(seq)})
+        demand_reaction.add_metabolites({gene: -1})
+
+        # mRNA biomass is handled during translation
+        if feature.type != 'mRNA':
+            demand_reaction.add_metabolites({
+                me_model._biomass: -compute_RNA_mass(seq)})
 
         # ---- Associate TranscribedGene to a TU ----
         parent_TU = TU_frame[

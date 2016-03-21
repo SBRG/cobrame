@@ -78,9 +78,9 @@ def create_component(component_id, default_type=Component):
     if not isinstance(component_id, str):
         raise TypeError("%s must be a str, not %s" %
                         (repr(component_id), str(type(component_id))))
-    if component_id.startswith("protein"):
+    if component_id.startswith("protein_"):
         return TranslatedGene(component_id)
-    elif component_id.startswith("RNA"):
+    elif component_id.startswith("RNA_"):
         return TranscribedGene(component_id)
     elif component_id.startswith("ribosome"):
         return Ribosome(component_id)

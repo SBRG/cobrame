@@ -356,6 +356,16 @@ class TranscriptionReaction(MEReaction):
                              add_to_container_model=False)
 
         # biomass contribution handled in translation
+        RNA_mass = 0
+        for met, v in new_stoich.items():
+            if v < 0:
+                continue
+            if hasattr(met, "RNA_type") and met.RNA_type != 'mRNA':
+                RNA_mass += met.formula_weight / 1000.  # kDa
+        if RNA_mass > 0:
+            self.add_metabolites({self._model._RNA_biomass: RNA_mass},
+                                 combine=False, add_to_container_model=False)
+
 
 
 class GenericFormationReaction(MEReaction):
@@ -386,8 +396,6 @@ class TranslationReaction(MEReaction):
         model = self._model
         metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(int)
-
-
 
         try:
             ribosome = metabolites.get_by_id("ribosome")
