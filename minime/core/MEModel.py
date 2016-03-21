@@ -192,10 +192,13 @@ class MEmodel(Model):
                 if m in rxn.reactants and not rxn.id.startswith('DM_'):
                     delete = False
             if delete:
-                self.reactions.get_by_id('DM_' + m.id).remove_from_model(
-                        remove_orphans=True)
-                if m in self.metabolites:
-                    m.remove_from_model(method='subtractive')
+                try:
+                    self.reactions.get_by_id('DM_' + m.id).remove_from_model(
+                            remove_orphans=True)
+                    if m in self.metabolites:
+                        m.remove_from_model(method='subtractive')
+                except KeyError:
+                    pass
 
         for t in self.reactions.query('transcription_TU'):
             delete = True
