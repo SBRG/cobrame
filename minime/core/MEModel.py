@@ -58,7 +58,9 @@ class MEmodel(Model):
 
     @unmodeled_protein_fraction.setter
     def unmodeled_protein_fraction(self, value):
-        amount = value / (1 + value) / \
+        # proportion = value / (1 - value)
+        # see the Biomass_formulations for an explanation
+        amount = value / \
                  (self.unmodeled_protein.formula_weight / 1000.)
         self._protein_biomass_dilution.add_metabolites(
                 {self.unmodeled_protein: -amount}, combine=False)
