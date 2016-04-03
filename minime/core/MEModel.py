@@ -81,6 +81,8 @@ class MEmodel(Model):
                     flux_dict[m_reaction_id] -= solution.x_dict[reaction.id]
                 else:
                     flux_dict[m_reaction_id] += solution.x_dict[reaction.id]
+            elif reaction.id.startswith("EX_") or reaction.id.startswith("DM"):
+                flux_dict[reaction.id] = solution.x_dict[reaction.id]
         return flux_dict
 
     def get_transcription_flux(self, solution=None):

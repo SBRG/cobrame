@@ -486,6 +486,8 @@ class TranslationReaction(MEReaction):
                 aa = 'sec'
             else:
                 abbreviated_aa = dogma.codon_table[codon]
+                if abbreviated_aa == "*":
+                    break
                 aa = dogma.amino_acids[abbreviated_aa].split('_')[0]
             codon = codon.replace('T', 'U')
             subreaction_id = aa + '_addition_at_' + codon
