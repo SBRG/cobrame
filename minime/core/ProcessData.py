@@ -235,7 +235,6 @@ class GenericData(ProcessData):
 
 
 class TranslationData(ProcessData):
-    protein_per_mRNA = .5  # per second
     _amino_acid_sequence = ""
     mRNA = None
     nucleotide_sequence = ""
@@ -283,7 +282,7 @@ class TranslationData(ProcessData):
 
         # Remove one methionine (AUG) from codon count to account for start
         first_codon = self.first_codon
-        if first_codon in self._model.translation_info["met_start_codons"]:
+        if first_codon in self._model.global_info["met_start_codons"]:
             codon_count[first_codon] -= 1
         else:
             warn("%s starts with '%s' which is not a start codon" %
@@ -314,7 +313,6 @@ class tRNAData(ProcessData):
         self.codon = codon
         self.amino_acid = amino_acid
         self.RNA = RNA
-        self.tRNA_keff = 2.39 * mu / (mu + 0.391)
 
 
 class ProteinTranslocationData(ProcessData):

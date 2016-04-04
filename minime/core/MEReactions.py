@@ -191,11 +191,12 @@ class MetabolicReaction(MEReaction):
     complex_dilution_list = set()
 
     def update(self, create_new=False):
+        self._metabolites.clear()
         metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(float)
         if self.complex_data:
             new_stoichiometry[self.complex_data.complex] = \
-                -mu / self.keff / 3600.
+                -mu / self.keff / 3600.  # s-1 / (3600 s/h)
         sign = -1 if self.reverse else 1
         for component_id, value in iteritems(
                 self.stoichiometric_data._stoichiometry):
@@ -240,6 +241,7 @@ class ComplexFormation(MEReaction):
         return self._model.metabolites.get_by_id(self._complex_id)
 
     def update(self, verbose=True):
+        self._metabolites.clear()
         stoichiometry = defaultdict(float)
         metabolites = self._model.metabolites
         complex_info = self._model.complex_data.get_by_id(self.complex_data_id)
@@ -294,20 +296,27 @@ class TranscriptionReaction(MEReaction):
         process_data._parent_reactions.add(self.id)
 
     def update(self, verbose=True):
+        self._metabolites.clear()
         TU_id = self.transcription_data.id
         stoichiometry = defaultdict(int)
         TU_length = len(self.transcription_data.nucleotide_sequence)
         RNA_polymerase = self.transcription_data.RNA_polymerase
         metabolites = self.model.metabolites
-        codes_stable_rna = self.transcription_data.codes_stable_rna  # TODO delete
+        # Set Parameters
+        kt = self._model.global_info['kt']
+        r0 = self._model.global_info['r0']
+        m_rr = self._model.global_info['m_rr']
+        f_rRNA = self._model.global_info['f_rRNA']
+        m_aa = self._model.global_info['m_aa']
+        c_ribo = m_rr / f_rRNA / m_aa
 
         try:
             RNAP = self._model.metabolites.get_by_id(RNA_polymerase)
         except KeyError:
             warn("RNA Polymerase (%s) not found" % RNA_polymerase)
         else:
-            k_RNAP = (mu * 22.7 / (mu + 0.391))*3  # 3*k_ribo
-            coupling = -TU_length * mu / k_RNAP / 3600
+            k_RNAP = (mu * c_ribo * kt / (mu + kt * r0)) * 3  # in hr-1 3*k_ribo
+            coupling = -TU_length * mu / k_RNAP
             stoichiometry[RNAP.id] = coupling
 
         # This is necessary as opposed to using get_components_from_ids in
@@ -355,17 +364,28 @@ class TranscriptionReaction(MEReaction):
         self.add_metabolites(new_stoich, combine=False,
                              add_to_container_model=False)
 
-        # biomass contribution handled in translation
-        RNA_mass = 0
+        # mRNA biomass contribution handled in translation
+        tRNA_mass = 0
+        rRNA_mass = 0
+        ncRNA_mass = 0
         for met, v in new_stoich.items():
-            if v < 0:
+            if v < 0 or not hasattr(met, "RNA_type"):
                 continue
-            if hasattr(met, "RNA_type") and met.RNA_type != 'mRNA':
-                RNA_mass += met.formula_weight / 1000.  # kDa
-        if RNA_mass > 0:
-            self.add_metabolites({self._model._RNA_biomass: RNA_mass},
+            if met.RNA_type == 'tRNA':
+                tRNA_mass += met.formula_weight / 1000.  # kDa
+            if met.RNA_type == 'rRNA':
+                rRNA_mass += met.formula_weight / 1000.  # kDa
+            if met.RNA_type == 'ncRNA':
+                ncRNA_mass += met.formula_weight / 1000.  # kDa
+        if tRNA_mass > 0:
+            self.add_metabolites({self._model._tRNA_biomass: tRNA_mass},
                                  combine=False, add_to_container_model=False)
-
+        if rRNA_mass > 0:
+            self.add_metabolites({self._model._rRNA_biomass: rRNA_mass},
+                                 combine=False, add_to_container_model=False)
+        if ncRNA_mass > 0:
+            self.add_metabolites({self._model._ncRNA_biomass: ncRNA_mass},
+                                 combine=False, add_to_container_model=False)
 
 
 class GenericFormationReaction(MEReaction):
@@ -390,20 +410,34 @@ class TranslationReaction(MEReaction):
         process_data._parent_reactions.add(self.id)
 
     def update(self, verbose=True):
+        self._metabolites.clear()
         protein_id = self.translation_data.protein
         mRNA_id = self.translation_data.mRNA
         protein_length = len(self.translation_data.amino_acid_sequence)
         model = self._model
         metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(int)
+        # Set Parameters
+        kt = self._model.global_info['kt']
+        k_deg = self._model.global_info['k_deg']
+        r0 = self._model.global_info['r0']
+        m_rr = self._model.global_info['m_rr']
+        f_rRNA = self._model.global_info['f_rRNA']
+        m_aa = self._model.global_info['m_aa']
+
+        m_nt = self._model.global_info['m_nt']
+        f_mRNA = self._model.global_info['f_mRNA']
+
+        c_ribo = m_rr / f_rRNA / m_aa
+        c_mRNA = m_nt / f_mRNA / m_aa
 
         try:
             ribosome = metabolites.get_by_id("ribosome")
         except KeyError:
             warn("ribosome not found")
         else:
-            k_ribo = mu * 22.7 / (mu + 0.391)  # TODO move to translation_data
-            coupling = -protein_length * mu / k_ribo / 3600.
+            k_ribo = mu * c_ribo * kt / (mu + kt * r0)  # in hr-1
+            coupling = -protein_length * mu / k_ribo
             new_stoichiometry[ribosome.id] = coupling
 
         # Not all genes have annotated TUs. For these add TU as the bnumber
@@ -414,15 +448,9 @@ class TranslationReaction(MEReaction):
             transcript = TranscribedGene(mRNA_id)
             model.add_metabolites(transcript)
 
-        # Set Parameters
-        kt = 4.5
-        r0 = 0.087
-        c_ribo = 1700./0.109/0.86
-        m_aa = 0.109   # kDa
-        k_mRNA = mu * self.translation_data.protein_per_mRNA / (mu + 0.391)
-        RNA_amount = mu / k_mRNA / 3600.
+        k_mRNA = mu * c_mRNA * kt / (mu + kt * r0)  # in hr-1
+        RNA_amount = mu / k_mRNA
 
-        k_deg = 1.0/5. * 60.0  # 1/5 1/min 60 min/h # h-1 # TODO move to translation data
         deg_fraction = 3. * k_deg / (3. * k_deg + mu)
         deg_amount = deg_fraction * RNA_amount
 
@@ -519,7 +547,7 @@ class TranslationReaction(MEReaction):
         #new_stoichiometry["adp_c"] += 1 * protein_length
 
         last_codon = self.translation_data.last_codon
-        term_enzyme = model.translation_info["translation_terminators"].get(last_codon)
+        term_enzyme = model.global_info["translation_terminators"].get(last_codon)
         if term_enzyme is not None:
             termination_subreaction_id = last_codon + '_' + term_enzyme + \
                 '_mediated_termination'
@@ -546,10 +574,10 @@ class TranslationReaction(MEReaction):
         self.add_metabolites({self._model._protein_biomass: protein_mass},
                              combine=False, add_to_container_model=False)
         # RNA biomass
-        RNA_mass = transcript.formula_weight / 1000.  # kDa
+        mRNA_mass = transcript.formula_weight / 1000.  # kDa
         self.add_metabolites(
-            {self._model._RNA_biomass:
-                 RNA_mass * (1 - deg_fraction) * RNA_amount},
+            {self._model._mRNA_biomass:
+                 mRNA_mass * (1 - deg_fraction) * RNA_amount},
             combine=False, add_to_container_model=False)
 
 
@@ -558,8 +586,18 @@ class tRNAChargingReaction(MEReaction):
     tRNAData = None
 
     def update(self, verbose=True):
+        self._metabolites.clear()
         stoic = defaultdict(int)
         data = self.tRNAData
+
+        # set tRNA coupling parameters
+        m_tRNA = self._model.global_info['m_tRNA']
+        m_aa = self._model.global_info['m_aa']
+        f_tRNA = self._model.global_info['f_tRNA']
+        kt = self._model.global_info['kt']  # hr-1
+        r0 = self._model.global_info['r0']
+        c_tRNA = m_tRNA / m_aa / f_tRNA
+        tRNA_keff = c_tRNA * kt * mu / (mu + r0 * kt) / 3600.  # in per second
 
         # If the generic tRNA does not exist, create it now. The meaning of
         # a generic tRNA is described in the TranslationReaction comments
@@ -568,9 +606,9 @@ class tRNAChargingReaction(MEReaction):
         stoic[generic_tRNA] = 1
 
         # compute what needs to go into production of a generic tRNA
-        tRNA_amount = mu / data.tRNA_keff / 3600
+        tRNA_amount = mu / tRNA_keff / 3600.
         synthetase_amount = mu / data.synthetase_keff / \
-                            3600 * (1 + tRNA_amount)
+                            3600. * (1 + tRNA_amount)
         stoic[data.RNA] = -tRNA_amount
         stoic[data.amino_acid] = -tRNA_amount
         if data.synthetase is not None:

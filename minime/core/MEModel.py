@@ -11,8 +11,7 @@ from minime.util import mu
 class MEmodel(Model):
     def __init__(self, *args):
         Model.__init__(self, *args)
-        self.transcription_info = {}
-        self.translation_info = {}
+        self.global_info = {}
         self.stoichiometric_data = DictList()
         self.complex_data = DictList()
         self.modification_data = DictList()
@@ -40,13 +39,36 @@ class MEmodel(Model):
             self._protein_biomass: -1,
             self._biomass: 1,
         })
-        self._RNA_biomass = Constraint("RNA_biomass")
-        self._RNA_biomass_dilution = SummaryVariable("RNA_biomass_dilution")
-        self._RNA_biomass_dilution.add_metabolites({
-            self._RNA_biomass: -1,
+        self._mRNA_biomass = Constraint("mRNA_biomass")
+        self._mRNA_biomass_dilution = SummaryVariable("mRNA_biomass_dilution")
+        self._mRNA_biomass_dilution.add_metabolites({
+            self._mRNA_biomass: -1,
             self._biomass: 1,
         })
-        self.add_reactions((self._protein_biomass_dilution, self._RNA_biomass_dilution))
+        self._tRNA_biomass = Constraint("tRNA_biomass")
+        self._tRNA_biomass_dilution = SummaryVariable("tRNA_biomass_dilution")
+        self._tRNA_biomass_dilution.add_metabolites({
+            self._tRNA_biomass: -1,
+            self._biomass: 1,
+        })
+        self._rRNA_biomass = Constraint("rRNA_biomass")
+        self._rRNA_biomass_dilution = SummaryVariable("rRNA_biomass_dilution")
+        self._rRNA_biomass_dilution.add_metabolites({
+            self._rRNA_biomass: -1,
+            self._biomass: 1,
+        })
+
+        self._ncRNA_biomass = Constraint("ncRNA_biomass")
+        self._ncRNA_biomass_dilution = SummaryVariable("ncRNA_biomass_dilution")
+        self._ncRNA_biomass_dilution.add_metabolites({
+            self._ncRNA_biomass: -1,
+            self._biomass: 1,
+        })
+        self.add_reactions((self._protein_biomass_dilution,
+                            self._mRNA_biomass_dilution,
+                            self._tRNA_biomass_dilution,
+                            self._rRNA_biomass_dilution,
+                            self._ncRNA_biomass_dilution))
 
     @property
     def unmodeled_protein(self):
