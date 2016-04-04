@@ -253,10 +253,10 @@ class TranslationData(ProcessData):
     def amino_acid_sequence(self):
         codons = (self.nucleotide_sequence[i: i + 3]
                   for i in range(0, (len(self.nucleotide_sequence)), 3))
-        amino_acid_sequence = ''.join(codon_table[i] for i in codons)
+        amino_acid_sequence = ''.join(codon_table.get(i, "K") for i in codons)
         amino_acid_sequence = amino_acid_sequence.rstrip("*")
         if "*" in amino_acid_sequence:
-            amino_acid_sequence = amino_acid_sequence.replace('*', 'U')
+            amino_acid_sequence = amino_acid_sequence.replace('*', 'K')
         return amino_acid_sequence
 
     @property
