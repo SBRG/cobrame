@@ -70,6 +70,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
     # String formatting for display
     str_places = int(abs(round(log(mu_accuracy)/log(10)))) + 1
     num_format = "%." + str(str_places) + "f"
+    mu_str = "mu".ljust(str_places + 2)
     if debug:
         verbose = True
         save_dir = mkdtemp()
@@ -84,9 +85,9 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
         success_str_base = Green + num_format + "\t+" + Normal
         failure_str_base = Red + num_format + "\t-" + Normal
         if debug:
-            print("mu\t\tstatus\treset\ttime\titer\tobj")
+            print("%s\tstatus\treset\ttime\titer\tobj" % mu_str)
         else:
-            print("mu\t\tstatus")
+            print("%s\tstatus" % mu_str)
 
     def try_mu(mu):
         substitute_mu(lp, mu, compiled_expressions, solver)
