@@ -212,7 +212,8 @@ class MEmodel(Model):
                     list(p._reaction)[0].delete(remove_orphans=True)
                     self.translation_data.remove(p.id.replace('protein_', ''))
 
-        for m in list(self.metabolites.query("RNA")):
+        removed_RNA = set()
+        for m in list(self.metabolites.query("RNA_")):
             delete = True
             for rxn in m._reaction:
                 if m in rxn.reactants and not rxn.id.startswith('DM_'):
@@ -225,16 +226,22 @@ class MEmodel(Model):
                         m.remove_from_model(method='subtractive')
                 except KeyError:
                     pass
+                else:
+                    removed_RNA.add(m.id)
 
         for t in self.reactions.query('transcription_TU'):
             delete = True
             for product in t.products:
                 if isinstance(product, TranscribedGene):
                     delete = False
+            t_process_id = t.id.replace('transcription_', '')
             if delete:
                 t.remove_from_model(remove_orphans=True)
-                t_process_id = t.id.replace('transcription_', '')
                 self.transcription_data.remove(t_process_id)
+            else:
+                # gets rid of the removed RNA from the products
+                self.transcription_data.get_by_id(
+                    t_process_id).RNA_products.difference_update(removed_RNA)
 
     def remove_genes_from_model(self, gene_list):
         for gene in gene_list:
