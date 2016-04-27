@@ -211,7 +211,8 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_modifications,
             charging_reaction = tRNAChargingReaction("charging_tRNA_" + tRNA +
                                                      "_" + codon)
             charging_reaction.tRNAData = tRNA_data
-            tRNA_data.modifications = tRNA_modifications[tRNA]
+            if tRNA_modifications:
+                tRNA_data.modifications = tRNA_modifications[tRNA]
 
             me_model.add_reaction(charging_reaction)
             charging_reaction.update(verbose=verbose)
@@ -364,9 +365,15 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         demand_reaction.add_metabolites({gene: -1})
 
         # mRNA biomass is handled during translation
-        if feature.type != 'mRNA':
+        if feature.type == 'tRNA':
             demand_reaction.add_metabolites({
-                me_model._biomass: -compute_RNA_mass(seq)})
+                me_model._tRNA_biomass: -compute_RNA_mass(seq)})
+        elif feature.type == 'rRNA':
+            demand_reaction.add_metabolites({
+                me_model._rRNA_biomass: -compute_RNA_mass(seq)})
+        elif feature.type == 'ncRNA':
+            demand_reaction.add_metabolites({
+                me_model._ncRNA_biomass: -compute_RNA_mass(seq)})
 
         # ---- Associate TranscribedGene to a TU ----
         parent_TU = TU_frame[
@@ -772,11 +779,15 @@ def add_dummy_reactions(me_model, dna_seq, update=True):
     me_model.add_metabolites(TranslatedGene("protein_" + "dummy"))
     add_translation_reaction(me_model, "dummy", dna_sequence=dna_seq,
                              update=update)
-
-    complex_data = ComplexData("CPLX_dummy", me_model)
+    try:
+        complex_data = ComplexData("CPLX_dummy", me_model)
+    except:
+        print 'CPLX_dummy already in model'
+        complex_data = me_model.complex_data.get_by_id('CPLX_dummy')
     complex_data.stoichiometry = {}
     complex_data.stoichiometry["protein_" + "dummy"] = 1
-    complex_data.create_complex_formation()
+    if update:
+        complex_data.create_complex_formation()
 
 
 def add_complex_stoichiometry_data(me_model, ME_complex_dict):
