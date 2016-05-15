@@ -1,16 +1,32 @@
 from cobra import Metabolite as Component
 from minime.util import dogma
 from six import iteritems
+from minime.util.mass import *
 
-
-class Metabolite(Component):
-    pass
-
-
-class TranscribedGene(Component):
+class MEComponent(Component):
 
     def __init__(self, id):
         Component.__init__(self, id)
+        pass
+
+    def remove_from_MEmodel(self, method='subtractive'):
+        try:
+            self._model.process_data.remove(self.id)
+            self._model.complex_data.remove(self.id)
+        except:
+            pass
+        if method == 'subtractive':
+            self.remove_from_model(method=method)
+
+
+class Metabolite(MEComponent):
+    pass
+
+
+class TranscribedGene(MEComponent):
+
+    def __init__(self, id):
+        MEComponent.__init__(self, id)
         self.left_pos = None
         self.right_pos = None
         self.strand = None
@@ -26,8 +42,12 @@ class TranscribedGene(Component):
                                 for k, v in iteritems(counts)}
         return monophosphate_counts
 
+    @property
+    def mass(self):
+        return compute_RNA_mass(self.nucleotide_sequence)
 
-class TranslatedGene(Component):
+
+class TranslatedGene(MEComponent):
     @property
     def complexes(self):
         """read-only link to the complexes that the gene forms"""
@@ -37,8 +57,14 @@ class TranslatedGene(Component):
                 complex_list.append(reaction.complex)
         return complex_list
 
+    @property
+    def mass(self):
+        locus = self.id.replace('protein_', '')
+        data = self._model.translation_data.get_by_id(locus)
+        return data.mass
 
-class Complex(Component):
+
+class Complex(MEComponent):
     @property
     def metabolic_reactions(self):
         """read-only link to MetabolicReactions"""
@@ -53,11 +79,11 @@ class Ribosome(Complex):
     pass
 
 
-class GenericComponent(Component):
+class GenericComponent(MEComponent):
     pass
 
 
-class GenerictRNA(Component):
+class GenerictRNA(MEComponent):
     pass
 
 
@@ -65,15 +91,15 @@ class RNAP(Complex):
     pass
 
 
-class Constraint(Component):
+class Constraint(MEComponent):
     pass
 
 
-class ModComplex(Component):
+class ModComplex(MEComponent):
     pass
 
 
-def create_component(component_id, default_type=Component):
+def create_component(component_id, default_type=MEComponent, RNAP_set={}):
     """creates a component and attempts to set the correct type"""
     if not isinstance(component_id, str):
         raise TypeError("%s must be a str, not %s" %
@@ -84,7 +110,7 @@ def create_component(component_id, default_type=Component):
         return TranscribedGene(component_id)
     elif component_id.startswith("ribosome"):
         return Ribosome(component_id)
-    elif component_id.startswith("RNA_Polymerase"):
+    elif component_id.startswith("RNA_Polymerase") or component_id in RNAP_set:
         return RNAP(component_id)
     elif component_id.startswith("generic_tRNA"):
         return GenerictRNA(component_id)

@@ -142,8 +142,6 @@ class TranscriptionData(ProcessData):
         # {ModificationData.id : number}
         self.modifications = defaultdict(int)
         self.subreactions = defaultdict(int)
-        # Used if not creating a "MiniME" model
-        self.using_RNAP = True
 
     @property
     def nucleotide_count(self):
@@ -255,6 +253,12 @@ class TranslationData(ProcessData):
                   for i in range(0, (len(self.nucleotide_sequence)), 3))
         amino_acid_sequence = ''.join(codon_table.get(i, "K") for i in codons)
         amino_acid_sequence = amino_acid_sequence.rstrip("*")
+        if not amino_acid_sequence.startswith('M'):
+            start_codons = self._model.global_info["met_start_codons"]
+            if self.first_codon not in start_codons:
+                warn("%s starts with '%s' which is not a start codon" %
+                     (self.mRNA, self.first_codon))
+            amino_acid_sequence = 'M' + ''.join(amino_acid_sequence[1:])
         if "*" in amino_acid_sequence:
             amino_acid_sequence = amino_acid_sequence.replace('*', 'K')
         return amino_acid_sequence
@@ -313,6 +317,7 @@ class tRNAData(ProcessData):
         self.codon = codon
         self.amino_acid = amino_acid
         self.RNA = RNA
+        self.modifications = defaultdict(int)
 
 
 class ProteinTranslocationData(ProcessData):
