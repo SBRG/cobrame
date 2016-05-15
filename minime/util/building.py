@@ -304,7 +304,8 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
     # Create transcription reactions for each TU and DNA sequence.
     # RNA_products will be added so no need to update now
     for TU_id in TU_frame.index:
-        sequence = dogma.extract_sequence(full_seq, TU_frame.start[TU_id],
+        # subtract 1 from TU start site to account for 0 indexing
+        sequence = dogma.extract_sequence(full_seq, TU_frame.start[TU_id]-1,
                                           TU_frame.stop[TU_id],
                                           TU_frame.strand[TU_id])
         rho_dependent = TU_frame.rho_dependent[TU_id]
@@ -353,7 +354,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
 
         # ---- Create dict to use for adding tRNAChargingReactions ----
         # tRNA_aa = {'amino_acid':'tRNA'}
-        elif feature.type == "tRNA":
+        elif RNA_type == "tRNA":
             tRNA_aa[bnum] = feature.qualifiers["product"][0].split("-")[1]
 
         # ---- Add in a demand reaction for each mRNA ---
@@ -365,19 +366,19 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         demand_reaction.add_metabolites({gene: -1})
 
         # mRNA biomass is handled during translation
-        if feature.type == 'tRNA':
+        if RNA_type == 'tRNA':
             demand_reaction.add_metabolites({
                 me_model._tRNA_biomass: -compute_RNA_mass(seq)})
-        elif feature.type == 'rRNA':
+        elif RNA_type == 'rRNA':
             demand_reaction.add_metabolites({
                 me_model._rRNA_biomass: -compute_RNA_mass(seq)})
-        elif feature.type == 'ncRNA':
+        elif RNA_type == 'ncRNA':
             demand_reaction.add_metabolites({
                 me_model._ncRNA_biomass: -compute_RNA_mass(seq)})
 
         # ---- Associate TranscribedGene to a TU ----
         parent_TU = TU_frame[
-            (TU_frame.start <= left_pos + 1) & (TU_frame.stop >= right_pos) & (
+            (TU_frame.start - 1 <= left_pos) & (TU_frame.stop >= right_pos) & (
             TU_frame.strand == strand)].index
 
         if len(parent_TU) == 0:

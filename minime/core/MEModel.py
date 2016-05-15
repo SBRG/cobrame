@@ -82,8 +82,7 @@ class MEmodel(Model):
     def unmodeled_protein_fraction(self, value):
         # proportion = value / (1 - value)
         # see the Biomass_formulations for an explanation
-        amount = value / \
-                 (self.unmodeled_protein.formula_weight / 1000.)
+        amount = value / self.unmodeled_protein.mass
         self._protein_biomass_dilution.add_metabolites(
                 {self.unmodeled_protein: -amount}, combine=False)
         self._unmodeled_protein_fraction = value
@@ -269,3 +268,56 @@ class MEmodel(Model):
                 t.remove_from_model(remove_orphans=True)
                 t_process_id = t.id.replace('transcription_', '')
                 self.transcription_data.remove(t_process_id)
+
+    def get_biomass_composition(self, solution=None):
+        # multiply each RNA/Protein biomass component by biomass coeff because
+        # this is the coefficient of the biomass in the dilution reaction
+        if solution is None:
+            solution = self.solution
+        sol_dict = solution.x_dict
+
+        biomass_comp = defaultdict(float)
+
+        for met, stoich in self._biomass_dilution.metabolites.items():
+            if met.id == 'biomass':
+                biomass_coeff = abs(stoich)
+            elif met.id == 'DNA_biomass':
+                DNA_coeff = abs(stoich)
+
+        for met, stoich in self._protein_biomass_dilution.metabolites.items():
+            if abs(stoich) < 1:
+                mass = self.unmodeled_protein.mass
+                biomass_comp['Unmodeled Protein'] = \
+                    sol_dict['protein_biomass_dilution'] * abs(stoich) * \
+                    mass * biomass_coeff
+
+        biomass_comp['Protein'] = \
+            sol_dict['protein_biomass_dilution'] * biomass_coeff
+        biomass_comp['tRNA'] = \
+            sol_dict['tRNA_biomass_dilution'] * biomass_coeff
+        biomass_comp['mRNA'] = \
+            sol_dict['mRNA_biomass_dilution'] * biomass_coeff
+        biomass_comp['rRNA'] = \
+            sol_dict['rRNA_biomass_dilution'] * biomass_coeff
+        biomass_comp['ncRNA'] = \
+            sol_dict['ncRNA_biomass_dilution'] * biomass_coeff
+        biomass_comp['DNA'] = sol_dict['biomass_dilution'] * DNA_coeff
+
+        for met, stoich in self._biomass_dilution.metabolites.items():
+            if met.id == 'atp_c' or stoich > 0 or type(met) == Constraint or \
+                            met.id == 'h2o_c':
+                continue
+            else:
+                mass = met.formula_weight / 1000.
+                biomass_comp['Other'] += \
+                    abs(stoich) * sol_dict['biomass_dilution'] * mass
+
+        return biomass_comp
+
+    def biomass_summary(self):
+        composition = self.get_biomass_composition()
+        RNA_to_protein = (composition['mRNA'] + composition['tRNA'] +
+                          composition['rRNA'] + composition['ncRNA']) / \
+                         (composition['Protein'] +
+                          composition['Unmodeled Protein'])
+        print 'RNA to Protein Ratio =', RNA_to_protein

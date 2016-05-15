@@ -1,11 +1,13 @@
 from __future__ import division
 
 from warnings import warn
-from collections import defaultdict
+from collections import defaultdict, Counter
+from itertools import product
 
 from six import iteritems
 
 from cobra import Reaction
+from cobra.core.Formula import Formula
 
 from minime.util.mass import *
 from minime.util import mu, dogma
@@ -14,7 +16,6 @@ from minime.core.Components import *
 
 
 class MEReaction(Reaction):
-
     # TODO set _upper and _lower bounds as a property
     """
     MEReaction is a general reaction class from which all ME-Model reactions
@@ -59,10 +60,10 @@ class MEReaction(Reaction):
             if type(modification.enzyme) == list:
                 for enzyme in modification.enzyme:
                     stoichiometry[enzyme] -= \
-                        mu / modification.keff / 3600.
+                        mu / modification.keff / 3600. * scale
             elif type(modification.enzyme) == str:
                 stoichiometry[modification.enzyme] -= \
-                    mu / modification.keff / 3600.
+                    mu / modification.keff / 3600. * scale
 
         return stoichiometry
 
@@ -90,7 +91,6 @@ class MEReaction(Reaction):
         process_info = self._model.process_data.get_by_id(process_data_id)
         for subreaction_id, count in iteritems(process_info.subreactions):
             subreaction_data = all_subreactions.get_by_id(subreaction_id)
-
             if type(subreaction_data.enzyme) == list:
                 for enzyme in subreaction_data.enzyme:
                     stoichiometry[enzyme] -= mu / subreaction_data.keff / 3600.
@@ -148,17 +148,126 @@ class MEReaction(Reaction):
         "charge" is treated as an element in this dict
         This should be empty for balanced reactions.
         """
+        metabolites = self._model.metabolites
+        coefficient_dict = {}
         reaction_element_dict = defaultdict(int)
         for metabolite, coefficient in self._metabolites.items():
             if metabolite.id == 'biomass':
                 continue
             if isinstance(coefficient, Basic):
-                coefficient = coefficient.subs(mu, 0)
+                if isinstance(metabolite, Ribosome):
+                    coefficient = 0
+                elif isinstance(metabolite, RNAP):
+                    coefficient = 0
+                elif isinstance(metabolite, TranscribedGene) and isinstance(self, tRNAChargingReaction):
+                    coefficient = 0
+                else:
+                    coefficient = coefficient.subs(mu, 0)
+            coefficient_dict[metabolite] = coefficient
             if metabolite.charge is not None:
                 reaction_element_dict["charge"] += \
                     coefficient * metabolite.charge
             for element, amount in iteritems(metabolite.elements):
                 reaction_element_dict[element] += coefficient * amount
+
+        # Don't account for remaining nucleotides on TU if they are excised
+        # Only include intergenic bases for solely mRNA coding TUs.
+        # TUs including both mRNA and t(r)RNA are already mass balanced.
+        if isinstance(self, TranscriptionReaction):
+            data_id = self.id.replace('transcription_', '')
+            TU = self._model.transcription_data.get_by_id(data_id)
+            if len(TU.excised_bases) == 0:
+                TU_seq = TU.nucleotide_sequence
+                TU_seq_red = TU_seq
+                left_pos_list = []
+                right_pos_list = []
+                for RNA in TU.RNA_products:
+                    met = metabolites.get_by_id(RNA)
+                    strand = met.strand
+                    dna_seq = met.nucleotide_sequence
+                    function_3 = lambda x, y: dna_seq[x+1:-y] \
+                        if strand == '+' else dna_seq[y:-(x+1)]
+                    function_1 = lambda x: dna_seq[x:] \
+                        if strand == '+' else dna_seq[:-(x+1)]
+                    function_2 = lambda x: dna_seq[:-x] \
+                        if strand == '+' else dna_seq[x+1:]
+                    if dna_seq in TU_seq and dna_seq not in TU_seq_red:
+                        for left, right in zip(left_pos_list, right_pos_list):
+                            if met.left_pos < right < met.right_pos:
+                                change = right - met.left_pos
+                                new_seq = function_1(change)
+                                TU_seq_red = TU_seq_red.replace(new_seq, '')
+                            elif met.left_pos < left < met.right_pos:
+                                change = met.right_pos - left
+                                new_seq = function_2(change)
+                                TU_seq_red = TU_seq_red.replace(new_seq, '')
+                        for left, right in product(left_pos_list, right_pos_list):
+                            if met.left_pos < right and met.right_pos > left:
+                                left_change = right - met.left_pos
+                                right_change = met.right_pos - left
+                                new_seq = function_3(left_change, right_change)
+                                TU_seq_red = TU_seq_red.replace(new_seq, '')
+                    else:
+                        TU_seq_red = TU_seq_red.replace(dna_seq, '')
+                    left_pos_list.append(met.left_pos)
+                    right_pos_list.append(met.right_pos)
+                for nucleotide, value in iteritems(Counter(TU_seq_red)):
+                    nucleotide = nucleotide.replace('T', 'U')
+                    met = metabolites.get_by_id(nucleotide.lower() + 'mp_c')
+                    for element, amount in iteritems(met.elements):
+                        reaction_element_dict[element] += value * amount
+
+        if isinstance(self, MetabolicReaction) or isinstance(self, tRNAChargingReaction):
+            mod_formula_dict = self._model.global_info['modification_formulas']
+            for met in self.metabolites:
+                coefficient = coefficient_dict[met]
+                if not isinstance(met, Complex) or coefficient == 0:
+                    continue
+
+                mods = met.id.split('_mod_')
+                if len(mods) == 1:
+                    continue
+
+                start_mod = 1
+
+                # elements from complexes with formulas are handled above
+                if not met.formula:
+                    met_list = met.id.split('_mod_')
+                    cplx_1 = met_list[0] + '_mod_' + met_list[1]
+
+                    try:
+                        complex_met = metabolites.get_by_id(cplx_1)
+                        formula = complex_met.formula
+                        start_mod = 2
+                    except:
+                        formula = None
+
+                    if not formula:
+                        start_mod = 1
+                        complex_met = metabolites.get_by_id(met_list[0])
+
+                    for element, amount in iteritems(complex_met.elements):
+                        reaction_element_dict[element] += coefficient * amount
+
+                    for mod in mods[start_mod:]:
+                        if mod == 'Oxidized':
+                            pass
+                            #reaction_element_dict['H'] += 2. * coefficient
+                        if len(mod.split(':')) == 1:
+                            value = 1
+                            mod_met = mod
+                        else:
+                            value, mod_met = mod.split(':')
+                        try:
+                            formula = mod_formula_dict[mod_met]['formula']
+                            formula_obj = Formula(str(formula))
+                            elements = formula_obj.elements
+                        except KeyError:
+                            elements = metabolites.get_by_id(mod_met + '_c').elements
+                        for element, amount in iteritems(elements):
+                            reaction_element_dict[element] += coefficient * amount * float(value)
+
+
         # filter out 0 values
         return {k: v for k, v in iteritems(reaction_element_dict) if v != 0}
 
@@ -301,7 +410,7 @@ class TranscriptionReaction(MEReaction):
         stoichiometry = defaultdict(int)
         TU_length = len(self.transcription_data.nucleotide_sequence)
         RNA_polymerase = self.transcription_data.RNA_polymerase
-        metabolites = self.model.metabolites
+        metabolites = self._model.metabolites
         # Set Parameters
         kt = self._model.global_info['kt']
         r0 = self._model.global_info['r0']
@@ -323,9 +432,13 @@ class TranscriptionReaction(MEReaction):
         # so that self.excised_bases can be used for "dummy_RNA"
         # TODO Can we fix this?
         for transcript_id in self.transcription_data.RNA_products:
-            if transcript_id not in self._model.metabolites:
+            if transcript_id not in metabolites:
+                warn("Transcript (%s) added to model " % transcript_id)
                 transcript = TranscribedGene(transcript_id)
                 self._model.add_metabolites([transcript])
+                demand_reaction = Reaction("DM_" + transcript_id)
+                self._model.add_reaction(demand_reaction)
+                demand_reaction.add_metabolites({transcript_id: -1})
             else:
                 transcript = self._model.metabolites.get_by_id(transcript_id)
             stoichiometry[transcript.id] += 1
@@ -349,9 +462,9 @@ class TranscriptionReaction(MEReaction):
         for base, count in iteritems(self.transcription_data.excised_bases):
             stoichiometry[base] += count
 
-        stoichiometry["ppi_c"] += TU_length - 1
-        stoichiometry["h2o_c"] -= TU_length - 1
-        stoichiometry["h_c"] += TU_length - 1
+        stoichiometry["ppi_c"] += TU_length
+        stoichiometry["h2o_c"] -= TU_length
+        stoichiometry["h_c"] += TU_length
         # 5' had a triphosphate, but this is removed when excising
         # Is this universally true?
         if sum(self.transcription_data.excised_bases.values()) > 0:
@@ -372,11 +485,11 @@ class TranscriptionReaction(MEReaction):
             if v < 0 or not hasattr(met, "RNA_type"):
                 continue
             if met.RNA_type == 'tRNA':
-                tRNA_mass += met.formula_weight / 1000.  # kDa
+                tRNA_mass += met.mass  # kDa
             if met.RNA_type == 'rRNA':
-                rRNA_mass += met.formula_weight / 1000.  # kDa
+                rRNA_mass += met.mass  # kDa
             if met.RNA_type == 'ncRNA':
-                ncRNA_mass += met.formula_weight / 1000.  # kDa
+                ncRNA_mass += met.mass  # kDa
         if tRNA_mass > 0:
             self.add_metabolites({self._model._tRNA_biomass: tRNA_mass},
                                  combine=False, add_to_container_model=False)
@@ -494,8 +607,7 @@ class TranslationReaction(MEReaction):
         elements["C"] += 1
         elements["O"] += 1
 
-        protein.formula = "".join(stringify(e, n)
-                                  for e, n in sorted(iteritems(elements)))
+        # TODO account of selenocysteine in formula
 
         # add in the tRNA's for each of the amino acids
         # We add in a "generic tRNA" for each amino acid. The production
@@ -523,6 +635,9 @@ class TranslationReaction(MEReaction):
                 self.translation_data.subreactions[subreaction_id] = count
             except KeyError:
                 warn('subreaction %s not in model' % subreaction_id)
+
+        protein.formula = "".join(stringify(e, n)
+                                  for e, n in sorted(iteritems(elements)))
 
         self.translation_data.subreactions['fmet_addition_at_START'] = 1
 
@@ -570,11 +685,11 @@ class TranslationReaction(MEReaction):
                              combine=False, add_to_container_model=False)
 
         # add to biomass
-        protein_mass = protein.formula_weight / 1000.  # kDa
+        protein_mass = protein.mass  # kDa
         self.add_metabolites({self._model._protein_biomass: protein_mass},
                              combine=False, add_to_container_model=False)
         # RNA biomass
-        mRNA_mass = transcript.formula_weight / 1000.  # kDa
+        mRNA_mass = transcript.mass  # kDa
         self.add_metabolites(
             {self._model._mRNA_biomass:
                  mRNA_mass * (1 - deg_fraction) * RNA_amount},
@@ -597,7 +712,7 @@ class tRNAChargingReaction(MEReaction):
         kt = self._model.global_info['kt']  # hr-1
         r0 = self._model.global_info['r0']
         c_tRNA = m_tRNA / m_aa / f_tRNA
-        tRNA_keff = c_tRNA * kt * mu / (mu + r0 * kt) / 3600.  # in per second
+        tRNA_keff = c_tRNA * kt * mu / (mu + r0 * kt)  # per hr
 
         # If the generic tRNA does not exist, create it now. The meaning of
         # a generic tRNA is described in the TranslationReaction comments
@@ -606,7 +721,7 @@ class tRNAChargingReaction(MEReaction):
         stoic[generic_tRNA] = 1
 
         # compute what needs to go into production of a generic tRNA
-        tRNA_amount = mu / tRNA_keff / 3600.
+        tRNA_amount = mu / tRNA_keff
         synthetase_amount = mu / data.synthetase_keff / \
                             3600. * (1 + tRNA_amount)
         stoic[data.RNA] = -tRNA_amount
