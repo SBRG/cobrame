@@ -75,11 +75,6 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
         verbose = True
         save_dir = mkdtemp()
         print("LP files will be saved in " + save_dir)
-        try:
-            status_mapping = {i.real: i.name for i in soplex.STATUS}
-        except AttributeError:
-            print("soplex status mapping not made")
-            status_mapping = {}
         filename_base = join(save_dir, "me_mu_" + num_format + ".lp")
     if verbose:
         success_str_base = Green + num_format + "\t+" + Normal
@@ -112,9 +107,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
             infeasible_mu.append(mu)
             if verbose:
                 if status != "infeasible" and debug:
-                    soplex_status = status_mapping.get(lp.soplex_status(),
-                                                       "unknown")
-                    debug_str += "(status: %s)" % soplex_status
+                    debug_str += "(status: %s)" % status
                 print(failure_str_base % mu + debug_str)
             return False
 
