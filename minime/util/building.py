@@ -12,8 +12,7 @@ import itertools
 
 
 def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
-                               rho_dependent=False,
-                               rna_polymerase='RNAP70-CPLX', update=True):
+                               update=True):
     """
     Create TranscriptionReaction object and add it to ME-Model.
     This includes the necessary transcription data.
@@ -46,9 +45,6 @@ def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
     transcription.transcription_data.nucleotide_sequence = sequence
     transcription.transcription_data.RNA_products = {"RNA_" + i
                                                      for i in locus_ids}
-    transcription.transcription_data.rho_dependent = rho_dependent
-
-    transcription.transcription_data.RNA_polymerase = rna_polymerase
 
     me_model.add_reaction(transcription)
     if update:
@@ -103,16 +99,15 @@ def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
     return gene
 
 
-def add_translation_reaction(me_model, locus_id, amino_acid_sequence=None,
-                             dna_sequence=None, update=False,
-                             terminator_dict={}, methionine_cleaved=[],
-                             folding_dict={}):
+def add_translation_reaction(me_model, locus_id, dna_sequence=None,
+                             update=False, terminator_dict={},
+                             methionine_cleaved=None, folding_dict={}):
     """
     Creates and adds a TranslationReaction to the ME-model as well as the
     associated TranslationData
 
-    Either a dna_sequence or amino_acid_sequence is required in order to add a
-    TranslationReaction to the ME-model
+    A dna_sequence  is required in order to add a TranslationReaction to the
+    ME-model
 
     Args:
         me_model: cobra.model.MEModel
@@ -145,16 +140,17 @@ def add_translation_reaction(me_model, locus_id, amino_acid_sequence=None,
     translation_data.term_enzyme = terminator_dict.get(
             translation_data.last_codon)
 
-    if locus_id in methionine_cleaved:
+    if methionine_cleaved and locus_id in methionine_cleaved:
         translation_data.subreactions['N_terminal_methionine_cleavage'] = 1
 
     for folding_type in folding_dict:
         if locus_id in folding_dict[folding_type]:
             translation_data.subreactions[folding_type] = 1
 
-    translation_data.subreactions['peptide_deformylase_processing'] = 1
-    translation_data.subreactions['peptide_chain_release'] = 1
-    translation_data.subreactions['ribosome_recycler'] = 1
+    # add organism specific subreactions associated with peptide processing
+    global_info = me_model.global_info
+    for subrxn, val in global_info['peptide_processing_subreactions'].items():
+        translation_data.subreactions[subrxn] = val
 
     # Create and add TranslationReaction with TranslationData
     translation_reaction = TranslationReaction("translation_" + locus_id)
@@ -221,14 +217,16 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_modifications,
 def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
                                  element_types={'CDS', 'rRNA', 'tRNA', 'ncRNA'},
                                  tRNA_modifications=None, verbose=True,
-                                 translation_terminators={}, sigma_to_RNAP_dict={},
+                                 translation_terminators={},
                                  methionine_cleaved=[], folding_dict={},
                                  frameshift_dict={}, tRNA_to_codon={}, update=True):
 
     # TODO handle special RNAse without type ('b3123')
     # TODO: move tRNA mods and folding its own function
     """Creates and adds transcription and translation reactions using genomic
-     information from the organism's genbank file
+     information from the organism's genbank file. Adds in the basic
+     requirements for these reactions. Organism specific components are added
+     ...
 
     Args:
         me_model: cobra.model.MEModel
@@ -294,9 +292,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             {"TU_" + i.qualifiers["locus_tag"][0]:
                 {"start": int(i.location.start),
                  "stop": int(i.location.end),
-                 "strand": "+" if i.strand == 1 else "-",
-                 "sigma": "RpoD_mono",
-                 "rho_dependent": False}
+                 "strand": "+" if i.strand == 1 else "-"}
              for i in gb_file.features if
              i.type in element_types},
             orient="index")
@@ -308,12 +304,9 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         sequence = dogma.extract_sequence(full_seq, TU_frame.start[TU_id]-1,
                                           TU_frame.stop[TU_id],
                                           TU_frame.strand[TU_id])
-        rho_dependent = TU_frame.rho_dependent[TU_id]
-        sigma = TU_frame.sigma[TU_id]
-        rna_polymerase = sigma_to_RNAP_dict[sigma]
+
         add_transcription_reaction(me_model, TU_id, set(), sequence,
-                                   rho_dependent=rho_dependent,
-                                   rna_polymerase=rna_polymerase, update=False)
+                                   update=False)
 
     # Associate each feature (RNA_product) with a TU and add translation
     # reactions and demands
@@ -335,7 +328,6 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         frameshift_string = frameshift_dict.get(bnum)
         if len(seq) % 3 != 0 and frameshift_string:
             print 'Applying frameshift on %s' % bnum
-            # Subtract 1 from start position to account for 0 indexing
             seq = dogma.return_frameshift_sequence(full_seq, frameshift_string)
             if strand == '-':
                 seq = dogma.reverse_transcribe(seq)
@@ -346,8 +338,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
 
         # ---- Add translation reaction for mRNA ----
         if RNA_type == "mRNA":
-            amino_acid_sequence = dogma.get_amino_acid_sequence_from_DNA(seq)
-            add_translation_reaction(me_model, bnum, amino_acid_sequence, seq,
+            add_translation_reaction(me_model, bnum, dna_sequence=seq,
                                      terminator_dict=translation_terminators,
                                      methionine_cleaved=methionine_cleaved,
                                      folding_dict=folding_dict)
@@ -393,20 +384,6 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             me_model.transcription_data.get_by_id(TU_id).RNA_products.add(
                     "RNA_" + bnum)
 
-    # add transcription machinery based on contained RNA types
-    for transcription_data in me_model.transcription_data:
-        if transcription_data.rho_dependent:
-            rho = 'dependent'
-        else:
-            rho = 'independent'
-        if transcription_data.codes_stable_rna:
-            stable = 'stable'
-        else:
-            stable = 'normal'
-
-        transcription_data.subreactions['Transcription_%s_rho_%s' % (stable,
-                                                                     rho)] = 1
-
     convert_aa_codes_and_add_charging(me_model, tRNA_aa,
                                       tRNA_modifications, tRNA_to_codon,
                                       verbose=verbose)
@@ -418,6 +395,24 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
 
 
 def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
+    """
+    Add metabolite and reaction attributes to me_model from m_model. Also
+    creates StoichiometricData objects for each reaction in m_model, and adds
+    reactions directly to me_model if they are exchanges or demands.
+
+    Args:
+        me_model: cobra.model.MEModel
+            The MEModel object to which the content will be added
+
+        m_model: cobra.model
+            The m_model which will act as the source of metabolic content for
+            MEModel
+
+        complex_metabolite_ids: list
+            List of complexes which are 'metabolites' in the m-model reaction
+            matrix, but should be treated as complexes
+
+    """
     for met in m_model.metabolites:
         if met.id in complex_metabolite_ids:
             new_met = Complex(met.id)
@@ -468,185 +463,6 @@ def add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme=None):
     return mod
 
 
-def find_genes_within_TU(me_model, TU, RNA_pos_dict):
-    loci = []
-    for string_pos in RNA_pos_dict:
-        pos = string_pos.split(',')
-        if int(pos[0]) + 1 >= int(TU.start) and int(pos[1]) <= int(TU.stop):
-            gene = RNA_pos_dict[string_pos]
-            try:
-                me_model.metabolites.get_by_id(gene).strand
-            except AttributeError:
-                print gene
-            if me_model.metabolites.get_by_id(gene).strand == TU.strand:
-                loci.append(RNA_pos_dict[string_pos].replace('RNA_', ''))
-
-    return set(loci)
-
-
-def should_TU_be_excised(me_model, loci):
-    excise = False
-    for locus in loci:
-        try:
-            gene = me_model.metabolites.get_by_id('RNA_'+locus)
-            RNA_type = gene.RNA_type
-            if RNA_type == 'tRNA' or RNA_type == 'rRNA' or locus == 'b3123':
-                excise = True
-        except:
-            pass
-    return excise
-
-
-def find_existing_genome_region(me_model, left_pos, right_pos, TU_strand,
-                                RNA_pos_dict, has_5prime_triphosphate):
-    try:
-        TU_name = RNA_pos_dict[str(left_pos)+','+str(right_pos)]
-    except:
-        TU_name = 'excised_TU_%s_%i_%i_%s' % \
-            (TU_strand.replace('-', 'M').replace('+', 'P'), left_pos,
-             right_pos, has_5prime_triphosphate)
-        try:
-            me_model.metabolites.get_by_id(TU_name)
-        except:
-            # print 'Creating new transcribed gene: ', TU_name
-            new_TU = TranscribedGene(TU_name)
-            new_TU.left_pos = left_pos
-            new_TU.right_pos = right_pos
-            new_TU.strand = TU_strand
-            me_model.add_metabolites([new_TU])
-            r = cobra.Reaction('DM_' + TU_name)
-            me_model.add_reaction(r)
-            r.reaction = TU_name + ' --> '
-
-    return TU_name
-
-
-def find_and_update_gene_at_left_pos(me_model, bnum_set, TU, gene_left_pos,
-                                     excised_TU_portions,
-                                     excised_TU_portion_count):
-    # Check to see which rRNA, tRNA this segment represents
-    for bnum in bnum_set:
-        gene = me_model.metabolites.get_by_id('RNA_'+bnum)
-        if gene.left_pos == gene_left_pos:
-            gene_right_pos = gene.right_pos
-            excised_portion_name = gene.id
-            excised_gene = me_model.metabolites.get_by_id(gene.id)
-
-    # tRNA, rRNA loses 5' triphosphate if cleaved
-    if gene_left_pos != TU.start and TU.strand == '+':
-        excised_gene.has_5prime_triphosphate = 'False'
-    if gene_right_pos != TU.stop and TU.strand == '-':
-        excised_gene.has_5prime_triphosphate = 'False'
-
-    excised_TU_portions.append(excised_portion_name)
-    excised_TU_portion_count += 1
-    return gene_right_pos
-
-
-def process_ends_of_TU_segment(me_model, TU, RNA_pos,
-                               excised_TU_portions, RNA_pos_dict,
-                               excised_TU_portion_count, right_flag):
-
-    # (+) strain has not been sliced on the left side yet, preserving
-    # triphosphate group
-    if right_flag:
-        right_pos = TU.stop
-        left_pos = RNA_pos
-        has_5prime_triphosphate = 'True' if TU.strand == '-' else 'False'
-    else:
-        right_pos = RNA_pos
-        left_pos = TU.start
-        has_5prime_triphosphate = 'False' if TU.strand == '-' else 'True'
-
-    # Add TranscribedGene for this segment if not already in model
-    TU_id = find_existing_genome_region(me_model, left_pos, right_pos,
-                                        TU.strand, RNA_pos_dict,
-                                        has_5prime_triphosphate)
-
-    excised_TU_portions.append(TU_id)
-    excised_TU_portion_count += 1
-
-
-def find_and_add_TU_pieces(me_model, TU, left_combo_list, RNA_pos_dict,
-                           bnum_set, TU_pieces):
-
-    excised_TU_portions = []
-    excised_TU_portion_count = 1
-
-    # Look at RNA portion between TU left_pos
-    # and first tRNA or rRNA
-    if left_combo_list[0] > TU.start:
-        RNA_left = left_combo_list[0]-1
-        process_ends_of_TU_segment(me_model, TU, RNA_left, excised_TU_portions,
-                                   RNA_pos_dict, excised_TU_portion_count,
-                                   False)
-
-    # iterate rest of possible segments
-    while len(left_combo_list) > 0:
-        gene_left_pos = left_combo_list[0]
-        gene_right_pos = \
-            find_and_update_gene_at_left_pos(me_model, bnum_set, TU,
-                                             gene_left_pos,
-                                             excised_TU_portions,
-                                             excised_TU_portion_count)
-
-        left_combo_list.pop(left_combo_list.index(gene_left_pos))
-
-        # Deal with the last (far right) segment
-        if len(left_combo_list) == 0:
-            if TU.stop > gene_right_pos:
-                process_ends_of_TU_segment(me_model, TU, gene_right_pos,
-                                           excised_TU_portions, RNA_pos_dict,
-                                           excised_TU_portion_count, True)
-
-        # Add in excised TU for next segment, if not tRNA, rRNA
-        else:
-            next_left = left_combo_list[0]
-            TU_id = find_existing_genome_region(me_model, gene_right_pos+1,
-                                                next_left-1, TU.strand,
-                                                RNA_pos_dict, 'False')
-            excised_TU_portion_count += 1
-            excised_TU_portions.append(TU_id)
-
-    if len(excised_TU_portions) > 0:
-        TU_pieces[TU.TU_id].append(excised_TU_portions)
-
-    return TU_pieces
-
-
-def find_all_TU_combos(me_model, TU, bnum_set, TU_seq, TU_pieces,
-                       RNA_pos_dict):
-
-    # Create list of all left strand positions of
-    # tRNA, rRNA, sRNA that will be excised
-    all_lefts = []
-    for bnum in bnum_set:
-        all_lefts.append(me_model.metabolites.get_by_id('RNA_'+bnum).left_pos)
-
-    # Create list [0:number_of_possible_excised_portions]
-    number_lefts_in_combo = range(len(all_lefts))
-    number_lefts_in_combo.append(len(all_lefts))
-
-    # Iterate through all possible combinations of gene left
-    # positions that equal the number, i
-    for i in number_lefts_in_combo:
-        for left_combo in itertools.combinations(all_lefts, i):
-            left_combo_list = list(left_combo)
-            left_combo_list.sort()  # ascending by default
-
-            if TU.TU_id not in TU_pieces:
-                TU_pieces[TU.TU_id] = []
-
-            if len(left_combo_list) == 0:
-                TU_pieces[TU.TU_id].append([])
-                continue
-
-            TU_pieces = find_and_add_TU_pieces(me_model, TU, left_combo_list,
-                                               RNA_pos_dict, bnum_set,
-                                               TU_pieces)
-    return TU_pieces
-
-
 def add_excision_machinery(me_model):
 
     excision_types = ['rRNA_containing', 'monocistronic',
@@ -668,106 +484,6 @@ def add_excision_machinery(me_model):
         rRNA_mod.enzyme = excision + '_excision_set'
 
 
-def count_and_add_excisions(me_model, pieces, transcription_data):
-
-    tRNA_count = 0
-    rRNA_count = 0
-    sRNA_count = 0  # not supported
-
-    RNA_products = set()
-
-    for piece in pieces:
-        RNA_object = me_model.metabolites.get_by_id(piece)
-        if RNA_object.RNA_type == 'tRNA':
-            tRNA_count += 1
-        elif RNA_object.RNA_type == 'rRNA':
-            rRNA_count += 1
-        else:
-            sRNA_count += 1
-        RNA_products.add(piece)
-
-    if rRNA_count > 0:
-        transcription_data.modifications[
-            'rRNA_containing_excision'] = len(pieces)-1
-    elif tRNA_count == 1 and rRNA_count == 0:
-        transcription_data.modifications[
-            'monocistronic_excision'] = len(pieces)-1
-    elif tRNA_count > 1 and rRNA_count == 0:
-        transcription_data.modifications[
-            'polycistronic_wout_rRNA_excision'] = len(pieces)-1
-    else:  # only applies to rnpB
-        transcription_data.modifications[
-            'monocistronic_excision'] = len(pieces)-1
-    return RNA_products
-
-
-def splice_TUs(me_model, TU_pieces, generic_flag=False):
-
-    # add_generic_RNase(me_model, generic_flag=generic_flag)
-    add_excision_machinery(me_model)
-
-    for TU, combos_of_pieces in TU_pieces.iteritems():
-        for i, pieces in enumerate(combos_of_pieces):
-
-            if len(pieces) < 1:  # no fragments to splice
-                continue
-
-            transcription = TranscriptionReaction(
-                'transcription_' + TU + '_slice_' + str(i))
-            transcription_data = TranscriptionData(
-                TU + '_slice_' + str(i), me_model)
-            full_TU_data = me_model.transcription_data.get_by_id(TU)
-            transcription_data.nucleotide_sequence = \
-                full_TU_data.nucleotide_sequence
-
-            RNA_products = \
-                count_and_add_excisions(me_model, pieces,
-                                        transcription_data)
-
-            transcription_data.RNA_products = RNA_products
-            transcription.transcription_data = transcription_data
-
-            me_model.add_reaction(transcription)
-            transcription.update()
-
-
-def add_TUs_and_translation(me_model, filename, TU_frame=None,
-                            generic_flag=False):
-    warn("deprecated - use build_reactions_from_genbank")
-
-    gb_file = SeqIO.read(filename, 'gb')
-    full_seq = str(gb_file.seq)
-    RNA_pos_dict = build_reactions_from_genbank(me_model, gb_file,
-                                                TU_frame=TU_frame)
-
-    TU_pieces = {}
-    all_rna_types = set()
-    for index, TU in TU_frame.iterrows():
-        seq = full_seq[TU.start:TU.stop]
-        if TU.strand == '-':
-            seq = util.dogma.reverse_transcribe(seq)
-
-        loci = find_genes_within_TU(me_model, TU, RNA_pos_dict)
-
-        excise = should_TU_be_excised(me_model, loci)
-
-        RNA_types = {me_model.metabolites.get_by_id("RNA_" + i).RNA_type for i in loci}
-        all_rna_types.add(tuple(sorted(RNA_types)))
-
-        if not excise:
-            add_transcription_reaction(me_model, TU.TU_id, loci, seq)
-
-        else:
-            TU_data = TranscriptionData(TU.TU_id, me_model)
-            TU_data.nucleotide_sequence = seq
-            TU_data.RNA_products = loci
-            # Must splice TU to form tRNA, rRNA, sRNA (not supported)
-            TU_pieces = find_all_TU_combos(me_model, TU, loci, seq, TU_pieces,
-                                           RNA_pos_dict)
-    print all_rna_types
-    splice_TUs(me_model, TU_pieces, generic_flag=generic_flag)
-
-
 def add_dummy_reactions(me_model, dna_seq, update=True):
     dummy = StoichiometricData("dummy_reaction", me_model)
     dummy.lower_bound = 0
@@ -782,16 +498,16 @@ def add_dummy_reactions(me_model, dna_seq, update=True):
                              update=update)
     try:
         complex_data = ComplexData("CPLX_dummy", me_model)
-    except:
+    except ValueError:
         print 'CPLX_dummy already in model'
         complex_data = me_model.complex_data.get_by_id('CPLX_dummy')
-    complex_data.stoichiometry = {}
-    complex_data.stoichiometry["protein_" + "dummy"] = 1
+    complex_data.stoichiometry = {"protein_dummy": 1}
     if update:
         complex_data.create_complex_formation()
 
 
 def add_complex_stoichiometry_data(me_model, ME_complex_dict):
+    warn('deprecated')
     for cplx, stoichiometry in ME_complex_dict.iteritems():
         complex_data = ComplexData(cplx, me_model)
 
@@ -801,6 +517,7 @@ def add_complex_stoichiometry_data(me_model, ME_complex_dict):
 
 
 def add_modication_data(me_model, mod_id, mod_dict, enzyme=None, keff=65):
+    warn('deprecated')
     try:
         mod = me_model.modification_data.get_by_id(mod_id)
     except:
@@ -813,6 +530,7 @@ def add_modication_data(me_model, mod_id, mod_dict, enzyme=None, keff=65):
 
 
 def add_complex_modification_data(me_model, modification_dict):
+    warn('deprecated')
     for mod_complex_id, mod_complex_info in iteritems(modification_dict):
 
         unmod_complex_id, mods = mod_complex_info
@@ -829,76 +547,214 @@ def add_complex_modification_data(me_model, modification_dict):
             add_modication_data(me_model, mod_id, {mod_comp: -1})
 
 
-def add_complex(me_model, ME_complex_dict,  modification_dict):
+def add_complex_to_model(me_model, complex_id, complex_stoichiometry,
+                         complex_modifications={}):
+    """
+    Adds ComplexData to the model for a given complex.
 
-    add_complex_stoichiometry_data(me_model, ME_complex_dict)
+    Args:
+        me_model: minime.MEModel
 
-    add_complex_modification_data(me_model, modification_dict)
+        complex_id: string
+            ID of the complex and thus the model ComplexData
+
+        complex_stoichiometry: dict
+            {complex_id: {protein_<locus_tag>: stoichiometry}}
+
+        complex_modifications: dict
+            {modification_id: stoichiometry}
+
+    """
+
+    complex_data = ComplexData(complex_id, me_model)
+    # must add update stoichiometry one by one since it is a defaultdict
+    for metabolite, value in complex_stoichiometry.items():
+        complex_data.stoichiometry[metabolite] += value
+    for modification, value in complex_modifications.items():
+        complex_data.modifications[modification] = value
 
 
-def find_associated_complexes(rxnToModCplxDict, reaction_data,
-                              rxn_info):
+def add_model_complexes(me_model, complex_stoichiometry_dict,
+                        complex_modification_dict):
+    """
+    Construct ComplexData for complexes into MEModel from its subunit
+    stoichiometry, and a dictionary of its modification metabolites. If a
+    the given modification_data for a metabolite is not in the model,
+    it will be added automatically.
+
+
+    Intended to be used as a function for large-scale complex addition.
+
+    For adding individual ComplexData objects, use add_complex_to_model
+
+    Args:
+        me_model: minime.MEModel
+
+        complex_stoichiometry_dict: dict
+            {unmodified_complex_id: {protein_<locus_tag>: stoichiometry}}
+
+        complex_modification_dict: dict
+            {modified_complex_id:{core_enzyme: unmodified_complex_id,
+                                 'modifications: {mod_metabolite:
+                                                  stoichiometry}}}
+
+    """
+    for complex_id, stoichiometry in complex_stoichiometry_dict.items():
+        add_complex_to_model(me_model, complex_id, stoichiometry, {})
+
+    for modified_complex_id, info in complex_modification_dict.items():
+        modification_dict = {}
+        for metabolite, number in info['modifications'].items():
+            modification_id = 'mod_' + metabolite
+            if modification_id not in me_model.modification_data:
+                mod = ModificationData(modification_id, me_model)
+                # Assumed every complex modification occurs spontaneously
+                # and adds one equivalent of the modification metabolite
+                # TODO Add modifications separately before adding complexes
+                mod.stoichiometry = {metabolite: -1.}
+            modification_dict[modification_id] = -number
+
+        core_enzyme = complex_modification_dict[modified_complex_id]['core_enzyme']
+        stoichiometry = complex_stoichiometry_dict[core_enzyme]
+
+        add_complex_to_model(me_model, modified_complex_id, stoichiometry,
+                             complex_modifications=modification_dict)
+
+
+def add_metabolic_reaction_to_model(me_model, stoichiometric_data_id,
+                                    directionality, complex_id=None,
+                                    spontaneous=False, update=False,
+                                    keff=65):
+    """
+    Creates and add a MetabolicReaction to a MEModel.
+
+
+    Args:
+        me_model:
+            MEModel that the MetabolicReaction will be added to
+
+        stoichiometric_data_id: string
+            ID of the StoichiometricData for the reaction being added
+
+        directionality: string
+            Forward: Add reaction that occurs in the forward direction
+            Reverse: Add reaction that occurs in the reverse direction
+
+        complex_id: string or None
+            ID of the ComplexData for the enzyme that catalyze the reaction
+            being added.
+
+        spontaneous: boolean
+            If True and complex_id='' add reaction as spontaneous reaction
+            If False and complex_id='' add reaction as orphan (CPLX_dummy
+            catalyzed)
+
+    """
+    # Get stoichiometric data for reaction being added
     try:
-        complexes_list = rxnToModCplxDict[reaction_data.id]
+        stoichiometric_data = me_model.stoichiometric_data.get_by_id(stoichiometric_data_id)
     except KeyError:
-        # These are orphans catalyzed by a dummy
-        if reaction_data.id == "dummy_reaction" or \
-                not rxn_info.is_spontaneous[reaction_data.id]:
-            complexes_list = ["CPLX_dummy"]
-        # These are truly spontaneous
-        else:
-            complexes_list = [None]
-    return complexes_list
+        raise Exception("Stoichiometric data for %s has not been added to"
+                        "model" % stoichiometric_data_id)
 
-
-def add_and_update_metabolic_reaction(me_model, reaction_data, complex_id,
-                                      reverse_flag, keff=65,
-                                      update=False, create_new=True):
-    if complex_id:
+    # Get complex data and id based on arguments passed into function
+    if type(complex_id) == str:
         complex_data = me_model.complex_data.get_by_id(complex_id)
-    else:
+    elif complex_id is None and spontaneous is True:
+        complex_id = "SPONT"
         complex_data = None
-    if not hasattr(reaction_data, "id"):
-        reaction_data = me_model.stoichiometric_data.get_by_id(reaction_data)
+    elif complex_id is None and spontaneous is False:
+        complex_id = "CPLX_dummy"
+        try:
+            complex_data = me_model.complex_data.get_by_id(complex_id)
+        except KeyError:
+            raise Exception("CPLX_dummy must be added to complex data to add"
+                            "orphan reactions")
+    else:
+        raise ValueError("Complex id (%s) must be a string or None" %
+                         str(complex_id))
 
-    direction = "_REV_" if reverse_flag is True else "_FWD_"
+    if directionality.lower() == 'forward':
+        direction = "_FWD_"
+        reverse_flag = False
+    elif directionality.lower() == 'reverse':
+        direction = "_REV_"
+        reverse_flag = True
+    else:
+        raise NameError("Reaction direction must be 'forward' or 'reverse'")
 
-    r = MetabolicReaction(reaction_data.id + direction + str(complex_id))
+    r = MetabolicReaction(stoichiometric_data_id + direction + complex_id)
     me_model.add_reaction(r)
     r.keff = keff
-    r.stoichiometric_data = reaction_data
+    r.stoichiometric_data = stoichiometric_data
     r.reverse = reverse_flag
     if complex_data is not None:
         r.complex_data = complex_data
     if update:
-        r.update(create_new=create_new)
+        r.update(verbose=True)
 
 
-def add_complexes_and_rxn_data(me_model, reaction_data, complexes_list,
-                               keff=65, update=False,
-                               create_new=False):
-    for complex_id in complexes_list:
+def add_reactions_from_stoichiometric_data(me_model, rxn_to_cplx_dict,
+                                           rxn_info_frame, update=False,
+                                           keff=65):
+    """
+    Creates and adds MetabolicReaction for all StoichiometricData in model.
 
-        if reaction_data.lower_bound < 0:
-            reverse_flag = True
-            add_and_update_metabolic_reaction(me_model, reaction_data,
-                                              complex_id, reverse_flag,
-                                              keff=keff, update=update,
-                                              create_new=create_new)
-        if reaction_data.upper_bound > 0:
-            reverse_flag = False
-            add_and_update_metabolic_reaction(me_model, reaction_data,
-                                              complex_id, reverse_flag,
-                                              keff=keff, update=update,
-                                              create_new=create_new)
+    Intended for use when adding all reactions from stoichiometric data for the
+    first time.
+
+    For adding an individual reaction use add_metabolic_reaction_to_model()
+
+    Args:
+        me_model:
+            MEModel that the MetabolicReaction will be added to
+
+        rxn_to_cplx_dict: Dict
+            {StoichiometricData.id: catalytic_enzyme_id}
 
 
-def add_metabolic_reactions(me_model, reaction_data, rxnToModCplxDict,
-                            rxn_info, update=False,
-                            create_new=False):
-    # TODO document better and rename
+        rxn_info_frame: pandas.Dataframe
+            Contains the ids, names and reversibility for each reaction in the
+            metabolic reaction matrix as well as whether the reaction is
+            spontaneous
+    """
 
-    complexes_list = find_associated_complexes(rxnToModCplxDict,
-                                               reaction_data, rxn_info)
-    add_complexes_and_rxn_data(me_model, reaction_data, complexes_list,
-                               update=update, create_new=create_new)
+    for reaction_data in me_model.stoichiometric_data:
+
+        try:
+            spontaneous_flag = rxn_info_frame.is_spontaneous[reaction_data.id]
+        except KeyError:
+            spontaneous_flag = 0
+            warn("(%s) not in rxn_info_frame assumed nonspontaneous" %
+                 reaction_data.id)
+
+        if spontaneous_flag == 1:
+            spontaneous = True
+        elif spontaneous_flag == 0:
+            spontaneous = False
+        else:
+            raise Exception("is_spontaneous must be '1' or '0'")
+
+        # Reactions can be catalyzed by multiple isozymes so retrieve list of
+        # complexes that catalyze the reaction
+        try:
+            complexes_list = rxn_to_cplx_dict[reaction_data.id]
+        except KeyError:
+            if reaction_data.id == "dummy_reaction":
+                complexes_list = ["CPLX_dummy"]
+            else:
+                complexes_list = [None]
+
+        # Add metabolic reactions for each isozyme
+        for complex_id in complexes_list:
+            directionality_list = []
+            if reaction_data.lower_bound < 0:
+                directionality_list.append('reverse')
+            if reaction_data.upper_bound > 0:
+                directionality_list.append('forward')
+            for directionality in directionality_list:
+                add_metabolic_reaction_to_model(me_model, reaction_data.id,
+                                                directionality,
+                                                complex_id=complex_id,
+                                                spontaneous=spontaneous,
+                                                update=update, keff=keff)

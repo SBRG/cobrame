@@ -135,8 +135,7 @@ class MEReaction(Reaction):
             except KeyError:
                 new_met = create_component(key, default_type=default_type)
                 if verbose:
-                    print("Created %s in %s" %
-                          (repr(new_met), repr(self)))
+                    print("Created %s in %s" % (repr(new_met), repr(self)))
                 object_stoichiometry[new_met] = value
                 self._model.add_metabolites([new_met])
         return object_stoichiometry
@@ -146,7 +145,7 @@ class MEReaction(Reaction):
 
         returns a dict of {element: amount} for unbalanced elements.
         "charge" is treated as an element in this dict
-        This should be empty for balanced reactions.
+        This will be empty for balanced reactions.
         """
         metabolites = self._model.metabolites
         coefficient_dict = {}
@@ -221,6 +220,11 @@ class MEReaction(Reaction):
             mod_formula_dict = self._model.global_info['modification_formulas']
             for met in self.metabolites:
                 coefficient = coefficient_dict[met]
+
+                if met.id == 'generic_tRNA_GAG_glu__L_c':
+                    reaction_element_dict['H'] -= coefficient
+                    reaction_element_dict['O'] -= coefficient
+
                 if not isinstance(met, Complex) or coefficient == 0:
                     continue
 
@@ -299,42 +303,35 @@ class MetabolicReaction(MEReaction):
     reverse = False
     complex_dilution_list = set()
 
-    def update(self, create_new=False):
+    def update(self, verbose=True):
         self._metabolites.clear()
-        metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(float)
-        if self.complex_data:
-            new_stoichiometry[self.complex_data.complex] = \
-                -mu / self.keff / 3600.  # s-1 / (3600 s/h)
-        sign = -1 if self.reverse else 1
-        for component_id, value in iteritems(
-                self.stoichiometric_data._stoichiometry):
-            if create_new:
-                try:
-                    component = metabolites.get_by_id(component_id)
-                except KeyError:
-                    component = create_component(component_id)
-                    self._model.add_metabolites([component])
-                    print("Created %s in %s" % (repr(component), repr(self)))
-            else:
-                component = metabolites.get_by_id(component_id)
-            if component not in new_stoichiometry:
-                new_stoichiometry[component] = 0
-            new_stoichiometry[component] += value * sign
-            if component.id in self.complex_dilution_list:
-                new_stoichiometry[component] += - mu / self.keff / 3600.
-        # replace old stoichiometry with new one
-        # TODO prune out old metabolites
-        # doing checks for relationship every time is unnecessary. don't do.
-        self.add_metabolites(new_stoichiometry,
-                             combine=False, add_to_container_model=False)
+        stoichiometric_data = self.stoichiometric_data
 
-        # set the bounds
+        # Add complex if enzyme catalyzed
+        if self.complex_data:
+            new_stoichiometry[self.complex_data.complex.id] = \
+                -mu / self.keff / 3600.  # s-1 / (3600 s/h)
+
+        # Update new stoichiometry values
+        sign = -1 if self.reverse else 1
+        for component, value in iteritems(stoichiometric_data.stoichiometry):
+            new_stoichiometry[component] += value * sign
+            if component in self.complex_dilution_list:
+                new_stoichiometry[component] += - mu / self.keff / 3600.
+
+        # Convert component ids to cobra metabolites
+        object_stoichiometry = self.get_components_from_ids(new_stoichiometry,
+                                                            verbose=verbose)
+
+        # Replace old stoichiometry with new one
+        self.add_metabolites(object_stoichiometry,
+                             add_to_container_model=False)
+
+        # Set the bounds
         if self.reverse:
-            self.lower_bound = max(
-                0, -self.stoichiometric_data.upper_bound)
-            self.upper_bound = max(
-                0, -self.stoichiometric_data.lower_bound)
+            self.lower_bound = max(0, -self.stoichiometric_data.upper_bound)
+            self.upper_bound = max(0, -self.stoichiometric_data.lower_bound)
         else:
             self.lower_bound = max(0, self.stoichiometric_data.lower_bound)
             self.upper_bound = max(0, self.stoichiometric_data.upper_bound)
@@ -452,7 +449,7 @@ class TranscriptionReaction(MEReaction):
             transcript.formula = "".join(stringify(e, n)
                                          for e, n in sorted(iteritems(elements)))
 
-        # add in the modifications
+        # Add modifications and subreactions to reaction stoichiometry
         stoichiometry = self.add_modifications(TU_id, stoichiometry)
         stoichiometry = self.add_subreactions(TU_id, stoichiometry)
 
@@ -502,7 +499,7 @@ class TranscriptionReaction(MEReaction):
 
 
 class GenericFormationReaction(MEReaction):
-    None
+    pass
 
 
 def stringify(element, number):
@@ -530,6 +527,9 @@ class TranslationReaction(MEReaction):
         model = self._model
         metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(int)
+        elements = defaultdict(int)
+        subreactions = self.translation_data.subreactions
+
         # Set Parameters
         kt = self._model.global_info['kt']
         k_deg = self._model.global_info['k_deg']
@@ -544,6 +544,7 @@ class TranslationReaction(MEReaction):
         c_ribo = m_rr / f_rRNA / m_aa
         c_mRNA = m_nt / f_mRNA / m_aa
 
+        # -----------------Add Ribosome Coupling----------------------------
         try:
             ribosome = metabolites.get_by_id("ribosome")
         except KeyError:
@@ -553,38 +554,44 @@ class TranslationReaction(MEReaction):
             coupling = -protein_length * mu / k_ribo
             new_stoichiometry[ribosome.id] = coupling
 
-        # Not all genes have annotated TUs. For these add TU as the bnumber
+        # -------------------Add mRNA Coupling------------------------------
         try:
             transcript = metabolites.get_by_id(mRNA_id)
         except KeyError:
+            # If transcript not found add to the model as the mRNA_id
             warn("transcript '%s' not found" % mRNA_id)
             transcript = TranscribedGene(mRNA_id)
             model.add_metabolites(transcript)
 
+        # Calculate coupling constraints for mRNA and degradation
         k_mRNA = mu * c_mRNA * kt / (mu + kt * r0)  # in hr-1
         RNA_amount = mu / k_mRNA
-
         deg_fraction = 3. * k_deg / (3. * k_deg + mu)
         deg_amount = deg_fraction * RNA_amount
 
-        # set stoichiometry
+        # Add mRNA coupling to stoichiometry
         new_stoichiometry[transcript.id] = -RNA_amount
+
+        # ---------------Add Degradation Requirements -------------------------
+        # Add degraded nucleotides to stoichiometry
         for nucleotide, count in transcript.nucleotide_count.items():
             new_stoichiometry[nucleotide] += count * deg_amount
-        nucleotide_length = len(transcript.nucleotide_sequence)
+
         # ATP hydrolysis required for cleaving
-        new_stoichiometry['atp_c'] -= (nucleotide_length-1) / 4. * deg_amount
-        new_stoichiometry['h2o_c'] -= (nucleotide_length-1) / 4. * deg_amount
-        new_stoichiometry['adp_c'] += (nucleotide_length-1) / 4. * deg_amount
-        new_stoichiometry['pi_c'] += (nucleotide_length-1) / 4. * deg_amount
-        new_stoichiometry['h_c'] += (nucleotide_length-1) / 4. * deg_amount
+        nucleotide_length = len(transcript.nucleotide_sequence)
+        hydrolysis_amount = (nucleotide_length - 1) / 4. * deg_amount
+        subreactions['atp_hydrolysis'] = hydrolysis_amount
+
+        # Add degradosome coupling, if known
         try:
             RNA_degradosome = metabolites.get_by_id("RNA_degradosome")
         except KeyError:
             warn("RNA_degradosome not found")
         else:
-            new_stoichiometry[RNA_degradosome.id] = -deg_amount * mu / (65. * 3600.) #keff of degradosome
+            deg_coupling = -deg_amount * mu / 65. / 3600. #keff of degradosome
+            new_stoichiometry[RNA_degradosome.id] = deg_coupling
 
+        # --------------- Add Protein to Stoichiometry ------------------------
         # Added protein to model if not already included
         try:
             protein = metabolites.get_by_id(protein_id)
@@ -594,96 +601,77 @@ class TranslationReaction(MEReaction):
         new_stoichiometry[protein.id] = 1
 
         # ------------------ Elongation Reactions------------------------
-        # update stoichiometry
-        aa_count = self.translation_data.amino_acid_count
-        elements = defaultdict(int)
-        for aa_name, value in iteritems(aa_count):
-            for e, n in iteritems(metabolites.get_by_id(aa_name).elements):
-                elements[e] += n * value
-        # subtract water from composition
-        elements["H"] -= (protein_length - 1) * 2
-        elements["O"] -= protein_length - 1
-        # methionine becomes formylmethionine
-        elements["C"] += 1
-        elements["O"] += 1
-
-        # TODO account of selenocysteine in formula
-
-        # add in the tRNA's for each of the amino acids
         # We add in a "generic tRNA" for each amino acid. The production
         # of this generic tRNA represents the production of enough of any tRNA
         # (according to its keff) for that amino acid to catalyze addition
         # of a single amino acid to a growing peptide.
+        # TODO: audit atp/gtp requirement for each amino acid addition
 
-        # Add transcription termination as subprocessdata so keff can be
-        # modified
-        all_subreactions = self._model.subreaction_data
-
+        # Add the subreaction_data associated with each tRNA/AA addition
         for codon, count in self.translation_data.codon_count.items():
             codon = codon.replace('U', 'T')
             if codon == 'TGA':
                 print 'Adding selenocystein for %s' % mRNA_id
                 aa = 'sec'
+                # TODO account of selenocysteine in formula
             else:
                 abbreviated_aa = dogma.codon_table[codon]
                 if abbreviated_aa == "*":
                     break
+                # Filter out the compartment and stereochemistry from aa id
                 aa = dogma.amino_acids[abbreviated_aa].split('_')[0]
             codon = codon.replace('T', 'U')
             subreaction_id = aa + '_addition_at_' + codon
             try:
-                self.translation_data.subreactions[subreaction_id] = count
+                subreactions[subreaction_id] = count
             except KeyError:
                 warn('subreaction %s not in model' % subreaction_id)
 
-        protein.formula = "".join(stringify(e, n)
-                                  for e, n in sorted(iteritems(elements)))
+        # Add subreaction that starts transcription if known
+        start_subreaction = self._model.global_info.get('start_subreaction')
+        if start_subreaction:
+            subreactions[start_subreaction] = 1
+            if start_subreaction == 'fmet_addition_at_START':
+                # starting methionine becomes formylmethionine
+                elements["C"] += 1
+                elements["O"] += 1
 
-        self.translation_data.subreactions['fmet_addition_at_START'] = 1
-
-        self.add_subreactions(self.translation_data.id, new_stoichiometry)
-
-        # TODO: how many h/h2o molecules are exchanged when making peptide bond
-        # tRNA charging requires 2 ATP per amino acid. TODO: tRNA demand
+        # tRNA charging requires 2 ATP per amino acid.
         # Translocation and elongation each use one GTP per event
         # (len(protein) - 1). Initiation and termination also each need
         # one GTP each. Therefore, the GTP hydrolysis resulting from
         # translation is 2 * len(protein)
-
         # tRNA + GTP -> tRNA_GTP
-        # TODO: audit the numbers below. Check with subreaction data
-        # TODO: handle in subreactions
-        #new_stoichiometry["h2o_c"] -= 3 * protein_length
-        #new_stoichiometry["h_c"] += 3 * protein_length
-        #new_stoichiometry["pi_c"] += 3 * protein_length
-        #new_stoichiometry["gtp_c"] -= 2 * protein_length
-        #new_stoichiometry["gdp_c"] += 2 * protein_length
-        #new_stoichiometry["atp_c"] -= 1 * protein_length
-        #new_stoichiometry["adp_c"] += 1 * protein_length
 
+        # Add transcription termination as subreaction so keff can be modified
+        all_subreactions = self._model.subreaction_data
         last_codon = self.translation_data.last_codon
         term_enzyme = model.global_info["translation_terminators"].get(last_codon)
         if term_enzyme is not None:
             termination_subreaction_id = last_codon + '_' + term_enzyme + \
                 '_mediated_termination'
             try:
-                term_subreaction_data = \
-                    all_subreactions.get_by_id(termination_subreaction_id)
+                all_subreactions.get_by_id(termination_subreaction_id)
             except KeyError as e:
                 if verbose:
                     print("Termination subreaction '%s' for '%s' not found" %
                           (termination_subreaction_id, self.id))
 
             else:
-                new_stoichiometry[term_subreaction_data.enzyme] -= \
-                    mu / term_subreaction_data.keff / 3600.
+                subreactions[termination_subreaction_id] = 1
 
+
+        # ------- Convert ids to metabolites and add to model -----------------
+        # add subreactions to stoichiometry
+        self.add_subreactions(self.translation_data.id, new_stoichiometry)
+        # convert metabolite ids to cobra metabolites
         object_stoichiometry = self.get_components_from_ids(new_stoichiometry,
                                                             verbose=verbose)
-
+        # add metabolites to reaction
         self.add_metabolites(object_stoichiometry,
                              combine=False, add_to_container_model=False)
 
+        # ------------------ Add biomass constraints --------------------------
         # add to biomass
         protein_mass = protein.mass  # kDa
         self.add_metabolites({self._model._protein_biomass: protein_mass},
@@ -695,6 +683,17 @@ class TranslationReaction(MEReaction):
                  mRNA_mass * (1 - deg_fraction) * RNA_amount},
             combine=False, add_to_container_model=False)
 
+        # -------------Update Element Dictionary and Formula-------------------
+        aa_count = self.translation_data.amino_acid_count
+        for aa_name, value in iteritems(aa_count):
+            for e, n in iteritems(metabolites.get_by_id(aa_name).elements):
+                elements[e] += n * value
+        # subtract water from composition
+        elements["H"] -= (protein_length - 1) * 2
+        elements["O"] -= protein_length - 1
+        protein.formula = "".join(stringify(e, n)
+                                  for e, n in sorted(iteritems(elements)))
+
 
 class tRNAChargingReaction(MEReaction):
 
@@ -702,7 +701,7 @@ class tRNAChargingReaction(MEReaction):
 
     def update(self, verbose=True):
         self._metabolites.clear()
-        stoic = defaultdict(int)
+        new_stoichiometry = defaultdict(float)
         data = self.tRNAData
 
         # set tRNA coupling parameters
@@ -712,29 +711,35 @@ class tRNAChargingReaction(MEReaction):
         kt = self._model.global_info['kt']  # hr-1
         r0 = self._model.global_info['r0']
         c_tRNA = m_tRNA / m_aa / f_tRNA
-        tRNA_keff = c_tRNA * kt * mu / (mu + r0 * kt)  # per hr
 
-        # If the generic tRNA does not exist, create it now. The meaning of
-        # a generic tRNA is described in the TranslationReaction comments
+        # The meaning of a generic tRNA is described in the
+        # TranslationReaction comments
         generic_tRNA = "generic_tRNA_" + data.codon + "_" + data.amino_acid
+        new_stoichiometry[generic_tRNA] = 1
 
-        stoic[generic_tRNA] = 1
-
-        # compute what needs to go into production of a generic tRNA
+        # Compute tRNA (and amino acid) coupling and add to stoichiometry
+        tRNA_keff = c_tRNA * kt * mu / (mu + r0 * kt)  # per hr
         tRNA_amount = mu / tRNA_keff
+        new_stoichiometry[data.RNA] = -tRNA_amount
+        new_stoichiometry[data.amino_acid] = -tRNA_amount
+
+        # Add synthetase coupling and enzyme, if known
         synthetase_amount = mu / data.synthetase_keff / \
                             3600. * (1 + tRNA_amount)
-        stoic[data.RNA] = -tRNA_amount
-        stoic[data.amino_acid] = -tRNA_amount
         if data.synthetase is not None:
-            stoic[data.synthetase] = -synthetase_amount
+            new_stoichiometry[data.synthetase] = -synthetase_amount
 
-        stoic = self.add_modifications(self.tRNAData.id, stoic, tRNA_amount)
+        # Add tRNA modifications to stoichiometry
+        new_stoichiometry = self.add_modifications(self.tRNAData.id,
+                                                   new_stoichiometry,
+                                                   tRNA_amount)
 
-        object_stoichiometry = self.get_components_from_ids(stoic,
+        # Convert component ids to cobra metabolites
+        object_stoichiometry = self.get_components_from_ids(new_stoichiometry,
                                                             verbose=verbose)
 
-        self.add_metabolites(object_stoichiometry, combine=False,
+        # Replace reaction stoichiometry with updated stoichiometry
+        self.add_metabolites(object_stoichiometry,
                              add_to_container_model=False)
 
 
