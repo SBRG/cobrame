@@ -19,7 +19,8 @@ class MEmodel(Model):
         self.transcription_data = DictList()
         self.generic_data = DictList()
         self.tRNA_data = DictList()
-        self.translocation_pathways = DictList()
+        self.translocation_data = DictList()
+        self.posttranslation_data = DictList()
         self.subreaction_data = DictList()
         self.process_data = DictList()
         # create the biomass/dilution constraint
@@ -85,6 +86,8 @@ class MEmodel(Model):
         amount = value / self.unmodeled_protein.mass
         self._protein_biomass_dilution.add_metabolites(
                 {self.unmodeled_protein: -amount}, combine=False)
+        self._protein_biomass_dilution.add_metabolites(
+            {self._biomass: 1+value}, combine=False)
         self._unmodeled_protein_fraction = value
 
     def get_metabolic_flux(self, solution=None):
@@ -198,18 +201,36 @@ class MEmodel(Model):
                 self.complex_data.remove(self.complex_data.get_by_id(c_d))
 
         for p in self.metabolites.query("protein"):
-            delete = True
-            for rxn in p._reaction:
-                try:
-                    if p in rxn.reactants:
-                        delete = False
-                except Exception as e:
-                    print(rxn)
-                    raise e
-            if delete:
-                while len(p._reaction) > 0:
-                    list(p._reaction)[0].delete(remove_orphans=True)
-                    self.translation_data.remove(p.id.replace('protein_', ''))
+            if isinstance(p, ProcessedProtein):
+                delete = True
+                for rxn in p._reaction:
+                    try:
+                        if p in rxn.reactants:
+                            delete = False
+                    except Exception as e:
+                        print(rxn)
+                        raise e
+                if delete:
+                    while len(p._reaction) > 0:
+                        list(p._reaction)[0].delete(remove_orphans=True)
+                        for data in self.posttranslation_data.query(p.id):
+                            self.posttranslation_data.remove(data.id)
+
+        for p in self.metabolites.query("protein"):
+            if isinstance(p, TranslatedGene):
+                delete = True
+                for rxn in p._reaction:
+                    try:
+                        if p in rxn.reactants:
+                            delete = False
+                    except Exception as e:
+                        print(rxn)
+                        raise e
+                if delete:
+                    while len(p._reaction) > 0:
+                        list(p._reaction)[0].delete(remove_orphans=True)
+                        self.translation_data.remove(p.id.replace('protein_', ''))
+
 
         removed_RNA = set()
         for m in list(self.metabolites.query("RNA_")):
@@ -314,10 +335,36 @@ class MEmodel(Model):
 
         return biomass_comp
 
-    def biomass_summary(self):
-        composition = self.get_biomass_composition()
+    def RNA_to_protein_ratio(self, solution=None):
+        composition = self.get_biomass_composition(solution=solution)
         RNA_to_protein = (composition['mRNA'] + composition['tRNA'] +
                           composition['rRNA'] + composition['ncRNA']) / \
                          (composition['Protein'] +
                           composition['Unmodeled Protein'])
-        print 'RNA to Protein Ratio =', RNA_to_protein
+        return RNA_to_protein
+
+    def get_RNA_fractions_dict(self, solution=None):
+        RNA_fractions = {}
+        composition = self.get_biomass_composition(solution=solution)
+
+        tRNA_to_RNA = (composition['tRNA']) / (
+        composition['mRNA'] + composition['tRNA'] + composition['rRNA'] +
+        composition['ncRNA'])
+        RNA_fractions['tRNA'] = tRNA_to_RNA
+
+        rRNA_to_RNA = (composition['rRNA']) / (
+        composition['mRNA'] + composition['tRNA'] + composition['rRNA'] +
+        composition['ncRNA'])
+        RNA_fractions['rRNA'] = rRNA_to_RNA
+
+        mRNA_to_RNA = (composition['mRNA']) / (
+        composition['mRNA'] + composition['tRNA'] + composition['rRNA'] +
+        composition['ncRNA'])
+        RNA_fractions['mRNA'] = mRNA_to_RNA
+
+        ncRNA_to_RNA = (composition['ncRNA']) / (
+        composition['mRNA'] + composition['tRNA'] + composition['rRNA'] +
+        composition['ncRNA'])
+        RNA_fractions['ncRNA'] = ncRNA_to_RNA
+
+        return RNA_fractions

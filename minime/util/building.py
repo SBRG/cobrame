@@ -147,10 +147,19 @@ def add_translation_reaction(me_model, locus_id, dna_sequence=None,
         if locus_id in folding_dict[folding_type]:
             translation_data.subreactions[folding_type] = 1
 
+    for subreaction, value in translation_data.elongation_subreactions.items():
+        translation_data.subreactions[subreaction] = value
+
+    for subreaction in translation_data.translation_start_subreactions:
+        translation_data.subreactions[subreaction] = 1
+
+    for subreaction in translation_data.translation_termination_subreactions:
+        translation_data.subreactions[subreaction] = 1
+
     # add organism specific subreactions associated with peptide processing
     global_info = me_model.global_info
-    for subrxn, val in global_info['peptide_processing_subreactions'].items():
-        translation_data.subreactions[subrxn] = val
+    for subrxn, value in global_info['peptide_processing_subreactions'].items():
+        translation_data.subreactions[subrxn] = value
 
     # Create and add TranslationReaction with TranslationData
     translation_reaction = TranslationReaction("translation_" + locus_id)
@@ -366,6 +375,9 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         elif RNA_type == 'ncRNA':
             demand_reaction.add_metabolites({
                 me_model._ncRNA_biomass: -compute_RNA_mass(seq)})
+        elif RNA_type == 'mRNA':
+            demand_reaction.add_metabolites({
+                me_model._mRNA_biomass: -compute_RNA_mass(seq)})
 
         # ---- Associate TranscribedGene to a TU ----
         parent_TU = TU_frame[
@@ -453,7 +465,7 @@ def add_generic_RNase(me_model):
     for cplx in generic_RNase_list:
         new_rxn = MEReaction('complex_' + cplx + '_to_generic')
         me_model.add_reaction(new_rxn)
-        new_rxn.reaction = cplx + ' <=> generic_RNase'
+        new_rxn.reaction = cplx + ' --> generic_RNase'
 
 
 def add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme=None):
