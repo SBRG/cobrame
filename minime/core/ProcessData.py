@@ -110,7 +110,6 @@ class ComplexData(ProcessData):
         model.complex_data.append(self)
         # {Component.id: stoichiometry}
         self.stoichiometry = defaultdict(float)
-        self.translocation = {}
         self.chaperones = {}
         # {ModificationData.id : number}
         self.modifications = {}
@@ -306,6 +305,67 @@ class TranslationData(ProcessData):
         """mass in kDa"""
         return compute_protein_mass(self.amino_acid_count)
 
+    @property
+    def elongation_subreactions(self):
+        global_info = self._model.global_info
+        elongation_subreactions = {}
+        # Add the subreaction_data associated with each tRNA/AA addition
+        for codon, count in self.codon_count.items():
+            codon = codon.replace('U', 'T')
+            if codon == 'TGA':
+                print 'Adding selenocystein for %s' % self.id
+                aa = 'sec'
+                # TODO account of selenocysteine in formula
+            else:
+                abbreviated_aa = dogma.codon_table[codon]
+                if abbreviated_aa == "*":
+                    break
+                # Filter out the compartment and stereochemistry from aa id
+                aa = dogma.amino_acids[abbreviated_aa].split('_')[0]
+            codon = codon.replace('T', 'U')
+            subreaction_id = aa + '_addition_at_' + codon
+            try:
+                self._model.subreaction_data.get_by_id(subreaction_id)
+            except KeyError:
+                warn('subreaction %s not in model' % subreaction_id)
+            else:
+                elongation_subreactions[subreaction_id] = count
+
+        for subreaction_id in global_info['translation_elongation_subreactions']:
+            try:
+                self._model.subreaction_data.get_by_id(subreaction_id)
+            except KeyError:
+                warn('subreaction %s not in model' % subreaction_id)
+            else:
+                # No elongation subreactions needed for start codon
+                elongation_subreactions[subreaction_id] = len(self.amino_acid_sequence) - 1.
+
+        return elongation_subreactions
+
+    @property
+    def translation_start_subreactions(self):
+        # Read-only link to list of start subreactions for organism
+        return self._model.global_info.get('translation_start_subreactions')
+
+    @property
+    def translation_termination_subreactions(self):
+        termination_subreactions = []
+        all_subreactions = self._model.subreaction_data
+        global_info = self._model.global_info
+        last_codon = self.last_codon
+        term_enzyme = global_info["translation_terminators"].get(last_codon)
+        if term_enzyme is not None:
+            termination_subreaction_id = last_codon + '_' + term_enzyme + \
+                                         '_mediated_termination'
+            try:
+                all_subreactions.get_by_id(termination_subreaction_id)
+            except KeyError:
+                print("Termination subreaction '%s' for '%s' not found" %
+                      (termination_subreaction_id, self.id))
+            else:
+                termination_subreactions.append(termination_subreaction_id)
+        return termination_subreactions
+
 
 class tRNAData(ProcessData):
     synthetase = None
@@ -320,200 +380,32 @@ class tRNAData(ProcessData):
         self.modifications = defaultdict(int)
 
 
-class ProteinTranslocationData(ProcessData):
+class TranslocationData(ProcessData):
     """
-    The user will have to use update after all complexes are into the
-    model...because otherwise how can you be sure that the translocases
-    are added into the model?
 
     """
 
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
-        self.keff = 0.
-        self.costs_complexes = []
-        model.translocation_pathways.append(self)
+        self.keff = 65.
+        # enzyme_dict = {enzyme_id: {length_dependent: <True or False>,
+        #                            fixed_keff: <True or False>}}
+        self.enzyme_dict = {}
+        self.length_dependent_energy = False
+        self.stoichiometry = {}
+        model.translocation_data.append(self)
 
-    def add_translocation_cost(self, model, complex, protein):
-        """really need to document this
 
-           Need to add in membrane area calculations
-        """
+class PostTranslationData(ProcessData):
+    """
+    PostTranslationData id can be anything, but the preprocessed protein id
+    and processed protein id must be defined
+    """
 
-        costs = {}
-
-        def sec_translocation(protein):  # s
-            """
-
-            """
-
-            protein, stoichiometry = protein.split('(')
-            stoichiometry = float(stoichiometry[:-1])
-            protein_length = len(
-                model.translation_data.get_by_id(protein).amino_acid_sequence)
-            atp = int(protein_length/25)
-
-            # SecB
-            costs[self.costs_complexes[0]] = \
-                mu * stoichiometry / (self.keff/protein_length) / 3600
-            # SecA
-            costs[self.costs_complexes[1]] = \
-                mu * stoichiometry / (self.keff/protein_length) / 3600
-            # Sec-CPLX
-            costs[self.costs_complexes[2]] = \
-                mu * stoichiometry / (self.keff/protein_length) / 3600
-            costs['atp_c'] = atp
-            costs['adp_c'] = -atp
-            costs['pi_c'] = -atp
-
-        def tat_translocation(protein):  # t
-            """
-
-            """
-
-            peptide, stoichiometry = protein.split('(')
-            # e.g. (1:14) for 1 of this protein in the final complex:14
-            # tatAs required
-            s1, s2 = stoichiometry[:-1].split(':')
-
-            # TatBC
-            costs[self.costs_complexes[0]] = \
-                mu * float(s1) / self.keff / 3600
-            # TatA
-            costs[self.costs_complexes[1]] = \
-                mu * float(s1) * float(s2) / self.keff / 3600
-
-        def bam_translocation(protein):  # b
-            """
-
-            """
-
-            protein, stoichiometry = protein.split('(')
-            stoichiometry = float(stoichiometry[:-1])
-
-            # SurA
-            costs[self.costs_complexes[0]] = \
-                mu * stoichiometry / self.keff / 3600
-            # Bam
-            costs[self.costs_complexes[1]] = \
-                mu * stoichiometry / self.keff / 3600
-
-        def lol_translocation(protein):  # l
-            """
-
-            """
-
-            protein, stoichiometry = protein.split('(')
-            stoichiometry = float(stoichiometry[:-1])
-
-            # LolCDE
-            costs[self.costs_complexes[0]] = \
-                mu * stoichiometry / self.keff / 3600
-            # LolA
-            costs[self.costs_complexes[1]] = \
-                mu * stoichiometry / self.keff / 3600
-            # LolB
-            costs[self.costs_complexes[2]] = \
-                mu * stoichiometry / self.keff / 3600
-
-            costs['atp_c'] = 1
-            costs['adp_c'] = -1
-            costs['pi_c'] = -1
-
-        def yidC_translocation(protein):  # y
-            """
-
-            """
-
-            protein, stoichiometry = protein.split('(')
-            stoichiometry = float(stoichiometry[:-1])
-            protein_length = len(
-                model.translation_data.get_by_id(protein).amino_acid_sequence)
-
-            # SRP
-            costs[self.costs_complexes[0]] = \
-                mu * stoichiometry / (self.keff/protein_length) / 3600
-            # YidC
-            costs[self.costs_complexes[1]] = \
-                mu * 2 / (self.keff/protein_length) / 3600
-
-            costs['gtp_c'] = 1
-            costs['gdp_c'] = -1
-            costs['pi_c'] = -1
-
-        def secA_translocation(protein):  # a
-            """
-
-            """
-
-            # Not sure what the actualy number is...will need to do
-            # calculations. For now, 1/3 of the peptide requires secA...since
-            # secA binding isn't detected until after ribosome release
-            # -Jo 10/31/13
-
-            protein, stoichiometry = protein.split('(')
-            stoichiometry = float(stoichiometry[:-1])
-            protein_length = len(
-                model.translation_data.get_by_id(protein).amino_acid_sequence)
-            atp = int(protein_length / 3 / 25)
-
-            # SecA
-            costs[self.costs_complexes[0]] = \
-                mu * stoichiometry / (self.keff/protein_length) / 3600
-
-            costs['atp_c'] = atp
-            costs['adp_c'] = -atp
-            costs['pi_c'] = -atp
-
-        def srp_yidC_translocation(protein):  # p
-            """
-
-            """
-
-            protein, stoichiometry = protein.split('(')
-            stoichiometry = float(stoichiometry[:-1])
-            protein_length = len(
-                model.translation_data.get_by_id(protein).amino_acid_sequence)
-
-            # SRP
-            costs[self.costs_complexes[0]] = \
-                mu * stoichiometry / (self.keff/protein_length) / 3600
-            # YidC
-            costs[self.costs_complexes[1]] = \
-                mu * stoichiometry / (self.keff/protein_length) / 3600
-            # Sec
-            costs[self.costs_complexes[2]] = \
-                mu * stoichiometry / (self.keff/protein_length) / 3600
-
-            costs['gtp_c'] = 1
-            costs['gdp_c'] = -1
-            costs['pi_c'] = -1
-
-        def srp_translocation(protein):  # r
-            """	FtsY keff needs to fixed"""
-            protein, stoichiometry = protein.split('(')
-            stoichiometry = float(stoichiometry[:-1])
-            protein_length = len(
-                model.translation_data.get_by_id(protein).amino_acid_sequence)
-
-            # SRP
-            costs[self.costs_complexes[0]] = \
-                mu * stoichiometry / (self.keff/protein_length) / 3600
-            # FtsY
-            costs[self.costs_complexes[1]] = \
-                mu * stoichiometry / 65. / 3600
-            # Sec
-            costs[self.costs_complexes[2]] = \
-                mu * stoichiometry / (self.keff/protein_length) / 3600
-
-            costs['gtp_c'] = 2
-            costs['gdp_c'] = -2
-            costs['pi_c'] = -2
-
-        eval(self.id+'(protein)')
-        formation = model.complex_data.get_by_id(complex).formation
-        for metabolite, cost in costs.iteritems():
-            model.complex_data.get_by_id(complex).\
-                stoichiometry[metabolite] += cost
-            # if membrane...then add into self.membrane
-        formation.update()
+    def __init__(self, id, model, processed_protein, preprocessed_protein):
+        ProcessData.__init__(self, id, model)
+        self.processed_protein_id = processed_protein
+        self.unprocessed_protein_id = preprocessed_protein
+        self.translocation = defaultdict(float)
+        self.chaperone = defaultdict(float)
+        model.posttranslation_data.append(self)

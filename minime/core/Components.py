@@ -49,6 +49,11 @@ class TranscribedGene(MEComponent):
 
 class TranslatedGene(MEComponent):
     @property
+    def translation_data(self):
+        locus = self.id.replace('protein_', '')
+        return self._model.translation_data.get_by_id(locus)
+
+    @property
     def complexes(self):
         """read-only link to the complexes that the gene forms"""
         complex_list = []
@@ -59,9 +64,22 @@ class TranslatedGene(MEComponent):
 
     @property
     def mass(self):
-        locus = self.id.replace('protein_', '')
-        data = self._model.translation_data.get_by_id(locus)
-        return data.mass
+        return self.translation_data.mass
+
+    @property
+    def amino_acid_sequence(self):
+        return self.translation_data.amino_acid_sequence
+
+
+class ProcessedProtein(MEComponent):
+
+    @property
+    def unprocessed_protein(self):
+        return self._model.metabolites.get_by_id(self.unprocessed_protein_id)
+
+    def __init__(self, id, unprocessed_protein_id):
+        MEComponent.__init__(self, id)
+        self.unprocessed_protein_id = unprocessed_protein_id
 
 
 class Complex(MEComponent):

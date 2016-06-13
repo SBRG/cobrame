@@ -46,6 +46,7 @@ def reverse_transcribe(seq):
 
 
 def return_frameshift_sequence(full_seq, frameshift_string):
+    # Subtract 1 from start position to account for 0 indexing
     seq = reduce(lambda x, y: x + y,
              [full_seq[int(x.split(':')[0])-1:int(x.split(':')[1])]
               for x in frameshift_string.replace(' ', '').split(',')])
@@ -73,5 +74,3 @@ def get_amino_acid_sequence_from_DNA(dna_seq):
     if "*" in amino_acid_sequence:
         amino_acid_sequence = amino_acid_sequence.replace('*', 'C')
     return amino_acid_sequence
-
-
