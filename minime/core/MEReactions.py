@@ -458,8 +458,8 @@ class PostTranslationReaction(MEReaction):
         stoichiometry = defaultdict(float)
         metabolites = self._model.metabolites
         posttranslation_data = self.posttranslation_data
-        unprocessed_protein = self._posttranslation_data.unprocessed_protein_id
-        processed_protein = self._posttranslation_data.processed_protein_id
+        unprocessed_protein = posttranslation_data.unprocessed_protein_id
+        processed_protein = posttranslation_data.processed_protein_id
 
         stoichiometry[unprocessed_protein] -= 1
 
@@ -470,10 +470,14 @@ class PostTranslationReaction(MEReaction):
                                            unprocessed_protein)
             self._model.add_metabolites(protein_met)
 
+        stoichiometry = self.add_modifications(posttranslation_data.id,
+                                               stoichiometry)
+
         stoichiometry[protein_met.id] = 1
-        stoichiometry = self.add_translocation_pathways(posttranslation_data.id,
-                                                        unprocessed_protein,
-                                                        stoichiometry)
+        if len(posttranslation_data.translocation) > 0:
+            stoichiometry = self.add_translocation_pathways(posttranslation_data.id,
+                                                            unprocessed_protein,
+                                                            stoichiometry)
 
         object_stoichiometry = self.get_components_from_ids(stoichiometry,
                                                             verbose=verbose)

@@ -48,6 +48,7 @@ class StoichiometricData(ProcessData):
         ProcessData.__init__(self, id, model)
         model.stoichiometric_data.append(self)
         self._stoichiometry = {}
+        self.subreactions = defaultdict(int)
 
     @property
     def stoichiometry(self):
@@ -408,4 +409,5 @@ class PostTranslationData(ProcessData):
         self.unprocessed_protein_id = preprocessed_protein
         self.translocation = defaultdict(float)
         self.chaperone = defaultdict(float)
+        self.modifications = defaultdict(int)
         model.posttranslation_data.append(self)

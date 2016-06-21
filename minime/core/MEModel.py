@@ -1,5 +1,6 @@
 from numpy import array
 from scipy.sparse import dok_matrix
+import re
 
 from cobra import Model, DictList
 
@@ -70,6 +71,15 @@ class MEmodel(Model):
                             self._tRNA_biomass_dilution,
                             self._rRNA_biomass_dilution,
                             self._ncRNA_biomass_dilution))
+
+        self._DNA_biomass = Constraint("DNA_biomass")
+        self._DNA_biomass_dilution = SummaryVariable("DNA_biomass_dilution")
+        self._DNA_biomass_dilution.add_metabolites({
+            self._DNA_biomass: -1e-3,
+            self._biomass: 1e-3,
+        })
+        self._DNA_biomass_dilution.lower_bound = mu
+        self._DNA_biomass_dilution.upper_bound = mu
 
     @property
     def unmodeled_protein(self):
@@ -200,7 +210,7 @@ class MEmodel(Model):
                 list(cplx.reactions)[0].delete(remove_orphans=True)
                 self.complex_data.remove(self.complex_data.get_by_id(c_d))
 
-        for p in self.metabolites.query("protein"):
+        for p in self.metabolites.query(re.compile('^protein_')):
             if isinstance(p, ProcessedProtein):
                 delete = True
                 for rxn in p._reaction:
@@ -216,12 +226,12 @@ class MEmodel(Model):
                         for data in self.posttranslation_data.query(p.id):
                             self.posttranslation_data.remove(data.id)
 
-        for p in self.metabolites.query("protein"):
+        for p in self.metabolites.query(re.compile('^protein_')):
             if isinstance(p, TranslatedGene):
                 delete = True
                 for rxn in p._reaction:
                     try:
-                        if p in rxn.reactants:
+                        if p in rxn.reactants and not rxn.id.startswith('degradation'):
                             delete = False
                     except Exception as e:
                         print(rxn)
@@ -229,11 +239,13 @@ class MEmodel(Model):
                 if delete:
                     while len(p._reaction) > 0:
                         list(p._reaction)[0].delete(remove_orphans=True)
-                        self.translation_data.remove(p.id.replace('protein_', ''))
+                        p_id = p.id.replace('protein_', '')
+                        for data in self.translation_data.query(p_id):
+                            self.translation_data.remove(data.id)
 
 
         removed_RNA = set()
-        for m in list(self.metabolites.query("RNA_")):
+        for m in list(self.metabolites.query(re.compile("^RNA_"))):
             delete = True
             for rxn in m._reaction:
                 if m in rxn.reactants and not rxn.id.startswith('DM_'):
@@ -291,49 +303,29 @@ class MEmodel(Model):
                 self.transcription_data.remove(t_process_id)
 
     def get_biomass_composition(self, solution=None):
-        # multiply each RNA/Protein biomass component by biomass coeff because
-        # this is the coefficient of the biomass in the dilution reaction
         if solution is None:
             solution = self.solution
-        sol_dict = solution.x_dict
-
-        biomass_comp = defaultdict(float)
-
-        for met, stoich in self._biomass_dilution.metabolites.items():
-            if met.id == 'biomass':
-                biomass_coeff = abs(stoich)
-            elif met.id == 'DNA_biomass':
-                DNA_coeff = abs(stoich)
-
+        biomass_composition = defaultdict(float)
         for met, stoich in self._protein_biomass_dilution.metabolites.items():
             if abs(stoich) < 1:
-                mass = self.unmodeled_protein.mass
-                biomass_comp['Unmodeled Protein'] = \
-                    sol_dict['protein_biomass_dilution'] * abs(stoich) * \
-                    mass * biomass_coeff
+                weight = self.unmodeled_protein.mass
+                biomass_composition['Unmodeled Protein'] = \
+                    solution.x_dict['protein_biomass_dilution'] * \
+                    abs(stoich) * weight
+        biomass_composition['Protein'] = \
+            solution.x_dict['protein_biomass_dilution']
+        biomass_composition['tRNA'] = \
+            solution.x_dict['tRNA_biomass_dilution']
+        biomass_composition['mRNA'] = \
+            solution.x_dict['mRNA_biomass_dilution']
+        biomass_composition['ncRNA'] = \
+            solution.x_dict['ncRNA_biomass_dilution']
+        biomass_composition['rRNA'] = \
+            solution.x_dict['rRNA_biomass_dilution']
+        biomass_composition['Other'] = \
+            solution.x_dict['biomass_component_dilution']
 
-        biomass_comp['Protein'] = \
-            sol_dict['protein_biomass_dilution'] * biomass_coeff
-        biomass_comp['tRNA'] = \
-            sol_dict['tRNA_biomass_dilution'] * biomass_coeff
-        biomass_comp['mRNA'] = \
-            sol_dict['mRNA_biomass_dilution'] * biomass_coeff
-        biomass_comp['rRNA'] = \
-            sol_dict['rRNA_biomass_dilution'] * biomass_coeff
-        biomass_comp['ncRNA'] = \
-            sol_dict['ncRNA_biomass_dilution'] * biomass_coeff
-        biomass_comp['DNA'] = sol_dict['biomass_dilution'] * DNA_coeff
-
-        for met, stoich in self._biomass_dilution.metabolites.items():
-            if met.id == 'atp_c' or stoich > 0 or type(met) == Constraint or \
-                            met.id == 'h2o_c':
-                continue
-            else:
-                mass = met.formula_weight / 1000.
-                biomass_comp['Other'] += \
-                    abs(stoich) * sol_dict['biomass_dilution'] * mass
-
-        return biomass_comp
+        return biomass_composition
 
     def RNA_to_protein_ratio(self, solution=None):
         composition = self.get_biomass_composition(solution=solution)
@@ -368,3 +360,28 @@ class MEmodel(Model):
         RNA_fractions['ncRNA'] = ncRNA_to_RNA
 
         return RNA_fractions
+
+    def make_biomass_composition_piechart(self, solution=None):
+        try:
+            import brewer2mpl
+        except ImportError:
+            color_map = None
+        else:
+            color_map = brewer2mpl.wesanderson.Zissou.mpl_colormap
+
+        try:
+            import pandas
+        except ImportError:
+            raise Exception("Pandas must be installed to get biomass piechart")
+
+        if solution is None:
+            solution = self.solution
+
+        summary = {}
+        summary['Biomass composition'] = \
+            self.get_biomass_composition(solution=solution)
+        frame = pandas.DataFrame.from_dict(summary) / solution.f
+
+
+        print 'Total biomass sum =', frame.sum().values[0]
+        return frame.plot(kind='pie', subplots=True, legend=None, colormap=color_map)
