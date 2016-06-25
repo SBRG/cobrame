@@ -210,6 +210,37 @@ class MEmodel(Model):
                 list(cplx.reactions)[0].delete(remove_orphans=True)
                 self.complex_data.remove(self.complex_data.get_by_id(c_d))
 
+        for p in self.metabolites.query('_folded'):
+            if 'partially' not in p.id:
+                delete = True
+                for rxn in p._reaction:
+                    try:
+                        if p in rxn.reactants:
+                            delete = False
+                    except Exception as e:
+                        print(rxn)
+                        raise e
+                if delete:
+                    while len(p._reaction) > 0:
+                        list(p._reaction)[0].delete(remove_orphans=True)
+                        for data in self.posttranslation_data.query(p.id):
+                            self.posttranslation_data.remove(data.id)
+
+        for p in self.metabolites.query('partially_folded'):
+            delete = True
+            for rxn in p._reaction:
+                try:
+                    if p in rxn.reactants:
+                        delete = False
+                except Exception as e:
+                    print(rxn)
+                    raise e
+            if delete:
+                while len(p._reaction) > 0:
+                    list(p._reaction)[0].delete(remove_orphans=True)
+                    for data in self.posttranslation_data.query(p.id):
+                        self.posttranslation_data.remove(data.id)
+
         for p in self.metabolites.query(re.compile('^protein_')):
             if isinstance(p, ProcessedProtein):
                 delete = True
@@ -381,7 +412,6 @@ class MEmodel(Model):
         summary['Biomass composition'] = \
             self.get_biomass_composition(solution=solution)
         frame = pandas.DataFrame.from_dict(summary) / solution.f
-
 
         print 'Total biomass sum =', frame.sum().values[0]
         return frame.plot(kind='pie', subplots=True, legend=None, colormap=color_map)

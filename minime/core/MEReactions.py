@@ -93,7 +93,8 @@ class MEReaction(Reaction):
             subreaction_data = all_subreactions.get_by_id(subreaction_id)
             if type(subreaction_data.enzyme) == list:
                 for enzyme in subreaction_data.enzyme:
-                    stoichiometry[enzyme] -= mu / subreaction_data.keff / 3600. * count
+                    stoichiometry[enzyme] -= mu / subreaction_data.keff / \
+                                             3600. * count
             elif type(subreaction_data.enzyme) == str:
                 stoichiometry[subreaction_data.enzyme] -= \
                     mu / subreaction_data.keff / 3600. * count
@@ -135,6 +136,8 @@ class MEReaction(Reaction):
 
                 if not length_dependent:
                     protein_length = 1.
+
+                # TODO is this backward?
                 keff = translocation_data.keff
                 if not fixed_keff:
                     keff = 65.
@@ -313,7 +316,6 @@ class MEReaction(Reaction):
                         for element, amount in iteritems(elements):
                             reaction_element_dict[element] += coefficient * amount * float(value)
 
-
         # filter out 0 values
         return {k: v for k, v in iteritems(reaction_element_dict) if v != 0}
 
@@ -430,7 +432,7 @@ class ComplexFormation(MEReaction):
 
 class PostTranslationReaction(MEReaction):
     """
-    Reaction class that includes all posttranslational modificaiton reactions
+    Reaction class that includes all posttranslational modification reactions
     (translocation, protein folding, etc)
 
     There are often multiple different reactions/enzymes that can accomplish
@@ -461,7 +463,13 @@ class PostTranslationReaction(MEReaction):
         unprocessed_protein = posttranslation_data.unprocessed_protein_id
         processed_protein = posttranslation_data.processed_protein_id
 
-        stoichiometry[unprocessed_protein] -= 1
+        # folding properties
+        folding_mechanism = posttranslation_data.folding_mechanism
+        aggregation_propensity = posttranslation_data.aggregation_propensity
+        if folding_mechanism:
+            T = str(self._model.global_info['temperature'])
+            keq_folding = posttranslation_data.keq_folding[T]
+            k_folding = posttranslation_data.k_folding[T]
 
         try:
             protein_met = metabolites.get_by_id(processed_protein)
@@ -472,12 +480,40 @@ class PostTranslationReaction(MEReaction):
 
         stoichiometry = self.add_modifications(posttranslation_data.id,
                                                stoichiometry)
+        stoichiometry = self.add_subreactions(posttranslation_data.id,
+                                              stoichiometry)
 
-        stoichiometry[protein_met.id] = 1
-        if len(posttranslation_data.translocation) > 0:
+        if posttranslation_data.translocation:
             stoichiometry = self.add_translocation_pathways(posttranslation_data.id,
                                                             unprocessed_protein,
                                                             stoichiometry)
+        if folding_mechanism == 'folding_spontaneous':
+            dilution = (keq_folding + mu / k_folding)
+            stoichiometry[unprocessed_protein] -= (dilution + 1.)
+            stoichiometry[protein_met.id] += 1.
+
+        elif folding_mechanism:
+            dilution = aggregation_propensity * (keq_folding + 1.)
+            stoichiometry[unprocessed_protein] -= (1. / dilution + 1.)
+
+            stoichiometry[protein_met.id] += 1. / dilution
+            stoichiometry[protein_met.id.replace('_folded', '')] += 1.
+        else:
+            stoichiometry[unprocessed_protein] = -1.
+            stoichiometry[protein_met.id] = 1.
+
+        # Add surface area constraints for all translocated protein
+        surface_area = posttranslation_data.surface_area
+        if surface_area:
+            for SA, value in surface_area.items():
+                try:
+                    SA_constraint = metabolites.get_by_id(SA)
+                except KeyError:
+                    warn('Constraint %s added to model' % SA)
+                    SA_constraint = Constraint(SA)
+                    self._model.add_metabolites([SA_constraint])
+
+                stoichiometry[SA_constraint.id] += value
 
         object_stoichiometry = self.get_components_from_ids(stoichiometry,
                                                             verbose=verbose)

@@ -408,6 +408,14 @@ class PostTranslationData(ProcessData):
         self.processed_protein_id = processed_protein
         self.unprocessed_protein_id = preprocessed_protein
         self.translocation = defaultdict(float)
-        self.chaperone = defaultdict(float)
-        self.modifications = defaultdict(int)
+
+        self.folding_mechanism = ''
+        self.aggregation_propensity = 0.
+        # Dictionaries of {str(temperature): value}
+        self.keq_folding = {}
+        self.k_folding = {}
+
+        self.modifications = defaultdict(float)
+        self.subreactions = defaultdict(float)
+        self.surface_area = {}
         model.posttranslation_data.append(self)
