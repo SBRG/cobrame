@@ -97,7 +97,7 @@ class MEmodel(Model):
         self._protein_biomass_dilution.add_metabolites(
                 {self.unmodeled_protein: -amount}, combine=False)
         self._protein_biomass_dilution.add_metabolites(
-            {self._biomass: 1+value}, combine=False)
+            {self._biomass: 1}, combine=False)
         self._unmodeled_protein_fraction = value
 
     def get_metabolic_flux(self, solution=None):
@@ -274,7 +274,6 @@ class MEmodel(Model):
                         for data in self.translation_data.query(p_id):
                             self.translation_data.remove(data.id)
 
-
         removed_RNA = set()
         for m in list(self.metabolites.query(re.compile("^RNA_"))):
             delete = True
@@ -344,7 +343,8 @@ class MEmodel(Model):
                     solution.x_dict['protein_biomass_dilution'] * \
                     abs(stoich) * weight
         biomass_composition['Protein'] = \
-            solution.x_dict['protein_biomass_dilution']
+            solution.x_dict['protein_biomass_dilution'] - \
+            biomass_composition['Unmodeled Protein']
         biomass_composition['tRNA'] = \
             solution.x_dict['tRNA_biomass_dilution']
         biomass_composition['mRNA'] = \
@@ -413,5 +413,7 @@ class MEmodel(Model):
             self.get_biomass_composition(solution=solution)
         frame = pandas.DataFrame.from_dict(summary) / solution.f
 
-        print 'Total biomass sum =', frame.sum().values[0]
-        return frame.plot(kind='pie', subplots=True, legend=None, colormap=color_map)
+        print('Total biomass sum =', frame.sum().values[0])
+        return frame.plot(kind='pie', subplots=True, legend=None,
+                          olormap=color_map)
+
