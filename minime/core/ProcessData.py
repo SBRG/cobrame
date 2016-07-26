@@ -114,6 +114,7 @@ class ComplexData(ProcessData):
         self.chaperones = {}
         # {ModificationData.id : number}
         self.modifications = {}
+        self.unmodified_complex_id = ''
         self._complex_id = None  # assumed to be the same as id if None
 
     def create_complex_formation(self, verbose=True):
@@ -246,6 +247,7 @@ class TranslationData(ProcessData):
         # Used if not creating a "MiniME" model
         self.using_ribosome = True
         self.subreactions = defaultdict(int)
+        self.modifications = defaultdict(int)
 
     @property
     def amino_acid_sequence(self):
@@ -414,6 +416,9 @@ class PostTranslationData(ProcessData):
         # Dictionaries of {str(temperature): value}
         self.keq_folding = {}
         self.k_folding = {}
+        # some small peptides are more likely to be folded by certain
+        # chaperones. This is accounted for using propensity_scaling.
+        self.propensity_scaling = 1.
 
         self.modifications = defaultdict(float)
         self.subreactions = defaultdict(float)

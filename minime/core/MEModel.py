@@ -89,15 +89,20 @@ class MEmodel(Model):
     def unmodeled_protein_fraction(self):
         return self._unmodeled_protein_fraction
 
+    @property
+    def unmodeled_protein_biomass(self):
+        return self.metabolites.get_by_id('dummy_protein_biomass')
+
     @unmodeled_protein_fraction.setter
     def unmodeled_protein_fraction(self, value):
         # proportion = value / (1 - value)
         # see the Biomass_formulations for an explanation
-        amount = value / self.unmodeled_protein.mass
+        amount = value #/ self.unmodeled_protein.mass
+        amount = value / (1 - value)
         self._protein_biomass_dilution.add_metabolites(
-                {self.unmodeled_protein: -amount}, combine=False)
+                {self.unmodeled_protein_biomass: -amount}, combine=False)
         self._protein_biomass_dilution.add_metabolites(
-            {self._biomass: 1}, combine=False)
+            {self._biomass: 1 + amount}, combine=False)
         self._unmodeled_protein_fraction = value
 
     def get_metabolic_flux(self, solution=None):
@@ -305,6 +310,11 @@ class MEmodel(Model):
                 self.transcription_data.get_by_id(
                     t_process_id).RNA_products.difference_update(removed_RNA)
 
+            # update to update the TranscriptionReaction mRNA biomass
+            # stoichiometry with new RNA_products
+            if not delete:
+                t.update()
+
     def remove_genes_from_model(self, gene_list):
         for gene in gene_list:
             self.metabolites.get_by_id('RNA_'+gene).remove_from_model(method='subtractive')
@@ -337,14 +347,10 @@ class MEmodel(Model):
             solution = self.solution
         biomass_composition = defaultdict(float)
         for met, stoich in self._protein_biomass_dilution.metabolites.items():
-            if abs(stoich) < 1:
-                weight = self.unmodeled_protein.mass
-                biomass_composition['Unmodeled Protein'] = \
-                    solution.x_dict['protein_biomass_dilution'] * \
-                    abs(stoich) * weight
+            if abs(stoich) > 1:
+                protein_stoich = stoich
         biomass_composition['Protein'] = \
-            solution.x_dict['protein_biomass_dilution'] - \
-            biomass_composition['Unmodeled Protein']
+            solution.x_dict['protein_biomass_dilution'] * protein_stoich
         biomass_composition['tRNA'] = \
             solution.x_dict['tRNA_biomass_dilution']
         biomass_composition['mRNA'] = \
@@ -415,5 +421,4 @@ class MEmodel(Model):
 
         print('Total biomass sum =', frame.sum().values[0])
         return frame.plot(kind='pie', subplots=True, legend=None,
-                          olormap=color_map)
-
+                          colormap=color_map)

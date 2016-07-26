@@ -70,6 +70,14 @@ class TranslatedGene(MEComponent):
     def amino_acid_sequence(self):
         return self.translation_data.amino_acid_sequence
 
+    def get_surface_area(self, location):
+        thickness = self._model.global_info['membrane_thickness'][location]
+        mass = self.mass
+        nm2_per_m2 = 1e18
+        molecules_per_mmol = 6.022e20
+        # return mass dependent SA from Liu et al 2014
+        return 1.21 / thickness * 2. * mass * molecules_per_mmol / nm2_per_m2
+
 
 class ProcessedProtein(MEComponent):
 

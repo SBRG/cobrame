@@ -4,9 +4,9 @@ from six import iteritems
 from minime import mu
 
 
-def _compile(expr):
+def _compile(expr, variable=mu):
     """compiles a sympy expression"""
-    return lambdify(mu, expr) if isinstance(expr, Basic) else expr
+    return lambdify(variable, expr) if isinstance(expr, Basic) else expr
 
 
 def _eval(expr, mu):
@@ -16,8 +16,8 @@ def _eval(expr, mu):
     return expr(mu) if callable(expr) else expr
 
 
-def compile_expressions(me_model):
-    """compiles symbolic exressions of mu to functions
+def compile_expressions(me_model, variable=mu):
+    """compiles symbolic expressions of mu to functions
 
     The compiled expressions dict has the following key value pairs:
     (met_index, rxn_index): stoichiometry,
@@ -31,22 +31,25 @@ def compile_expressions(me_model):
         for met, stoic in iteritems(r._metabolites):
             if isinstance(stoic, Basic):
                 expressions[(me_model.metabolites.index(met), i)] = \
-                    lambdify(mu, stoic)
+                    lambdify(variable, stoic)
         # If either the lower or upper reaction bounds are symbolic
         if isinstance(r.lower_bound, Basic) or \
                 isinstance(r.upper_bound, Basic):
-            expressions[(None, i)] = (_compile(r.lower_bound),
-                                      _compile(r.upper_bound))
+            expressions[(None, i)] = (_compile(r.lower_bound, variable),
+                                      _compile(r.upper_bound, variable))
     # Metabolite bound
     for i, metabolite in enumerate(me_model.metabolites):
         if isinstance(metabolite._bound, Basic):
-            expressions[(i, None)] = (_compile(metabolite._bound),
+            expressions[(i, None)] = (_compile(metabolite._bound, variable),
                                       metabolite._constraint_sense)
     return expressions
 
 
 def substitute_mu(lp, mu, compiled_exressions, solver_module=None):
-    """substitute mu into a constructed LP"""
+    """substitute mu into a constructed LP
+
+    mu: float
+    """
     # This only works for object-oriented solver interfaces. For other
     # solvers, need to pass in solver_module
     if solver_module is None:

@@ -466,6 +466,7 @@ class PostTranslationReaction(MEReaction):
         # folding properties
         folding_mechanism = posttranslation_data.folding_mechanism
         aggregation_propensity = posttranslation_data.aggregation_propensity
+        scaling = posttranslation_data.propensity_scaling
         if folding_mechanism:
             T = str(self._model.global_info['temperature'])
             keq_folding = posttranslation_data.keq_folding[T]
@@ -493,7 +494,7 @@ class PostTranslationReaction(MEReaction):
             stoichiometry[protein_met.id] += 1.
 
         elif folding_mechanism:
-            dilution = aggregation_propensity * (keq_folding + 1.)
+            dilution = aggregation_propensity * scaling * (keq_folding + 1.)
             stoichiometry[unprocessed_protein] -= (1. / dilution + 1.)
 
             stoichiometry[protein_met.id] += 1. / dilution
@@ -557,7 +558,7 @@ class TranscriptionReaction(MEReaction):
         except KeyError:
             warn("RNA Polymerase (%s) not found" % RNA_polymerase)
         else:
-            k_RNAP = (mu * c_ribo * kt / (mu + kt * r0)) * 3  # in hr-1 3*k_ribo
+            k_RNAP = (mu * c_ribo * kt / (mu + kt * r0)) * 3  # (3*k_ribo) hr-1
             coupling = -TU_length * mu / k_RNAP
             stoichiometry[RNAP.id] = coupling
 
@@ -706,7 +707,7 @@ class TranslationReaction(MEReaction):
             model.add_metabolites(transcript)
 
         # Calculate coupling constraints for mRNA and degradation
-        k_mRNA = mu * c_mRNA * kt / (mu + kt * r0)  # in hr-1
+        k_mRNA = mu * c_mRNA * kt / (mu + kt * r0) * 3.  # in hr-1
         RNA_amount = mu / k_mRNA
         #deg_fraction = 3. * k_deg / (3. * k_deg + mu)
         deg_fraction = 1. / (k_deg)
@@ -774,6 +775,8 @@ class TranslationReaction(MEReaction):
         # add subreactions to stoichiometry
         new_stoichiometry = self.add_subreactions(self.translation_data.id,
                                                   new_stoichiometry)
+        new_stoichiometry = self.add_modifications(self.translation_data.id,
+                                                   new_stoichiometry)
         # convert metabolite ids to cobra metabolites
         object_stoichiometry = self.get_components_from_ids(new_stoichiometry,
                                                             verbose=verbose)
