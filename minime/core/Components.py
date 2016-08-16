@@ -89,6 +89,10 @@ class ProcessedProtein(MEComponent):
         MEComponent.__init__(self, id)
         self.unprocessed_protein_id = unprocessed_protein_id
 
+    @property
+    def mass(self):
+        return self.unprocessed_protein.mass
+
 
 class Complex(MEComponent):
     @property
@@ -99,6 +103,15 @@ class Complex(MEComponent):
             if reaction.__class__.__name__ == 'MetabolicReaction':
                 reaction_list.append(reaction)
         return reaction_list
+
+    @property
+    def mass(self):
+        value = 0
+        complex_data = self._model.process_data.get_by_id(self.id)
+        for protein, coefficient in complex_data.stoichiometry.items():
+            protein_met = self._model.metabolites.get_by_id(protein)
+            value += protein_met.mass * coefficient
+        return value
 
 
 class Ribosome(Complex):

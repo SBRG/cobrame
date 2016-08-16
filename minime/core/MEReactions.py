@@ -138,12 +138,13 @@ class MEReaction(Reaction):
                     protein_length = 1.
 
                 # TODO is this backward?
-                keff = translocation_data.keff
-                if not fixed_keff:
+                # keff = translocation_data.keff
+                if fixed_keff:
                     keff = 65.
+                else:
+                    keff = translocation_data.keff / protein_length
 
-                enzyme_stoichiometry = multiplier * mu / keff / 3600. * \
-                                       protein_length * count
+                enzyme_stoichiometry = multiplier * mu / keff / 3600. * count
                 stoichiometry[enzyme] -= enzyme_stoichiometry
 
         return stoichiometry
@@ -470,7 +471,7 @@ class PostTranslationReaction(MEReaction):
         if folding_mechanism:
             T = str(self._model.global_info['temperature'])
             keq_folding = posttranslation_data.keq_folding[T]
-            k_folding = posttranslation_data.k_folding[T]
+            k_folding = posttranslation_data.k_folding[T] * 3600.  # in hr-1
 
         try:
             protein_met = metabolites.get_by_id(processed_protein)
@@ -494,11 +495,11 @@ class PostTranslationReaction(MEReaction):
             stoichiometry[protein_met.id] += 1.
 
         elif folding_mechanism:
-            dilution = aggregation_propensity * scaling * (keq_folding + 1.)
+            dilution = aggregation_propensity * scaling * (keq_folding + 1.)+1.
             stoichiometry[unprocessed_protein] -= (1. / dilution + 1.)
 
             stoichiometry[protein_met.id] += 1. / dilution
-            stoichiometry[protein_met.id.replace('_folded', '')] += 1.
+            stoichiometry[protein_met.id.replace('_folded', '')] += (1.)
         else:
             stoichiometry[unprocessed_protein] = -1.
             stoichiometry[protein_met.id] = 1.
@@ -707,7 +708,7 @@ class TranslationReaction(MEReaction):
             model.add_metabolites(transcript)
 
         # Calculate coupling constraints for mRNA and degradation
-        k_mRNA = mu * c_mRNA * kt / (mu + kt * r0) * 3.  # in hr-1
+        k_mRNA = mu * c_mRNA * kt / (mu + kt * r0) * 3.  # in hr-1 TODO should be *3
         RNA_amount = mu / k_mRNA
         #deg_fraction = 3. * k_deg / (3. * k_deg + mu)
         deg_fraction = 1. / (k_deg)

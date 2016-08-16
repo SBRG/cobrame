@@ -66,11 +66,6 @@ class MEmodel(Model):
             self._ncRNA_biomass: -1,
             self._biomass: 1,
         })
-        self.add_reactions((self._protein_biomass_dilution,
-                            self._mRNA_biomass_dilution,
-                            self._tRNA_biomass_dilution,
-                            self._rRNA_biomass_dilution,
-                            self._ncRNA_biomass_dilution))
 
         self._DNA_biomass = Constraint("DNA_biomass")
         self._DNA_biomass_dilution = SummaryVariable("DNA_biomass_dilution")
@@ -78,8 +73,19 @@ class MEmodel(Model):
             self._DNA_biomass: -1e-3,
             self._biomass: 1e-3,
         })
+
         self._DNA_biomass_dilution.lower_bound = mu
         self._DNA_biomass_dilution.upper_bound = mu
+
+        self.add_reactions((self._protein_biomass_dilution,
+                            self._mRNA_biomass_dilution,
+                            self._tRNA_biomass_dilution,
+                            self._rRNA_biomass_dilution,
+                            self._ncRNA_biomass_dilution,
+                            self._DNA_biomass_dilution))
+
+
+
 
     @property
     def unmodeled_protein(self):
@@ -398,7 +404,51 @@ class MEmodel(Model):
 
         return RNA_fractions
 
-    def make_biomass_composition_piechart(self, solution=None):
+    def get_membrane_composition(self, membrane='Inner_Membrane',
+                                 solution=None):
+        if not solution:
+            solution = self.solution
+
+        composition = {}
+
+        composition['Dummy_protein'] = solution.x_dict[
+                                           'SA_demand_dummy_protein_' + membrane]
+        composition['Modeled_protein'] = solution.x_dict[
+                                             'SA_demand_protein_' + membrane]
+        composition['Lipid'] = solution.x_dict[
+                                   'SA_demand_lipid_' + membrane]
+
+        if membrane == 'Outer_Membrane':
+            composition['LPS'] = solution.x_dict[
+                                     'SA_demand_lps_' + membrane]
+            composition['Lipoprotein'] = solution.x_dict[
+                                             'SA_demand_lipoprotein_' + membrane]
+        return composition
+
+    def get_membrane_protein(self, membrane='Inner_Membrane', solution=None):
+        if not solution:
+            solution = self.solution
+
+        composition = defaultdict(float)
+
+        membrane_SA = self.metabolites.get_by_id('SA_protein_' + membrane)
+        for rxn in membrane_SA.reactions:
+            if membrane_SA in rxn.products:
+                coeff = rxn._metabolites[membrane_SA]
+                flux = coeff * solution.x_dict[rxn.id]
+                if flux != 0:
+                    composition[
+                        rxn.id.replace('translocation_', '')] += flux
+            elif 'lipid_modification' in rxn.id:
+                coeff = rxn._metabolites[membrane_SA]
+                flux = coeff * solution.x_dict[rxn.id]
+                if flux != 0:
+                    composition[rxn.id.split('_')[0]] += flux
+        composition['dummy'] = solution.x_dict[
+                                   'SA_demand_dummy_protein_' + membrane]
+        return composition
+
+    def make_composition_piechart(self, kind='Biomass', solution=None):
         try:
             import brewer2mpl
         except ImportError:
@@ -415,10 +465,40 @@ class MEmodel(Model):
             solution = self.solution
 
         summary = {}
-        summary['Biomass composition'] = \
-            self.get_biomass_composition(solution=solution)
-        frame = pandas.DataFrame.from_dict(summary) / solution.f
+        if kind == 'Biomass':
+            summary['Biomass composition'] = \
+                self.get_biomass_composition(solution=solution)
+            frame = pandas.DataFrame.from_dict(summary) / solution.f
 
-        print('Total biomass sum =', frame.sum().values[0])
+        elif kind == 'Inner_Membrane':
+            SA = solution.x_dict['SA_demand_Inner_Membrane']
+            summary['Inner_Membrane'] = \
+                self.get_membrane_composition(solution=solution, membrane=kind)
+            frame = pandas.DataFrame.from_dict(summary) / SA
+        elif kind == 'Outer_Membrane':
+            SA = solution.x_dict['SA_demand_Outer_Membrane']
+            summary['Outer_Membrane'] = \
+                self.get_membrane_composition(solution=solution, membrane=kind)
+            frame = pandas.DataFrame.from_dict(summary) / SA
+        elif kind == 'Protein_Inner_Membrane':
+            SA = solution.x_dict['SA_demand_protein_Inner_Membrane'] + \
+                 solution.x_dict['SA_demand_dummy_protein_Inner_Membrane']
+            summary['Inner_Membrane_Protein'] = \
+                self.get_membrane_protein(solution=solution,
+                                          membrane='Inner_Membrane')
+            frame = pandas.DataFrame.from_dict(summary) / SA
+        elif kind == 'Protein_Outer_Membrane':
+            SA = solution.x_dict['SA_demand_protein_Outer_Membrane'] + \
+                 solution.x_dict['SA_demand_dummy_protein_Outer_Membrane']
+            summary['Outer_Membrane_Protein'] = \
+                self.get_membrane_protein(solution=solution,
+                                          membrane='Outer_Membrane')
+            frame = pandas.DataFrame.from_dict(summary) / SA
+
+        else:
+            raise('%s not a valid composition kind' % kind)
+
+        print('Component sum =', frame.sum().values[0])
+        frame = frame[frame > 1e-4].dropna()
         return frame.plot(kind='pie', subplots=True, legend=None,
                           colormap=color_map)
