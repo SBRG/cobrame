@@ -23,6 +23,10 @@ def save_json_me(me0, file_name, pretty=False):
         if isinstance(rxn.upper_bound, Basic):
             rxn.upper_bound = str(rxn.upper_bound)
 
+    for met in me.metabolites:
+        if isinstance(met._bound, Basic):
+            met._bound = str(met._bound)
+
     save_json_model(me, file_name)
 
 
@@ -50,6 +54,13 @@ def load_json_me(file_name):
             rxn.upper_bound = float(rxn.upper_bound)
         except ValueError:
             rxn.upper_bound = sympify(rxn.upper_bound)
+
+    for met in me.metabolites:
+        b = met._bound
+        try:
+            met._bound = float(b)
+        except ValueError:
+            met._bound = sympify(b)
 
     return me
 
