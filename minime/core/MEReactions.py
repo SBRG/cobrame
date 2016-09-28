@@ -128,9 +128,10 @@ class MEReaction(Reaction):
                     translocation_data.enzyme_dict):
                 length_dependent = enzyme_info['length_dependent']
                 fixed_keff = enzyme_info['fixed_keff']
+                bnum = protein_id.replace('protein_', '')
 
                 if multiplier_dict:
-                    multiplier = multiplier_dict[enzyme].get(protein_id, 1)
+                    multiplier = multiplier_dict[enzyme].get(bnum, 1)
                 else:
                     multiplier = 1
 

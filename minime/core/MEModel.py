@@ -348,157 +348,25 @@ class MEmodel(Model):
                 t_process_id = t.id.replace('transcription_', '')
                 self.transcription_data.remove(t_process_id)
 
-    def get_biomass_composition(self, solution=None):
-        if solution is None:
-            solution = self.solution
-        biomass_composition = defaultdict(float)
-        for met, stoich in self._protein_biomass_dilution.metabolites.items():
-            if abs(stoich) > 1:
-                protein_stoich = stoich
-        biomass_composition['Protein'] = \
-            solution.x_dict['protein_biomass_dilution'] * protein_stoich
-        biomass_composition['tRNA'] = \
-            solution.x_dict['tRNA_biomass_dilution']
-        biomass_composition['mRNA'] = \
-            solution.x_dict['mRNA_biomass_dilution']
-        biomass_composition['ncRNA'] = \
-            solution.x_dict['ncRNA_biomass_dilution']
-        biomass_composition['rRNA'] = \
-            solution.x_dict['rRNA_biomass_dilution']
-        biomass_composition['Other'] = \
-            solution.x_dict['biomass_component_dilution']
+    def set_SASA_keffs(self, avg_keff):
+        SASA_list = []
+        for rxn in self.reactions:
+            if hasattr(rxn, 'keff') and rxn.complex_data is not None:
+                weight = rxn.complex_data.complex.mass
+                SASA = weight ** (3. / 4.)
+                if SASA == 0:
+                    warn('Keff not updated for %s' % rxn)
+                else:
+                    SASA_list.append(SASA)
 
-        return biomass_composition
+        avg_SASA = array(SASA_list).mean()
 
-    def RNA_to_protein_ratio(self, solution=None):
-        composition = self.get_biomass_composition(solution=solution)
-        RNA_to_protein = (composition['mRNA'] + composition['tRNA'] +
-                          composition['rRNA'] + composition['ncRNA']) / \
-                         (composition['Protein'] +
-                          composition['Unmodeled Protein'])
-        return RNA_to_protein
-
-    def get_RNA_fractions_dict(self, solution=None):
-        RNA_fractions = {}
-        composition = self.get_biomass_composition(solution=solution)
-
-        tRNA_to_RNA = (composition['tRNA']) / (
-        composition['mRNA'] + composition['tRNA'] + composition['rRNA'] +
-        composition['ncRNA'])
-        RNA_fractions['tRNA'] = tRNA_to_RNA
-
-        rRNA_to_RNA = (composition['rRNA']) / (
-        composition['mRNA'] + composition['tRNA'] + composition['rRNA'] +
-        composition['ncRNA'])
-        RNA_fractions['rRNA'] = rRNA_to_RNA
-
-        mRNA_to_RNA = (composition['mRNA']) / (
-        composition['mRNA'] + composition['tRNA'] + composition['rRNA'] +
-        composition['ncRNA'])
-        RNA_fractions['mRNA'] = mRNA_to_RNA
-
-        ncRNA_to_RNA = (composition['ncRNA']) / (
-        composition['mRNA'] + composition['tRNA'] + composition['rRNA'] +
-        composition['ncRNA'])
-        RNA_fractions['ncRNA'] = ncRNA_to_RNA
-
-        return RNA_fractions
-
-    def get_membrane_composition(self, membrane='Inner_Membrane',
-                                 solution=None):
-        if not solution:
-            solution = self.solution
-
-        composition = {}
-
-        composition['Dummy_protein'] = solution.x_dict[
-                                           'SA_demand_dummy_protein_' + membrane]
-        composition['Modeled_protein'] = solution.x_dict[
-                                             'SA_demand_protein_' + membrane]
-        composition['Lipid'] = solution.x_dict[
-                                   'SA_demand_lipid_' + membrane]
-
-        if membrane == 'Outer_Membrane':
-            composition['LPS'] = solution.x_dict[
-                                     'SA_demand_lps_' + membrane]
-            composition['Lipoprotein'] = solution.x_dict[
-                                             'SA_demand_lipoprotein_' + membrane]
-        return composition
-
-    def get_membrane_protein(self, membrane='Inner_Membrane', solution=None):
-        if not solution:
-            solution = self.solution
-
-        composition = defaultdict(float)
-
-        membrane_SA = self.metabolites.get_by_id('SA_protein_' + membrane)
-        for rxn in membrane_SA.reactions:
-            if membrane_SA in rxn.products:
-                coeff = rxn._metabolites[membrane_SA]
-                flux = coeff * solution.x_dict[rxn.id]
-                if flux != 0:
-                    composition[
-                        rxn.id.replace('translocation_', '')] += flux
-            elif 'lipid_modification' in rxn.id:
-                coeff = rxn._metabolites[membrane_SA]
-                flux = coeff * solution.x_dict[rxn.id]
-                if flux != 0:
-                    composition[rxn.id.split('_')[0]] += flux
-        composition['dummy'] = solution.x_dict[
-                                   'SA_demand_dummy_protein_' + membrane]
-        return composition
-
-    def make_composition_piechart(self, kind='Biomass', solution=None):
-        try:
-            import brewer2mpl
-        except ImportError:
-            color_map = None
-        else:
-            color_map = brewer2mpl.wesanderson.Zissou.mpl_colormap
-
-        try:
-            import pandas
-        except ImportError:
-            raise Exception("Pandas must be installed to get biomass piechart")
-
-        if solution is None:
-            solution = self.solution
-
-        summary = {}
-        if kind == 'Biomass':
-            summary['Biomass composition'] = \
-                self.get_biomass_composition(solution=solution)
-            frame = pandas.DataFrame.from_dict(summary) / solution.f
-
-        elif kind == 'Inner_Membrane':
-            SA = solution.x_dict['SA_demand_Inner_Membrane']
-            summary['Inner_Membrane'] = \
-                self.get_membrane_composition(solution=solution, membrane=kind)
-            frame = pandas.DataFrame.from_dict(summary) / SA
-        elif kind == 'Outer_Membrane':
-            SA = solution.x_dict['SA_demand_Outer_Membrane']
-            summary['Outer_Membrane'] = \
-                self.get_membrane_composition(solution=solution, membrane=kind)
-            frame = pandas.DataFrame.from_dict(summary) / SA
-        elif kind == 'Protein_Inner_Membrane':
-            SA = solution.x_dict['SA_demand_protein_Inner_Membrane'] + \
-                 solution.x_dict['SA_demand_dummy_protein_Inner_Membrane']
-            summary['Inner_Membrane_Protein'] = \
-                self.get_membrane_protein(solution=solution,
-                                          membrane='Inner_Membrane')
-            frame = pandas.DataFrame.from_dict(summary) / SA
-        elif kind == 'Protein_Outer_Membrane':
-            SA = solution.x_dict['SA_demand_protein_Outer_Membrane'] + \
-                 solution.x_dict['SA_demand_dummy_protein_Outer_Membrane']
-            summary['Outer_Membrane_Protein'] = \
-                self.get_membrane_protein(solution=solution,
-                                          membrane='Outer_Membrane')
-            frame = pandas.DataFrame.from_dict(summary) / SA
-
-        else:
-            raise('%s not a valid composition kind' % kind)
-
-        print('Component sum =', frame.sum().values[0])
-        frame = frame[frame > 1e-4].dropna()
-        return frame.plot(kind='pie', subplots=True, legend=None,
-                          colormap=color_map)
+        # redo scaling average SASA to 65.
+        for rxn in self.reactions:
+            if hasattr(rxn, 'keff') and rxn.complex_data is not None:
+                weight = rxn.complex_data.complex.mass
+                SASA = weight ** (3. / 4.)
+                if SASA == 0:
+                    SASA = avg_SASA
+                rxn.keff = SASA * avg_keff / avg_SASA
+                rxn.update()

@@ -35,6 +35,12 @@ rna_no_ppi = {
     'ctp_c': 304.175,
     'atp_c': 328.201}
 
+# Mass of the DNA nucleotides with the diphosphate removed.
+dna_mw_no_ppi = {'datp': 312.202,
+                 'dctp': 286.16,
+                 'dgtp': 328.201,
+                 'dttp': 303.187}
+
 
 def compute_protein_mass(amino_acid_count):
     """compute protein mass in kDa from amino acid count
