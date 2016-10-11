@@ -363,8 +363,8 @@ class TranslationData(ProcessData):
             try:
                 all_subreactions.get_by_id(termination_subreaction_id)
             except KeyError:
-                print("Termination subreaction '%s' for '%s' not found" %
-                      (termination_subreaction_id, self.id))
+                warn("Termination subreaction '%s' not found" %
+                     (termination_subreaction_id))
             else:
                 termination_subreactions.append(termination_subreaction_id)
         return termination_subreactions

@@ -100,8 +100,7 @@ def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
 
 
 def add_translation_reaction(me_model, locus_id, dna_sequence=None,
-                             update=False, terminator_dict={},
-                             methionine_cleaved=None, folding_dict={}):
+                             update=False):
     """
     Creates and adds a TranslationReaction to the ME-model as well as the
     associated TranslationData
@@ -137,29 +136,6 @@ def add_translation_reaction(me_model, locus_id, dna_sequence=None,
     translation_data = TranslationData(locus_id, me_model, "RNA_" + locus_id,
                                        "protein_" + locus_id)
     translation_data.nucleotide_sequence = dna_sequence
-    translation_data.term_enzyme = terminator_dict.get(
-            translation_data.last_codon)
-
-    if methionine_cleaved and locus_id in methionine_cleaved:
-        translation_data.subreactions['N_terminal_methionine_cleavage'] = 1
-
-    for folding_type in folding_dict:
-        if locus_id in folding_dict[folding_type]:
-            translation_data.subreactions[folding_type] = 1
-
-    for subreaction, value in translation_data.elongation_subreactions.items():
-        translation_data.subreactions[subreaction] = value
-
-    for subreaction in translation_data.translation_start_subreactions:
-        translation_data.subreactions[subreaction] = 1
-
-    for subreaction in translation_data.translation_termination_subreactions:
-        translation_data.subreactions[subreaction] = 1
-
-    # add organism specific subreactions associated with peptide processing
-    global_info = me_model.global_info
-    for subrxn, value in global_info['peptide_processing_subreactions'].items():
-        translation_data.subreactions[subrxn] = value
 
     # Create and add TranslationReaction with TranslationData
     translation_reaction = TranslationReaction("translation_" + locus_id)
@@ -170,8 +146,8 @@ def add_translation_reaction(me_model, locus_id, dna_sequence=None,
         translation_reaction.update()
 
 
-def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_modifications,
-                                      tRNA_to_codon, verbose=True):
+def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_to_codon,
+                                      verbose=True):
     """
     Adds tRNA charging reactions for all tRNAs in ME-model
 
@@ -216,8 +192,6 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_modifications,
             charging_reaction = tRNAChargingReaction("charging_tRNA_" + tRNA +
                                                      "_" + codon)
             charging_reaction.tRNAData = tRNA_data
-            if tRNA_modifications:
-                tRNA_data.modifications = tRNA_modifications[tRNA]
 
             me_model.add_reaction(charging_reaction)
             charging_reaction.update(verbose=verbose)
@@ -225,10 +199,8 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_modifications,
 
 def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
                                  element_types={'CDS', 'rRNA', 'tRNA', 'ncRNA'},
-                                 tRNA_modifications=None, verbose=True,
-                                 translation_terminators={},
-                                 methionine_cleaved=[], folding_dict={},
-                                 frameshift_dict={}, tRNA_to_codon={}, update=True):
+                                 verbose=True, frameshift_dict={},
+                                 tRNA_to_codon={}, update=True):
 
     # TODO handle special RNAse without type ('b3123')
     # TODO: move tRNA mods and folding its own function
@@ -347,10 +319,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
 
         # ---- Add translation reaction for mRNA ----
         if RNA_type == "mRNA":
-            add_translation_reaction(me_model, bnum, dna_sequence=seq,
-                                     terminator_dict=translation_terminators,
-                                     methionine_cleaved=methionine_cleaved,
-                                     folding_dict=folding_dict)
+            add_translation_reaction(me_model, bnum, dna_sequence=seq)
 
         # ---- Create dict to use for adding tRNAChargingReactions ----
         # tRNA_aa = {'amino_acid':'tRNA'}
@@ -396,8 +365,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             me_model.transcription_data.get_by_id(TU_id).RNA_products.add(
                     "RNA_" + bnum)
 
-    convert_aa_codes_and_add_charging(me_model, tRNA_aa,
-                                      tRNA_modifications, tRNA_to_codon,
+    convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_to_codon,
                                       verbose=verbose)
 
     if update:

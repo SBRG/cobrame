@@ -332,7 +332,8 @@ class MetabolicReaction(MEReaction):
     @complex_data.setter
     def complex_data(self, process_data):
         self._complex_data = process_data
-        process_data._parent_reactions.add(self.id)
+        if process_data is not None:
+            process_data._parent_reactions.add(self.id)
     _complex_data = None
 
     @property
@@ -347,7 +348,7 @@ class MetabolicReaction(MEReaction):
 
     keff = 65.  # in per second
     reverse = False
-    complex_dilution_list = set()
+    complex_dilution_set = set()
 
     def update(self, verbose=True):
         self.clear_metabolites()
@@ -363,7 +364,7 @@ class MetabolicReaction(MEReaction):
         sign = -1 if self.reverse else 1
         for component, value in iteritems(stoichiometric_data.stoichiometry):
             new_stoichiometry[component] += value * sign
-            if component in self.complex_dilution_list:
+            if component in self.complex_dilution_set:
                 new_stoichiometry[component] += - mu / self.keff / 3600.
 
         # Convert component ids to cobra metabolites
