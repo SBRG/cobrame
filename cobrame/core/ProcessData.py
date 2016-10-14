@@ -40,9 +40,16 @@ class ProcessData(object):
 
 
 class StoichiometricData(ProcessData):
-    """Encodes the stoichiometry  for a reaction.
+    """Encodes the stoichiometry for a metabolic reaction.
 
-    Used by Metabolic Reactions
+    This stoichiometry and ID will often link directly to M-model reactions
+
+    :param dict _stoichiometry:
+        Dictionary of {metabolite_id: stoichiometry}
+
+    :param defaultdict subreactions:
+        This should rarely contain anything. Only in special cases where
+        a second diluted enzyme needs added to metabolic reaction
     """
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
@@ -85,9 +92,23 @@ class SubreactionData(ProcessData):
 
 class ComplexData(ProcessData):
 
+    """Contains all information associated with the formation of an
+    enzyme complex
+
+    :param dict stoichiometry:
+        Dictionary containing {protein_id: count} for all protein subunits
+        comprising enzyme complex
+
+    :param dict modifications:
+        Dictionary of {modfication_data_id: count} for all protein
+        modifications. This can include cofactor/prosthetic group binding
+        or enzyme side group addition.
+
+    """
+
     @property
     def formation(self):
-        """a read-only link to the formation reaction"""
+        """a read-only link to the formation reaction object"""
         try:
             return self._model.reactions.get_by_id("formation_" + self.id)
         except KeyError:
@@ -100,6 +121,9 @@ class ComplexData(ProcessData):
 
     @property
     def complex_id(self):
+        """There are cases where multiple equivalent processes can result in
+        the same final complex. This allows the equivalent final complex
+        complex_id to be queried. This only needs set in the above case"""
         return self.id if self._complex_id is None else self._complex_id
 
     @complex_id.setter
@@ -114,14 +138,14 @@ class ComplexData(ProcessData):
         self.chaperones = {}
         # {ModificationData.id : number}
         self.modifications = {}
-        self.unmodified_complex_id = ''
+        self.unmodified_complex_id = ''  # TODO confirm this is unused
         self._complex_id = None  # assumed to be the same as id if None
 
     def create_complex_formation(self, verbose=True):
         """creates a complex formation reaction
 
         This assumes none exists already. Will create a reaction (prefixed by
-        'formation_') which forms the complex"""
+        "formation_") which forms the complex"""
         formation_id = "formation_" + self.id
         if formation_id in self._model.reactions:
             raise ValueError("reaction %s already in model" % formation_id)
@@ -244,8 +268,6 @@ class TranslationData(ProcessData):
         model.translation_data.append(self)
         self.mRNA = mRNA
         self.protein = protein
-        # Used if not creating a "MiniME" model
-        self.using_ribosome = True
         self.subreactions = defaultdict(int)
         self.modifications = defaultdict(int)
 

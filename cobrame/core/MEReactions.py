@@ -42,7 +42,7 @@ class MEReaction(Reaction):
                                   {metabolite_id: float * (sympy.Symbol)}
 
         scale: float
-           Some processes (ie. tRNA charging) are reformulated such other
+           Some processes (ie. tRNA charging) are reformulated such that other
            involved metabolites need scaling
 
 
@@ -323,7 +323,24 @@ class MEReaction(Reaction):
 
 
 class MetabolicReaction(MEReaction):
-    """Metabolic reaction including required enzymatic complex"""
+    """Metabolic reaction including required enzymatic complex
+
+    This reaction class's update function processes the a information contained
+    in the complex data for the enzyme that catalyzes this reaction as well as
+    the stoichiometric data which contains the stoichiometry of the metabolic
+    conversion being performed (i.e. the stoichiometry of the M-model reaction
+    analog)
+
+    :param float keff:
+        The keff couples enzymatic dilution to metabolic flux
+    :param Boolean reverse:
+        If True, the reaction corresponds to the reverse direction of the
+        reaction. This is necessary since all reversible enzymatic reactions
+        in an ME-model are broken into two irreversible reactions
+    :param set complex_dilution_set:
+        If an enzyme involved of this reaction acts as a "carrier" (i.e. enzyme
+        that transfers a sidechain to another enzyme or metabolite)
+    """
 
     @property
     def complex_data(self):
@@ -690,6 +707,10 @@ class TranslationReaction(MEReaction):
         c_ribo = m_rr / f_rRNA / m_aa
         c_mRNA = m_nt / f_mRNA / m_aa
 
+        # -----------------Add Amino Acids----------------------------------
+        for aa, value in self._translation_data.amino_acid_count.items():
+            new_stoichiometry[aa] = -value
+
         # -----------------Add Ribosome Coupling----------------------------
         try:
             ribosome = metabolites.get_by_id("ribosome")
@@ -713,7 +734,7 @@ class TranslationReaction(MEReaction):
         k_mRNA = mu * c_mRNA * kt / (mu + kt * r0) * 3.  # in hr-1 TODO should be *3
         RNA_amount = mu / k_mRNA
         #deg_fraction = 3. * k_deg / (3. * k_deg + mu)
-        deg_fraction = 1. / (k_deg)
+        deg_fraction = 1. / (k_deg) if k_deg != 0 else 0
         deg_amount = deg_fraction * RNA_amount
 
         # Add mRNA coupling to stoichiometry
