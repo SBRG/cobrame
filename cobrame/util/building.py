@@ -161,12 +161,6 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_to_codon,
 
             {locus_id: amino_acid_3_letter_code}
 
-        tRNA_modifications: collections.defaultdict
-            Defaultdict of tRNA locus ID to dictionary of modification ID to
-            number of modifications needed
-
-            {locus_id: {modification_id: value}}
-
         verbose: Boolean
             If True, display metabolites that were not previously added to the
             model and were thus added when creating charging reactions
@@ -203,7 +197,6 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
                                  tRNA_to_codon={}, update=True):
 
     # TODO handle special RNAse without type ('b3123')
-    # TODO: move tRNA mods and folding its own function
     """Creates and adds transcription and translation reactions using genomic
      information from the organism's genbank file. Adds in the basic
      requirements for these reactions. Organism specific components are added
@@ -232,12 +225,6 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             feature.types in this set. This uses the nomenclature of the
             genbank file (gb_filename)
 
-        tRNA_modifications: collections.defaultdict
-            Defaultdict of tRNA locus ID to dictionary of modification ID to
-            number of modifications needed. If None then no modifications will
-            be added to the tRNA
-
-            {locus_id: {modification_id: value}}
 
         verbose: Boolean
             If True, display metabolites that were not previously added to the

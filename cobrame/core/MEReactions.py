@@ -187,7 +187,7 @@ class MEReaction(Reaction):
                 self._model.add_metabolites([new_met])
         return object_stoichiometry
 
-    def check_ME_mass_balance(self):
+    def check_mass_balance(self):
         """Compute mass and charge balance for the reaction
 
         returns a dict of {element: amount} for unbalanced elements.

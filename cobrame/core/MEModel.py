@@ -5,6 +5,7 @@ import re
 from cobra import Model, DictList
 
 from cobrame.core.MEReactions import *
+from cobrame.core.ProcessData import *
 from cobrame.core.Components import Constraint
 from cobrame.util import mu
 
@@ -31,6 +32,9 @@ class MEmodel(Model):
         self.add_reaction(self._biomass_dilution)
         self._biomass_dilution.upper_bound = mu
         self._biomass_dilution.lower_bound = mu
+        # maintenance energy
+        self._gam = 0.
+        self._ngam = 0.
         # Unmodeled protein is handled by converting protein_biomass to
         # biomass, and requiring production of the appropriate amount of dummy
         # protein
@@ -70,12 +74,9 @@ class MEmodel(Model):
         self._DNA_biomass = Constraint("DNA_biomass")
         self._DNA_biomass_dilution = SummaryVariable("DNA_biomass_dilution")
         self._DNA_biomass_dilution.add_metabolites({
-            self._DNA_biomass: -1e-3,
-            self._biomass: 1e-3,
+            self._DNA_biomass: -1,
+            self._biomass: 1,
         })
-
-        self._DNA_biomass_dilution.lower_bound = mu
-        self._DNA_biomass_dilution.upper_bound = mu
 
         self.add_reactions((self._protein_biomass_dilution,
                             self._mRNA_biomass_dilution,
@@ -83,9 +84,6 @@ class MEmodel(Model):
                             self._rRNA_biomass_dilution,
                             self._ncRNA_biomass_dilution,
                             self._DNA_biomass_dilution))
-
-
-
 
     @property
     def unmodeled_protein(self):
@@ -110,6 +108,29 @@ class MEmodel(Model):
         self._protein_biomass_dilution.add_metabolites(
             {self._biomass: 1 + amount}, combine=False)
         self._unmodeled_protein_fraction = value
+
+    @property
+    def gam(self):
+        return self._gam
+
+    @gam.setter
+    def gam(self, value):
+        atp_hydrolysis = {'atp_c': -1, 'h2o_c': -1, 'adp_c': 1, 'h_c': 1,
+                          'pi_c': 1}
+        for met, coeff in atp_hydrolysis.items():
+            self.reactions.biomass_component_demand.add_metabolites({
+                met: value * coeff}, combine=False)
+        self._gam = value
+
+    @property
+    def ngam(self):
+        return self._ngam
+
+    @ngam.setter
+    def ngam(self, value):
+        self.stoichiometric_data.ATPM.lower_bound = value
+        self.reactions.ATPM_FWD_SPONT.update()
+        self._ngam = value
 
     def get_metabolic_flux(self, solution=None):
         """extract the flux state for metabolic reactions"""
@@ -359,6 +380,26 @@ class MEmodel(Model):
                 else:
                     SASA_list.append(SASA)
 
+        for data in self.process_data:
+            cplx_mw = 0.
+            if isinstance(data, TranslocationData):
+                continue
+            if hasattr(data, 'keff') and data.enzyme is not None:
+                if type(data.enzyme) == str:
+                    cplxs = [data.enzyme]
+                else:
+                    cplxs = data.enzyme
+                for cplx in cplxs:
+                    if cplx in self.complex_data:
+                        try:
+                            cplx_mw += self.metabolites.get_by_id(cplx).mass ** (3. / 4)
+                        except:
+                            print cplx, data
+                    elif cplx.split('_mod_')[0] in self.complex_data:
+                        cplx_mw += self.metabolites.get_by_id(cplx.split('_mod_')[0]).mass ** (3. / 4)
+
+                SASA_list.append(cplx_mw)
+
         avg_SASA = array(SASA_list).mean()
 
         # redo scaling average SASA to 65.
@@ -368,5 +409,27 @@ class MEmodel(Model):
                 SASA = weight ** (3. / 4.)
                 if SASA == 0:
                     SASA = avg_SASA
+                    print 'bad', rxn
                 rxn.keff = SASA * avg_keff / avg_SASA
-                rxn.update()
+        for data in self.process_data:
+            SASA = 0.
+            if isinstance(data, TranslocationData):
+                continue
+            if hasattr(data, 'keff') and data.enzyme is not None:
+                if data.enzyme == str:
+                    cplxs = [data.enzyme]
+                else:
+                    cplxs = data.enzyme
+                for cplx in cplxs:
+                    if cplx in self.complex_data:
+                        SASA += self.metabolites.get_by_id(cplx).mass ** (3. / 4)
+                    elif cplx.split('_mod_')[0] in self.complex_data:
+                        SASA += self.metabolites.get_by_id(
+                            cplx.split('_mod_')[0]).mass ** (3. / 4)
+
+                if SASA == 0:
+                    SASA = avg_SASA
+                    print 'bad', data
+                data.keff = SASA * avg_keff / avg_SASA
+
+        self.update()

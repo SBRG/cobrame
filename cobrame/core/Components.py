@@ -63,6 +63,15 @@ class TranslatedGene(MEComponent):
         return complex_list
 
     @property
+    def metabolic_reactions(self):
+        """read-only link to the metabolic reactions that the gene is involved
+        in"""
+        metabolic_reactions = []
+        for complexes in self.complexes:
+            metabolic_reactions.extend(complexes.metabolic_reactions)
+        return metabolic_reactions
+
+    @property
     def mass(self):
         return self.translation_data.mass
 
