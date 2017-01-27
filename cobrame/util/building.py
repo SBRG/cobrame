@@ -137,6 +137,12 @@ def add_translation_reaction(me_model, locus_id, dna_sequence=None,
                                        "protein_" + locus_id)
     translation_data.nucleotide_sequence = dna_sequence
 
+    # Add RNA to model if it doesn't exist
+    if "RNA_" + locus_id not in me_model.metabolites:
+        RNA = TranscribedGene('RNA_c')
+        RNA.nucleotide_sequence = dna_sequence
+        me_model.add_metabolites(RNA)
+
     # Create and add TranslationReaction with TranslationData
     translation_reaction = TranslationReaction("translation_" + locus_id)
     me_model.add_reaction(translation_reaction)
@@ -414,7 +420,7 @@ def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
 
 
 def add_generic_RNase(me_model):
-
+    raise EOFError('depreciated')
     generic_RNase_list = eval('generic_RNase_list')
 
     for cplx in generic_RNase_list:
@@ -431,7 +437,7 @@ def add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme=None):
 
 
 def add_excision_machinery(me_model):
-
+    raise EOFError('depreciated')
     excision_types = ['rRNA_containing', 'monocistronic',
                       'polycistronic_wout_rRNA']
     for excision in excision_types:
@@ -455,7 +461,7 @@ def add_dummy_reactions(me_model, dna_seq, update=True):
     dummy = StoichiometricData("dummy_reaction", me_model)
     dummy.lower_bound = 0
     dummy.upper_bound = 1000
-    dummy._stoichiometry = {}
+    dummy._stoichiometry = {'CPLX_dummy': -1}
 
     create_transcribed_gene(me_model, 'dummy', 0, len(dna_seq), dna_seq, '+',
                             'mRNA')
@@ -466,7 +472,7 @@ def add_dummy_reactions(me_model, dna_seq, update=True):
     try:
         complex_data = ComplexData("CPLX_dummy", me_model)
     except ValueError:
-        print 'CPLX_dummy already in model'
+        warn('CPLX_dummy already in model')
         complex_data = me_model.complex_data.get_by_id('CPLX_dummy')
     complex_data.stoichiometry = {"protein_dummy": 1}
     if update:
@@ -481,37 +487,6 @@ def add_complex_stoichiometry_data(me_model, ME_complex_dict):
         # stoichiometry is a defaultdict so much build as follows
         for complex, value in stoichiometry.items():
             complex_data.stoichiometry[complex] = value
-
-
-def add_modication_data(me_model, mod_id, mod_dict, enzyme=None, keff=65):
-    warn('deprecated')
-    try:
-        mod = me_model.modification_data.get_by_id(mod_id)
-    except:
-        mod = ModificationData(mod_id, me_model)
-        mod.stoichiometry = mod_dict
-
-    if not enzyme:
-        mod.enzyme = enzyme
-        mod.keff = keff
-
-
-def add_complex_modification_data(me_model, modification_dict):
-    warn('deprecated')
-    for mod_complex_id, mod_complex_info in iteritems(modification_dict):
-
-        unmod_complex_id, mods = mod_complex_info
-        unmod_complex = me_model.complex_data.get_by_id(unmod_complex_id)
-
-        cplx = ComplexData(mod_complex_id, me_model)
-        cplx.stoichiometry = unmod_complex.stoichiometry
-        cplx.translocation = unmod_complex.translocation
-        cplx.chaperones = unmod_complex.chaperones
-
-        for mod_comp, mod_count in iteritems(mods):
-            mod_id = "mod_" + mod_comp
-            cplx.modifications[mod_id] = -mod_count
-            add_modication_data(me_model, mod_id, {mod_comp: -1})
 
 
 def add_complex_to_model(me_model, complex_id, complex_stoichiometry,
@@ -541,14 +516,36 @@ def add_complex_to_model(me_model, complex_id, complex_stoichiometry,
         complex_data.modifications[modification] = value
 
 
+def add_complex_modification_data(me_model, metabolite):
+    """
+    Creates a ModificationData object for each modification passed in via
+    the complex_modification_dict, if one doesn't already exist
+
+    It's assumed every complex modification occurs spontaneously
+    and adds one equivalent of the modification metabolite
+
+    If a modification uses an enzyme this can be updated after the
+    ModificationData object is already created
+
+
+    Args:
+        me_model: class:cobrame.MEModel
+        metabolite: str
+            ID of the metabolite that the enzyme complex is being modified by
+
+    """
+
+    modification_id = 'mod_' + metabolite
+    if modification_id not in me_model.modification_data:
+        mod = ModificationData(modification_id, me_model)
+        mod.stoichiometry = {metabolite: -1.}
+
+
 def add_model_complexes(me_model, complex_stoichiometry_dict,
                         complex_modification_dict):
     """
     Construct ComplexData for complexes into MEModel from its subunit
-    stoichiometry, and a dictionary of its modification metabolites. If a
-    the given modification_data for a metabolite is not in the model,
-    it will be added automatically.
-
+    stoichiometry, and a dictionary of its modification metabolites.
 
     Intended to be used as a function for large-scale complex addition.
 
@@ -572,16 +569,11 @@ def add_model_complexes(me_model, complex_stoichiometry_dict,
     for modified_complex_id, info in complex_modification_dict.items():
         modification_dict = {}
         for metabolite, number in info['modifications'].items():
-            modification_id = 'mod_' + metabolite
-            if modification_id not in me_model.modification_data:
-                mod = ModificationData(modification_id, me_model)
-                # Assumed every complex modification occurs spontaneously
-                # and adds one equivalent of the modification metabolite
-                # TODO Add modifications separately before adding complexes
-                mod.stoichiometry = {metabolite: -1.}
-            modification_dict[modification_id] = -number
+            add_complex_modification_data(me_model, metabolite)
+            modification_dict['mod_' + metabolite] = -number
 
-        core_enzyme = complex_modification_dict[modified_complex_id]['core_enzyme']
+        core_enzyme = \
+            complex_modification_dict[modified_complex_id]['core_enzyme']
         stoichiometry = complex_stoichiometry_dict[core_enzyme]
 
         add_complex_to_model(me_model, modified_complex_id, stoichiometry,
@@ -622,7 +614,7 @@ def add_metabolic_reaction_to_model(me_model, stoichiometric_data_id,
         stoichiometric_data = me_model.stoichiometric_data.get_by_id(stoichiometric_data_id)
     except KeyError:
         raise Exception("Stoichiometric data for %s has not been added to"
-                        "model" % stoichiometric_data_id)
+                        " model" % stoichiometric_data_id)
 
     # Get complex data and id based on arguments passed into function
     if type(complex_id) == str:
@@ -707,10 +699,7 @@ def add_reactions_from_stoichiometric_data(me_model, rxn_to_cplx_dict,
         try:
             complexes_list = rxn_to_cplx_dict[reaction_data.id]
         except KeyError:
-            if reaction_data.id == "dummy_reaction":
-                complexes_list = ["CPLX_dummy"]
-            else:
-                complexes_list = [None]
+            complexes_list = [None]
 
         # Add metabolic reactions for each isozyme
         for complex_id in complexes_list:

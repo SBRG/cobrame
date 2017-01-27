@@ -310,7 +310,8 @@ class TranslationData(ProcessData):
 
         # Remove one methionine (AUG) from codon count to account for start
         first_codon = self.first_codon
-        if first_codon in self._model.global_info["met_start_codons"]:
+        start_codons = self._model.global_info.get("met_start_codons", {})
+        if first_codon in start_codons:
             codon_count[first_codon] -= 1
         else:
             warn("%s starts with '%s' which is not a start codon" %
@@ -338,7 +339,7 @@ class TranslationData(ProcessData):
         for codon, count in self.codon_count.items():
             codon = codon.replace('U', 'T')
             if codon == 'TGA':
-                print 'Adding selenocystein for %s' % self.id
+                print('Adding selenocystein for %s' % self.id)
                 aa = 'sec'
                 # TODO account of selenocysteine in formula
             else:
@@ -352,18 +353,24 @@ class TranslationData(ProcessData):
             try:
                 self._model.subreaction_data.get_by_id(subreaction_id)
             except KeyError:
-                warn('subreaction %s not in model' % subreaction_id)
+                warn('elongation subreaction %s not in model' % subreaction_id)
             else:
                 elongation_subreactions[subreaction_id] = count
 
-        for subreaction_id in global_info['translation_elongation_subreactions']:
+        # Some additional enzymatic processes are required for each amino acid
+        # addition during translation elongation
+        translation_elongation_subreactions = \
+            global_info.get('translation_elongation_subreactions', [])
+        for subreaction_id in translation_elongation_subreactions:
             try:
                 self._model.subreaction_data.get_by_id(subreaction_id)
             except KeyError:
-                warn('subreaction %s not in model' % subreaction_id)
+                warn('elongation subreaction %s not in model' %
+                     subreaction_id)
             else:
                 # No elongation subreactions needed for start codon
-                elongation_subreactions[subreaction_id] = len(self.amino_acid_sequence) - 1.
+                elongation_subreactions[subreaction_id] = \
+                    len(self.amino_acid_sequence) - 1.
 
         return elongation_subreactions
 
@@ -385,7 +392,7 @@ class TranslationData(ProcessData):
             try:
                 all_subreactions.get_by_id(termination_subreaction_id)
             except KeyError:
-                warn("Termination subreaction '%s' not found" %
+                warn("Termination subreaction '%s' not in model" %
                      (termination_subreaction_id))
             else:
                 termination_subreactions.append(termination_subreaction_id)

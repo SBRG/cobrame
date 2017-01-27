@@ -325,7 +325,7 @@ class MEReaction(Reaction):
 class MetabolicReaction(MEReaction):
     """Metabolic reaction including required enzymatic complex
 
-    This reaction class's update function processes the a information contained
+    This reaction class's update function processes the information contained
     in the complex data for the enzyme that catalyzes this reaction as well as
     the stoichiometric data which contains the stoichiometry of the metabolic
     conversion being performed (i.e. the stoichiometry of the M-model reaction
@@ -340,7 +340,21 @@ class MetabolicReaction(MEReaction):
     :param set complex_dilution_set:
         If an enzyme involved of this reaction acts as a "carrier" (i.e. enzyme
         that transfers a sidechain to another enzyme or metabolite)
+    :param cobrame.core.ProcessData.ComplexData complex_data:
+        ComplexData instance for the enzyme that catalzes the metabolic
+        reaction
+    :param cobrame.core.ProcessData.StoichiometricData stoichiometric_data:
+        StoichiometricData instance that defines the metabolite stoichiometry
+        and upper and lower bounds of metabolic reaction
     """
+
+    def __init__(self, id):
+        MEReaction.__init__(self, id)
+        self._complex_data = None
+        self._stoichiometric_data = None
+        self.keff = 65.  # in per second
+        self.reverse = False
+        self.complex_dilution_set = set()
 
     @property
     def complex_data(self):
@@ -349,9 +363,11 @@ class MetabolicReaction(MEReaction):
     @complex_data.setter
     def complex_data(self, process_data):
         self._complex_data = process_data
+        if not hasattr(process_data, 'complex_id'):
+            raise TypeError('%s is not a ComplexData instance' %
+                            process_data.id)
         if process_data is not None:
             process_data._parent_reactions.add(self.id)
-    _complex_data = None
 
     @property
     def stoichiometric_data(self):
@@ -361,11 +377,6 @@ class MetabolicReaction(MEReaction):
     def stoichiometric_data(self, process_data):
         self._stoichiometric_data = process_data
         process_data._parent_reactions.add(self.id)
-    _stoichiometric_data = None
-
-    keff = 65.  # in per second
-    reverse = False
-    complex_dilution_set = set()
 
     def update(self, verbose=True):
         self.clear_metabolites()
@@ -402,9 +413,25 @@ class MetabolicReaction(MEReaction):
 
 
 class ComplexFormation(MEReaction):
-    """Formation of a protein complex"""
-    _complex_id = None
-    complex_data_id = None
+    """Formation of a functioning enzyme complex that can act as a catalyst for
+    metabolic reactions or other reactions involved in gene expression.
+
+    This reaction class produces a reaction that combines the protein subunits
+    and any cofactors or prosthetic groups into a complete enzyme complex.
+
+    :param str _complex_id:
+        Name of the complex being produced by the complex formation reaction
+
+    :param str complex_data_id:
+        Name of ComplexData that defines the subunit stoichiometry or
+        modifications. This will not always be the same as the _complex_id.
+        Sometimes complexes can be modified using different processes/enzymes
+
+    """
+    def __init__(self, id):
+        MEReaction.__init__(self, id)
+        self._complex_id = None
+        self.complex_data_id = None
 
     @property
     def complex(self):
@@ -414,6 +441,7 @@ class ComplexFormation(MEReaction):
         self.clear_metabolites()
         stoichiometry = defaultdict(float)
         metabolites = self._model.metabolites
+        modifications = self._model.modification_data
         complex_info = self._model.complex_data.get_by_id(self.complex_data_id)
         try:
             complex_met = metabolites.get_by_id(self._complex_id)
@@ -435,13 +463,25 @@ class ComplexFormation(MEReaction):
 
         # Add formula as sum of all protein and modification components
         elements = defaultdict(int)
-        for component, value in iteritems(stoichiometry):
+        cofactor_biomass = 0.
+        for component, value in iteritems(object_stoichiometry):
             if isinstance(value, Basic):
                 value = value.subs(mu, 0)
-            if component == complex_met.id:
+            if component == complex_met:
                 continue
-            for e, n in iteritems(metabolites.get_by_id(component).elements):
+            for e, n in iteritems(component.elements):
                 elements[e] += n * -int(value)
+
+            # Biomass of proteins is handled in translation reactions
+            # Handle cofactors and prosthetic groups here
+            # TODO this under/over calculates biomass values for metacomplexes
+            # such as ribosome formaiton
+            if len(modifications.query('mod_' + component.id)) > 0 and \
+                            value < 0.:
+                cofactor_biomass += component.formula_weight / 1000. * -value
+
+        if cofactor_biomass > 0:
+            self.add_metabolites({self._model._biomass: cofactor_biomass})
 
         complex_met.formula = "".join(stringify(e, n)
                                       for e, n in sorted(iteritems(elements)))
@@ -460,11 +500,14 @@ class PostTranslationReaction(MEReaction):
     maintain one translation reaction per protein, these processes need to be
     modeled as separate reactions.
 
-    Note: for now folding is handled as part of translation, but this will
-    be updated once multiple folding pathways are accounted for.
+    :param cobrame.core.ProcessData.PostTranslationData posttranslation_data:
+        PostTranslationData instance that defines the type of post translation
+        modification/process (folding/translocation) that the reaction accounts
+        for.
     """
-
-    _posttranslation_data = None
+    def __init__(self, id):
+        MEReaction.__init__(self, id)
+        self._posttranslation_data = None
 
     @property
     def posttranslation_data(self):
@@ -523,7 +566,8 @@ class PostTranslationReaction(MEReaction):
             stoichiometry[unprocessed_protein] = -1.
             stoichiometry[protein_met.id] = 1.
 
-        # Add surface area constraints for all translocated protein
+        # Add surface area constraints for all translocated protein, if
+        # applicable
         surface_area = posttranslation_data.surface_area
         if surface_area:
             for SA, value in surface_area.items():
@@ -544,10 +588,25 @@ class PostTranslationReaction(MEReaction):
 
 
 class TranscriptionReaction(MEReaction):
-    """Transcription of a TU to produced TranscribedGene"""
+    """Transcription of a TU to produced TranscribedGene.
+
+    RNA is transcribed on a transcription unit (TU) level. This type of
+    reaction produces all of the RNAs contained within a TU, as well as
+    accounts for the splicing/excision of RNA between tRNAs and rRNAs.
+    The appropriate RNA_biomass constrain is produced based on the molecular
+    weight of the RNAs being transcribed
+
+    :transcription_data :class: `cobrame.core.ProcessData.TranscriptionData`
+        Instance of ProcessData that defines the TU architecture and the
+        features of the RNAs being transcribed.
+
+    """
 
     # TODO double check how initiation use is used as well as ATP cost etc.
-    _transcription_data = None
+
+    def __init__(self, id):
+        MEReaction.__init__(self, id)
+        self._transcription_data = None
 
     @property
     def transcription_data(self):
@@ -620,7 +679,7 @@ class TranscriptionReaction(MEReaction):
         stoichiometry["h2o_c"] -= TU_length
         stoichiometry["h_c"] += TU_length
         # 5' had a triphosphate, but this is removed when excising
-        # Is this universally true?
+        # TODO: Is this universally true?
         if sum(self.transcription_data.excised_bases.values()) > 0:
             stoichiometry["ppi_c"] += 1
 
@@ -631,7 +690,7 @@ class TranscriptionReaction(MEReaction):
         self.add_metabolites(new_stoich, combine=False,
                              add_to_container_model=False)
 
-        # mRNA biomass contribution handled in translation
+        # add biomass constraints for RNA products
         tRNA_mass = 0.
         rRNA_mass = 0.
         ncRNA_mass = 0.
@@ -648,6 +707,8 @@ class TranscriptionReaction(MEReaction):
             if met.RNA_type == 'mRNA':
                 mRNA_mass += met.mass  # kDa
 
+        # Add the appropriate biomass constraints for each RNA contained in
+        # the transcription unit
         if tRNA_mass > 0:
             self.add_metabolites({self._model._tRNA_biomass: tRNA_mass},
                                  combine=False, add_to_container_model=False)
@@ -663,6 +724,11 @@ class TranscriptionReaction(MEReaction):
 
 
 class GenericFormationReaction(MEReaction):
+    """
+    Some components in an ME-model can perform exactly the same function. To
+    handle this, GenericFormationReactions are used to create generic forms
+    of these components.
+    """
     pass
 
 
@@ -685,9 +751,10 @@ class TranslationReaction(MEReaction):
 
     def update(self, verbose=True):
         self.clear_metabolites()
-        protein_id = self.translation_data.protein
-        mRNA_id = self.translation_data.mRNA
-        protein_length = len(self.translation_data.amino_acid_sequence)
+        translation_data = self.translation_data
+        protein_id = translation_data.protein
+        mRNA_id = translation_data.mRNA
+        protein_length = len(translation_data.amino_acid_sequence)
         model = self._model
         metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(int)
@@ -731,7 +798,8 @@ class TranslationReaction(MEReaction):
             model.add_metabolites(transcript)
 
         # Calculate coupling constraints for mRNA and degradation
-        k_mRNA = mu * c_mRNA * kt / (mu + kt * r0) * 3.  # in hr-1 TODO should be *3
+        # TODO should be *3
+        k_mRNA = mu * c_mRNA * kt / (mu + kt * r0) * 3.  # in hr-1
         RNA_amount = mu / k_mRNA
         #deg_fraction = 3. * k_deg / (3. * k_deg + mu)
         deg_fraction = 1. / (k_deg) if k_deg != 0 else 0
@@ -771,30 +839,6 @@ class TranslationReaction(MEReaction):
             model.add_metabolites(protein)
         new_stoichiometry[protein.id] = 1
 
-        # ------------------ Elongation Reactions------------------------
-        # We add in a "generic tRNA" for each amino acid. The production
-        # of this generic tRNA represents the production of enough of any tRNA
-        # (according to its keff) for that amino acid to catalyze addition
-        # of a single amino acid to a growing peptide.
-
-        # Add the subreaction_data associated with each tRNA/AA addition
-        # The subreaction data itself is added in building.py
-
-        # Addition of translation start subreaction handled in buidling.py
-
-        # Correction for formylmethionine start codon
-        elements["C"] += 1
-        elements["O"] += 1
-
-        # tRNA charging requires 2 ATP per amino acid.
-        # Translocation and elongation each use one GTP per event
-        # (len(protein) - 1). Initiation and termination also each need
-        # one GTP each. Therefore, the GTP hydrolysis resulting from
-        # translation is 2 * len(protein)
-        # tRNA + GTP -> tRNA_GTP
-
-        # Add transcription termination as subreaction, handled in building.py
-
         # ------- Convert ids to metabolites and add to model -----------------
         # add subreactions to stoichiometry
         new_stoichiometry = self.add_subreactions(self.translation_data.id,
@@ -809,11 +853,11 @@ class TranslationReaction(MEReaction):
                              combine=False, add_to_container_model=False)
 
         # ------------------ Add biomass constraints --------------------------
-        # add to biomass
+        # add biomass constraint for protein translated
         protein_mass = protein.mass  # kDa
         self.add_metabolites({self._model._protein_biomass: protein_mass},
                              combine=False, add_to_container_model=False)
-        # RNA biomass
+        # RNA biomass consumed due to degradation
         mRNA_mass = transcript.mass  # kDa
         self.add_metabolites(
             {self._model._mRNA_biomass: (-mRNA_mass * deg_amount)},
@@ -824,9 +868,15 @@ class TranslationReaction(MEReaction):
         for aa_name, value in iteritems(aa_count):
             for e, n in iteritems(metabolites.get_by_id(aa_name).elements):
                 elements[e] += n * value
+
         # subtract water from composition
         elements["H"] -= (protein_length - 1) * 2
         elements["O"] -= protein_length - 1
+
+        # Correction for formylmethionine as start codon
+        elements["C"] += 1
+        elements["O"] += 1
+
         protein.formula = "".join(stringify(e, n)
                                   for e, n in sorted(iteritems(elements)))
 
@@ -880,4 +930,10 @@ class tRNAChargingReaction(MEReaction):
 
 
 class SummaryVariable(MEReaction):
+    """
+    SummaryVariables are reactions that impose global constraints on the model.
+    The primary example of this is the biomass_dilution SummaryVariable which
+    forces the rate of biomass production of macromolecules, etc. to be equal
+    to the rate of their dilution to daughter cells during growth.
+    """
     pass

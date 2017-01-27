@@ -46,11 +46,12 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
     The objective function of the model should be set to a dummy
     reaction which forces translation of a dummy protein.
 
-    max_mu: A guess for a growth rate which will be infeasible
-    min_mu: A guess for a growth rate which will be feasible
-    mu_accuracy: The final error in mu after the binary search
-    verbose: will print out each mu in the binary search
-    compiled_expressions: precompiled symbolic expressions in the model
+    :param float max_mu: A guess for a growth rate which will be infeasible
+    :param float min_mu: A guess for a growth rate which will be feasible
+    :param float mu_accuracy: The final error in mu after the binary search
+    :param boolean verbose: will print out each mu in the binary search
+    :param dict compiled_expressions: precompiled symbolic expressions in the
+        model
 
     """
     if enzyme_efficiency:

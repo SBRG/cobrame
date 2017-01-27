@@ -115,11 +115,15 @@ class MEmodel(Model):
 
     @gam.setter
     def gam(self, value):
+        if 'GAM' not in self.reactions:
+            warn('Adding GAM reaction to model')
+            self.add_reaction(SummaryVariable("GAM"))
+            self.reactions.GAM.lower_bound = mu
         atp_hydrolysis = {'atp_c': -1, 'h2o_c': -1, 'adp_c': 1, 'h_c': 1,
                           'pi_c': 1}
         for met, coeff in atp_hydrolysis.items():
-            self.reactions.biomass_component_demand.add_metabolites({
-                met: value * coeff}, combine=False)
+            self.reactions.GAM.add_metabolites({met: value * coeff},
+                                               combine=False)
         self._gam = value
 
     @property
@@ -128,8 +132,10 @@ class MEmodel(Model):
 
     @ngam.setter
     def ngam(self, value):
-        self.stoichiometric_data.ATPM.lower_bound = value
-        self.reactions.ATPM_FWD_SPONT.update()
+        if 'ATPM' not in self.reactions:
+            warn('Adding ATPM reaction to model')
+            self.add_reaction(SummaryVariable("ATPM"))
+        self.reactions.ATPM.lower_bound = value
         self._ngam = value
 
     def get_metabolic_flux(self, solution=None):
