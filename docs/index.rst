@@ -17,7 +17,7 @@ This resource is intended to:
    CobrameArchitectureOverview
    ProcessData
    MetabolicReaction
-   COBRAme_Tutorial_Final
+   COBRAme_Tutorial
    Reaction_Manipulation
    cobrame
 

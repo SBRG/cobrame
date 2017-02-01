@@ -39,8 +39,7 @@ def get_ME_solver(solver=None):
 
 def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
                   solver=None, verbose=True, compiled_expressions=None,
-                  debug=True, reset_obj=False, enzyme_efficiency=False,
-                  **solver_args):
+                  debug=True, reset_obj=False, **solver_args):
     """Computes maximum feasible growth rate (mu) through a binary search
 
     The objective function of the model should be set to a dummy
@@ -54,8 +53,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
         model
 
     """
-    if enzyme_efficiency:
-        efficiency_symbol = Symbol("enzyme_efficiency_scaling", positive=True)
+
     if solver is not None:
         debug = False  # other solvers can't handle debug mode
     solver = get_ME_solver(solver)
@@ -68,11 +66,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
     for name, value in iteritems(solver_args):
         solver.set_parameter(lp, name, value)
     if compiled_expressions is None:
-        if enzyme_efficiency:
-            compiled_expressions = compile_expressions(
-                me_model, variable=efficiency_symbol)
-        else:
-            compiled_expressions = compile_expressions(me_model)
+        compiled_expressions = compile_expressions(me_model)
     feasible_mu = []
     infeasible_mu = []
 
@@ -121,130 +115,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
             return False
 
     start = time()
-    if enzyme_efficiency:  # find lowest possible value of enzyme efficiency
-        # try the edges of binary search
-        if not try_mu(max_mu):
-            # Try 0 if min_mu failed
-            if max_mu == 1. or not try_mu(1.):
-                raise ValueError("1 needs to be feasible")
-        while try_mu(min_mu):  # If min_mu was feasible, set it to zero
-            min_mu = 0
-        while abs(infeasible_mu[-1] - feasible_mu[-1]) > mu_accuracy:
-            try_mu((infeasible_mu[-1] + feasible_mu[-1]) * 0.5)
-        # now we want to solve with the objective
-        if reset_obj:
-            for i, reaction in enumerate(me_model.reactions):
-                if reaction.objective_coefficient != 0:
-                    solver.change_variable_objective(
-                        lp, i, reaction.objective_coefficient)
-        try_mu(feasible_mu[-1])
-        me_model.solution = solver.format_solution(lp, me_model)
-        me_model.solution.f = feasible_mu[-1]
-
-    else:  # find highest possible value of mu
-        # try the edges of binary search
-        if not try_mu(min_mu):
-            # Try 0 if min_mu failed
-            if min_mu == 0 or not try_mu(0):
-                raise ValueError("0 needs to be feasible")
-        while try_mu(max_mu):  # If max_mu was feasible, keep increasing
-            max_mu += 1
-        while infeasible_mu[-1] - feasible_mu[-1] > mu_accuracy:
-            try_mu((infeasible_mu[-1] + feasible_mu[-1]) * 0.5)
-        # now we want to solve with the objective
-        if reset_obj:
-            for i, reaction in enumerate(me_model.reactions):
-                if reaction.objective_coefficient != 0:
-                    solver.change_variable_objective(
-                        lp, i, reaction.objective_coefficient)
-        try_mu(feasible_mu[-1])
-        me_model.solution = solver.format_solution(lp, me_model)
-        me_model.solution.f = feasible_mu[-1]
-
-    if verbose:
-        print("completed in %.1f seconds and %d iterations" %
-              (time() - start, len(feasible_mu) + len(infeasible_mu)))
-    return me_model.solution
-
-
-def efficiency_binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
-                  solver=None, verbose=True, compiled_expressions=None,
-                  debug=True, reset_obj=False, **solver_args):
-
-    """Computes maximum feasible growth rate (mu) through a binary search
-
-    The objective function of the model should be set to a dummy
-    reaction which forces translation of a dummy protein.
-
-    max_mu: A guess for a growth rate which will be infeasible
-    min_mu: A guess for a growth rate which will be feasible
-    mu_accuracy: The final error in mu after the binary search
-    verbose: will print out each mu in the binary search
-    compiled_expressions: precompiled symbolic expressions in the model
-
-    """
-    if solver is not None:
-        debug = False  # other solvers can't handle debug mode
-    solver = get_ME_solver(solver)
-    lp = solver.create_problem(me_model)
-    # reset the objective for faster feasibility solving
-    if reset_obj:
-        for i, reaction in enumerate(me_model.reactions):
-            if reaction.objective_coefficient != 0:
-                solver.change_variable_objective(lp, i, 0)
-    for name, value in iteritems(solver_args):
-        solver.set_parameter(lp, name, value)
-    if compiled_expressions is None:
-        compiled_expressions = compile_expressions(me_model)
-    feasible_mu = []
-    infeasible_mu = []
-
-    # String formatting for display
-    str_places = int(abs(round(log(mu_accuracy) / log(10)))) + 1
-    num_format = "%." + str(str_places) + "f"
-    mu_str = "mu".ljust(str_places + 2)
-    if debug:
-        verbose = True
-        save_dir = mkdtemp()
-        print("LP files will be saved in " + save_dir)
-        filename_base = join(save_dir, "me_mu_" + num_format + ".lp")
-    if verbose:
-        success_str_base = Green + num_format + "\t+" + Normal
-        failure_str_base = Red + num_format + "\t-" + Normal
-        if debug:
-            print("%s\tstatus\treset\ttime\titer\tobj" % mu_str)
-        else:
-            print("%s\tstatus" % mu_str)
-
-    def try_mu(mu):
-        substitute_mu(lp, mu, compiled_expressions, solver)
-        if debug:
-            lp.write(filename_base % mu, rational=True)
-        solver.solve_problem(lp)
-        status = solver.get_status(lp)
-        if debug:
-            reset_basis = lp.reset_basis
-            obj = str(lp.get_objective_value()) \
-                if status == "optimal" else ""
-            debug_str = "\t%s\t%.2f\t%d\t%s" % \
-                (reset_basis, lp.solveTime, lp.numIterations, obj)
-        else:
-            debug_str = ""
-        if status == "optimal":
-            if verbose:
-                print(success_str_base % mu + debug_str)
-            feasible_mu.append(mu)
-            return True
-        else:
-            infeasible_mu.append(mu)
-            if verbose:
-                if status != "infeasible" and debug:
-                    debug_str += "(status: %s)" % status
-                print(failure_str_base % mu + debug_str)
-            return False
-
-    start = time()
-    # try the edges of binary search
+    # find highest possible value of mu try the edges of binary search
     if not try_mu(min_mu):
         # Try 0 if min_mu failed
         if min_mu == 0 or not try_mu(0):
@@ -262,6 +133,7 @@ def efficiency_binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
     try_mu(feasible_mu[-1])
     me_model.solution = solver.format_solution(lp, me_model)
     me_model.solution.f = feasible_mu[-1]
+
     if verbose:
         print("completed in %.1f seconds and %d iterations" %
               (time() - start, len(feasible_mu) + len(infeasible_mu)))

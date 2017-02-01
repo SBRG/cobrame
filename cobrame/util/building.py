@@ -301,7 +301,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         # ---- Add gene metabolites and apply frameshift mutations----
         frameshift_string = frameshift_dict.get(bnum)
         if len(seq) % 3 != 0 and frameshift_string:
-            print 'Applying frameshift on %s' % bnum
+            print('Applying frameshift on %s' % bnum)
             seq = dogma.return_frameshift_sequence(full_seq, frameshift_string)
             if strand == '-':
                 seq = dogma.reverse_transcribe(seq)
@@ -419,44 +419,6 @@ def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
                                             in iteritems(reaction.metabolites)}
 
 
-def add_generic_RNase(me_model):
-    raise EOFError('depreciated')
-    generic_RNase_list = eval('generic_RNase_list')
-
-    for cplx in generic_RNase_list:
-        new_rxn = MEReaction('complex_' + cplx + '_to_generic')
-        me_model.add_reaction(new_rxn)
-        new_rxn.reaction = cplx + ' --> generic_RNase'
-
-
-def add_modification_data(me_model, mod_id, mod_stoich, mod_enzyme=None):
-    mod = ModificationData(mod_id, me_model)
-    mod.stoichiometry = mod_stoich
-    mod.enzyme = mod_enzyme
-    return mod
-
-
-def add_excision_machinery(me_model):
-    raise EOFError('depreciated')
-    excision_types = ['rRNA_containing', 'monocistronic',
-                      'polycistronic_wout_rRNA']
-    for excision in excision_types:
-        excision_dict = {}
-        r = cobra.Reaction('combine_' + excision + '_excision_machinery')
-        for machine in eval(excision):
-            for ion in eval('divalent_list'):
-                machine = machine.replace(ion, 'generic_divalent')
-            excision_dict[Metabolite(machine)] = -1
-        excision_dict[Metabolite(excision + '_excision_set')] = 1
-        r.add_metabolites(excision_dict)
-        me_model.add_reaction(r)
-
-        # Add modification data objects for TU excision reactions
-        rRNA_mod = ModificationData(excision + '_excision', me_model)
-        rRNA_mod.stoichiometry = {'h2o_c': -1, 'h_c': 1}
-        rRNA_mod.enzyme = excision + '_excision_set'
-
-
 def add_dummy_reactions(me_model, dna_seq, update=True):
     dummy = StoichiometricData("dummy_reaction", me_model)
     dummy.lower_bound = 0
@@ -516,13 +478,14 @@ def add_complex_to_model(me_model, complex_id, complex_stoichiometry,
         complex_data.modifications[modification] = value
 
 
-def add_complex_modification_data(me_model, metabolite):
+def add_modification_data(me_model, modification_id,
+                          modification_stoichiometry,
+                          modification_enzyme=None, verbose=True):
     """
-    Creates a ModificationData object for each modification passed in via
-    the complex_modification_dict, if one doesn't already exist
+    Creates a ModificationData object for each modification defined by the
+    function inputs.
 
-    It's assumed every complex modification occurs spontaneously
-    and adds one equivalent of the modification metabolite
+    It's assumed every complex modification occurs spontaneously, unless
 
     If a modification uses an enzyme this can be updated after the
     ModificationData object is already created
@@ -535,17 +498,26 @@ def add_complex_modification_data(me_model, metabolite):
 
     """
 
-    modification_id = 'mod_' + metabolite
-    if modification_id not in me_model.modification_data:
-        mod = ModificationData(modification_id, me_model)
-        mod.stoichiometry = {metabolite: -1.}
+    if modification_id in me_model.modification_data:
+        if verbose:
+            warn('Modification (%s) already in model' % modification_id)
+        else:
+            pass
+    else:
+        modification_data = ModificationData(modification_id, me_model)
+        modification_data.stoichiometry = modification_stoichiometry
+        modification_data.enzyme = modification_enzyme
 
 
 def add_model_complexes(me_model, complex_stoichiometry_dict,
-                        complex_modification_dict):
+                        complex_modification_dict, verbose=True):
     """
     Construct ComplexData for complexes into MEModel from its subunit
     stoichiometry, and a dictionary of its modification metabolites.
+
+    It is assumed that each modification adds one equivalent of the
+    modification metabolite. Multiple
+
 
     Intended to be used as a function for large-scale complex addition.
 
@@ -569,8 +541,12 @@ def add_model_complexes(me_model, complex_stoichiometry_dict,
     for modified_complex_id, info in complex_modification_dict.items():
         modification_dict = {}
         for metabolite, number in info['modifications'].items():
-            add_complex_modification_data(me_model, metabolite)
-            modification_dict['mod_' + metabolite] = -number
+            modification_id = 'mod_' + metabolite
+            add_modification_data(me_model, modification_id, {metabolite: -1},
+                                  verbose=verbose)
+            # stoichiometry of modification determined in
+            # modification_data.stoichiometry
+            modification_dict[modification_id] = abs(number)
 
         core_enzyme = \
             complex_modification_dict[modified_complex_id]['core_enzyme']

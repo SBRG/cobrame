@@ -138,7 +138,6 @@ class MEReaction(Reaction):
                 if not length_dependent:
                     protein_length = 1.
 
-                # TODO is this backward?
                 # keff = translocation_data.keff
                 if fixed_keff:
                     keff = 65.
@@ -186,140 +185,6 @@ class MEReaction(Reaction):
                 object_stoichiometry[new_met] = value
                 self._model.add_metabolites([new_met])
         return object_stoichiometry
-
-    def check_mass_balance(self):
-        """Compute mass and charge balance for the reaction
-
-        returns a dict of {element: amount} for unbalanced elements.
-        "charge" is treated as an element in this dict
-        This will be empty for balanced reactions.
-        """
-        metabolites = self._model.metabolites
-        coefficient_dict = {}
-        reaction_element_dict = defaultdict(int)
-        for metabolite, coefficient in self._metabolites.items():
-            if metabolite.id == 'biomass':
-                continue
-            if isinstance(coefficient, Basic):
-                if isinstance(metabolite, Ribosome):
-                    coefficient = 0
-                elif isinstance(metabolite, RNAP):
-                    coefficient = 0
-                elif isinstance(metabolite, TranscribedGene) and isinstance(self, tRNAChargingReaction):
-                    coefficient = 0
-                else:
-                    coefficient = coefficient.subs(mu, 0)
-            coefficient_dict[metabolite] = coefficient
-            if metabolite.charge is not None:
-                reaction_element_dict["charge"] += \
-                    coefficient * metabolite.charge
-            for element, amount in iteritems(metabolite.elements):
-                reaction_element_dict[element] += coefficient * amount
-
-        # Don't account for remaining nucleotides on TU if they are excised
-        # Only include intergenic bases for solely mRNA coding TUs.
-        # TUs including both mRNA and t(r)RNA are already mass balanced.
-        if isinstance(self, TranscriptionReaction):
-            data_id = self.id.replace('transcription_', '')
-            TU = self._model.transcription_data.get_by_id(data_id)
-            if len(TU.excised_bases) == 0:
-                TU_seq = TU.nucleotide_sequence
-                TU_seq_red = TU_seq
-                left_pos_list = []
-                right_pos_list = []
-                for RNA in TU.RNA_products:
-                    met = metabolites.get_by_id(RNA)
-                    strand = met.strand
-                    dna_seq = met.nucleotide_sequence
-                    function_3 = lambda x, y: dna_seq[x+1:-y] \
-                        if strand == '+' else dna_seq[y:-(x+1)]
-                    function_1 = lambda x: dna_seq[x:] \
-                        if strand == '+' else dna_seq[:-(x+1)]
-                    function_2 = lambda x: dna_seq[:-x] \
-                        if strand == '+' else dna_seq[x+1:]
-                    if dna_seq in TU_seq and dna_seq not in TU_seq_red:
-                        for left, right in zip(left_pos_list, right_pos_list):
-                            if met.left_pos < right < met.right_pos:
-                                change = right - met.left_pos
-                                new_seq = function_1(change)
-                                TU_seq_red = TU_seq_red.replace(new_seq, '')
-                            elif met.left_pos < left < met.right_pos:
-                                change = met.right_pos - left
-                                new_seq = function_2(change)
-                                TU_seq_red = TU_seq_red.replace(new_seq, '')
-                        for left, right in product(left_pos_list, right_pos_list):
-                            if met.left_pos < right and met.right_pos > left:
-                                left_change = right - met.left_pos
-                                right_change = met.right_pos - left
-                                new_seq = function_3(left_change, right_change)
-                                TU_seq_red = TU_seq_red.replace(new_seq, '')
-                    else:
-                        TU_seq_red = TU_seq_red.replace(dna_seq, '')
-                    left_pos_list.append(met.left_pos)
-                    right_pos_list.append(met.right_pos)
-                for nucleotide, value in iteritems(Counter(TU_seq_red)):
-                    nucleotide = nucleotide.replace('T', 'U')
-                    met = metabolites.get_by_id(nucleotide.lower() + 'mp_c')
-                    for element, amount in iteritems(met.elements):
-                        reaction_element_dict[element] += value * amount
-
-        if isinstance(self, MetabolicReaction) or isinstance(self, tRNAChargingReaction):
-            mod_formula_dict = self._model.global_info['modification_formulas']
-            for met in self.metabolites:
-                coefficient = coefficient_dict[met]
-
-                if met.id == 'generic_tRNA_GAG_glu__L_c':
-                    reaction_element_dict['H'] -= coefficient
-                    reaction_element_dict['O'] -= coefficient
-
-                if not isinstance(met, Complex) or coefficient == 0:
-                    continue
-
-                mods = met.id.split('_mod_')
-                if len(mods) == 1:
-                    continue
-
-                start_mod = 1
-
-                # elements from complexes with formulas are handled above
-                if not met.formula:
-                    met_list = met.id.split('_mod_')
-                    cplx_1 = met_list[0] + '_mod_' + met_list[1]
-
-                    try:
-                        complex_met = metabolites.get_by_id(cplx_1)
-                        formula = complex_met.formula
-                        start_mod = 2
-                    except:
-                        formula = None
-
-                    if not formula:
-                        start_mod = 1
-                        complex_met = metabolites.get_by_id(met_list[0])
-
-                    for element, amount in iteritems(complex_met.elements):
-                        reaction_element_dict[element] += coefficient * amount
-
-                    for mod in mods[start_mod:]:
-                        if mod == 'Oxidized':
-                            pass
-                            #reaction_element_dict['H'] += 2. * coefficient
-                        if len(mod.split(':')) == 1:
-                            value = 1
-                            mod_met = mod
-                        else:
-                            value, mod_met = mod.split(':')
-                        try:
-                            formula = mod_formula_dict[mod_met]['formula']
-                            formula_obj = Formula(str(formula))
-                            elements = formula_obj.elements
-                        except KeyError:
-                            elements = metabolites.get_by_id(mod_met + '_c').elements
-                        for element, amount in iteritems(elements):
-                            reaction_element_dict[element] += coefficient * amount * float(value)
-
-        # filter out 0 values
-        return {k: v for k, v in iteritems(reaction_element_dict) if v != 0}
 
 
 class MetabolicReaction(MEReaction):
@@ -474,8 +339,8 @@ class ComplexFormation(MEReaction):
 
             # Biomass of proteins is handled in translation reactions
             # Handle cofactors and prosthetic groups here
-            # TODO this under/over calculates biomass values for metacomplexes
-            # such as ribosome formaiton
+            # TODO this slightly under/over calculates biomass values for
+            # metacomplexes such as ribosome formaiton
             if len(modifications.query('mod_' + component.id)) > 0 and \
                             value < 0.:
                 cofactor_biomass += component.formula_weight / 1000. * -value
@@ -596,14 +461,13 @@ class TranscriptionReaction(MEReaction):
     The appropriate RNA_biomass constrain is produced based on the molecular
     weight of the RNAs being transcribed
 
-    :transcription_data :class: `cobrame.core.ProcessData.TranscriptionData`
+    transcription_data :class:`~cobrame.core.ProcessData.TranscriptionData`
         Instance of ProcessData that defines the TU architecture and the
         features of the RNAs being transcribed.
 
     """
 
-    # TODO double check how initiation use is used as well as ATP cost etc.
-
+    # TODO double check how initiation is used as well as ATP cost etc.
     def __init__(self, id):
         MEReaction.__init__(self, id)
         self._transcription_data = None
@@ -798,10 +662,9 @@ class TranslationReaction(MEReaction):
             model.add_metabolites(transcript)
 
         # Calculate coupling constraints for mRNA and degradation
-        # TODO should be *3
         k_mRNA = mu * c_mRNA * kt / (mu + kt * r0) * 3.  # in hr-1
         RNA_amount = mu / k_mRNA
-        #deg_fraction = 3. * k_deg / (3. * k_deg + mu)
+
         deg_fraction = 1. / (k_deg) if k_deg != 0 else 0
         deg_amount = deg_fraction * RNA_amount
 

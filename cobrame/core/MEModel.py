@@ -264,21 +264,6 @@ class MEmodel(Model):
                         for data in self.posttranslation_data.query(p.id):
                             self.posttranslation_data.remove(data.id)
 
-        for p in self.metabolites.query('partially_folded'):
-            delete = True
-            for rxn in p._reaction:
-                try:
-                    if p in rxn.reactants:
-                        delete = False
-                except Exception as e:
-                    print(rxn)
-                    raise e
-            if delete:
-                while len(p._reaction) > 0:
-                    list(p._reaction)[0].delete(remove_orphans=True)
-                    for data in self.posttranslation_data.query(p.id):
-                        self.posttranslation_data.remove(data.id)
-
         for p in self.metabolites.query(re.compile('^protein_')):
             if isinstance(p, ProcessedProtein):
                 delete = True
@@ -353,7 +338,7 @@ class MEmodel(Model):
             self.metabolites.get_by_id('RNA_'+gene).remove_from_model(method='subtractive')
             protein = self.metabolites.get_by_id('protein_'+gene)
             for cplx in protein.complexes:
-                print cplx
+                print('Complex (%s) removed from model' % cplx.id)
                 for rxn in cplx.metabolic_reactions:
                     try:
                         self.stoichiometric_data.remove(rxn.id.split('_')[0])
@@ -398,9 +383,10 @@ class MEmodel(Model):
                 for cplx in cplxs:
                     if cplx in self.complex_data:
                         try:
-                            cplx_mw += self.metabolites.get_by_id(cplx).mass ** (3. / 4)
+                            cplx_mw += self.metabolites.get_by_id(cplx).mass \
+                                       ** (3. / 4)
                         except:
-                            print cplx, data
+                            warn('Complex (%s) cannot access mass' % cplx)
                     elif cplx.split('_mod_')[0] in self.complex_data:
                         cplx_mw += self.metabolites.get_by_id(cplx.split('_mod_')[0]).mass ** (3. / 4)
 
@@ -415,7 +401,6 @@ class MEmodel(Model):
                 SASA = weight ** (3. / 4.)
                 if SASA == 0:
                     SASA = avg_SASA
-                    print 'bad', rxn
                 rxn.keff = SASA * avg_keff / avg_SASA
         for data in self.process_data:
             SASA = 0.
@@ -435,7 +420,6 @@ class MEmodel(Model):
 
                 if SASA == 0:
                     SASA = avg_SASA
-                    print 'bad', data
                 data.keff = SASA * avg_keff / avg_SASA
 
         self.update()
