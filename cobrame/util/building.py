@@ -6,7 +6,6 @@ from cobrame import util
 from cobrame.util import dogma
 from cobrame import *
 from cobra.core import Reaction
-from ecolime.ecoli_k12 import *
 import cobra
 import itertools
 
