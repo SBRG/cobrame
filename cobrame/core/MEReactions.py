@@ -662,14 +662,13 @@ class TranslationReaction(MEReaction):
             model.add_metabolites(transcript)
 
         # Calculate coupling constraints for mRNA and degradation
-        k_mRNA = mu * c_mRNA * kt / (mu + kt * r0) * 3.  # in hr-1
+        k_mRNA = mu * c_mRNA * kt / (mu + kt * r0) / 3.  # in hr-1
         RNA_amount = mu / k_mRNA
 
-        deg_fraction = 1. / (k_deg) if k_deg != 0 else 0
-        deg_amount = deg_fraction * RNA_amount
+        deg_amount = k_deg / k_mRNA
 
         # Add mRNA coupling to stoichiometry
-        new_stoichiometry[transcript.id] = -RNA_amount
+        new_stoichiometry[transcript.id] = -(RNA_amount + deg_amount)
 
         # ---------------Add Degradation Requirements -------------------------
         # Add degraded nucleotides to stoichiometry
