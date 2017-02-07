@@ -99,9 +99,7 @@ class MEmodel(Model):
 
     @unmodeled_protein_fraction.setter
     def unmodeled_protein_fraction(self, value):
-        # proportion = value / (1 - value)
         # see the Biomass_formulations for an explanation
-        amount = value #/ self.unmodeled_protein.mass
         amount = value / (1 - value)
         self._protein_biomass_dilution.add_metabolites(
                 {self.unmodeled_protein_biomass: -amount}, combine=False)
@@ -134,7 +132,10 @@ class MEmodel(Model):
     def ngam(self, value):
         if 'ATPM' not in self.reactions:
             warn('Adding ATPM reaction to model')
+            atp_hydrolysis = {'atp_c': -1, 'h2o_c': -1, 'adp_c': 1, 'h_c': 1,
+                              'pi_c': 1}
             self.add_reaction(SummaryVariable("ATPM"))
+            self.reactions.ATPM.add_metabolites(atp_hydrolysis)
         self.reactions.ATPM.lower_bound = value
         self._ngam = value
 

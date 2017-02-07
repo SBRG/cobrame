@@ -88,6 +88,10 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
             print("%s\tstatus" % mu_str)
 
     def try_mu(mu):
+        if mu == 0 and me_model.global_info.get('k_deg', 0) != 0:
+            warn('Due to mRNA degradation constraint formulation the model is '
+                 'infeasible at mu = 0. Using mu = .1 instead.')
+            mu = .1
         substitute_mu(lp, mu, compiled_expressions, solver)
         if debug:
             lp.write(filename_base % mu, rational=True)
@@ -142,6 +146,11 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
 
 def create_lP_at_growth_rate(me_model, growth_rate, compiled_expressions=None,
                              solver=None, **solver_args):
+
+    if growth_rate == 0 and me_model.global_info.get('k_deg', 0) != 0:
+        warn('Due to mRNA degradation constraint formulation the model is '
+             'infeasible at mu = 0. Using mu = .1 instead.')
+        growth_rate = .1
     solver = get_ME_solver(solver)
     lp = solver.create_problem(me_model)
     for name, value in iteritems(solver_args):

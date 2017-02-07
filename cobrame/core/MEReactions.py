@@ -260,6 +260,9 @@ class MetabolicReaction(MEReaction):
             if component in self.complex_dilution_set:
                 new_stoichiometry[component] += - mu / self.keff / 3600.
 
+        new_stoichiometry = self.add_subreactions(stoichiometric_data.id,
+                                                  new_stoichiometry)
+
         # Convert component ids to cobra metabolites
         object_stoichiometry = self.get_components_from_ids(new_stoichiometry,
                                                             verbose=verbose)
@@ -662,10 +665,9 @@ class TranslationReaction(MEReaction):
             model.add_metabolites(transcript)
 
         # Calculate coupling constraints for mRNA and degradation
-        k_mRNA = mu * c_mRNA * kt / (mu + kt * r0) / 3.  # in hr-1
+        k_mRNA = mu * c_mRNA * kt / (mu + kt * r0)  # in hr-1
         RNA_amount = mu / k_mRNA
-
-        deg_amount = k_deg / k_mRNA
+        deg_amount = 3 * k_deg / k_mRNA
 
         # Add mRNA coupling to stoichiometry
         new_stoichiometry[transcript.id] = -(RNA_amount + deg_amount)

@@ -149,7 +149,8 @@ class ModComplex(MEComponent):
 
 def create_component(component_id, default_type=MEComponent, RNAP_set={}):
     """creates a component and attempts to set the correct type"""
-    if not isinstance(component_id, str):
+    if not isinstance(component_id, str) and \
+            not isinstance(component_id, unicode):
         raise TypeError("%s must be a str, not %s" %
                         (repr(component_id), str(type(component_id))))
     if component_id.startswith("protein_"):

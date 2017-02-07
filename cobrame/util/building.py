@@ -586,7 +586,8 @@ def add_metabolic_reaction_to_model(me_model, stoichiometric_data_id,
     """
     # Get stoichiometric data for reaction being added
     try:
-        stoichiometric_data = me_model.stoichiometric_data.get_by_id(stoichiometric_data_id)
+        stoichiometric_data = \
+            me_model.stoichiometric_data.get_by_id(stoichiometric_data_id)
     except KeyError:
         raise Exception("Stoichiometric data for %s has not been added to"
                         " model" % stoichiometric_data_id)
@@ -647,7 +648,7 @@ def add_reactions_from_stoichiometric_data(me_model, rxn_to_cplx_dict,
             {StoichiometricData.id: catalytic_enzyme_id}
 
 
-        rxn_info_frame: pandas.Dataframe
+        rxn_info_frame: :class:`pandas.Dataframe
             Contains the ids, names and reversibility for each reaction in the
             metabolic reaction matrix as well as whether the reaction is
             spontaneous
@@ -683,6 +684,10 @@ def add_reactions_from_stoichiometric_data(me_model, rxn_to_cplx_dict,
                 directionality_list.append('reverse')
             if reaction_data.upper_bound > 0:
                 directionality_list.append('forward')
+            elif reaction_data.upper_bound == 0 and \
+                            reaction_data.lower_bound == 0:
+                directionality_list.append('forward')
+                warn('Reaction (%s) cannot carry flux' % reaction_data.id)
             for directionality in directionality_list:
                 add_metabolic_reaction_to_model(me_model, reaction_data.id,
                                                 directionality,

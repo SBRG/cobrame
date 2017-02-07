@@ -15,8 +15,6 @@ This resource is intended to:
 
    MEModelFundamentals
    CobrameArchitectureOverview
-   ProcessData
-   MetabolicReaction
    COBRAme_Tutorial
    Reaction_Manipulation
    cobrame
