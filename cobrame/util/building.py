@@ -1,13 +1,11 @@
-from Bio import SeqIO
+from __future__ import print_function, division, absolute_import
+
+import cobra
 import pandas
+from Bio import SeqIO
 from six import iteritems
 
-from cobrame import util
-from cobrame.util import dogma
 from cobrame import *
-from cobra.core import Reaction
-import cobra
-import itertools
 
 
 def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
@@ -171,7 +169,7 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_to_codon,
             model and were thus added when creating charging reactions
     """
     # convert amino acid 3 letter codes to metabolites
-    for tRNA, aa in list(tRNA_aa.items()):
+    for tRNA, aa in iteritems(tRNA_aa):
         if aa == "OTHER":
             tRNA_aa.pop(tRNA)
         elif aa == "Sec":
@@ -184,7 +182,7 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_to_codon,
                 me_model.metabolites.get_by_id(aa.lower() + "__L_c")
 
     # add in all the tRNA charging reactions
-    for tRNA, aa in tRNA_aa.items():
+    for tRNA, aa in iteritems(tRNA_aa):
         for codon in tRNA_to_codon[tRNA]:
             tRNA_data = tRNAData("tRNA_" + tRNA + "_" + codon, me_model, aa.id,
                                  "RNA_" + tRNA, codon)
@@ -442,11 +440,11 @@ def add_dummy_reactions(me_model, dna_seq, update=True):
 
 def add_complex_stoichiometry_data(me_model, ME_complex_dict):
     warn('deprecated')
-    for cplx, stoichiometry in ME_complex_dict.iteritems():
+    for cplx, stoichiometry in iteritems(ME_complex_dict):
         complex_data = ComplexData(cplx, me_model)
 
         # stoichiometry is a defaultdict so much build as follows
-        for complex, value in stoichiometry.items():
+        for complex, value in iteritems(stoichiometry):
             complex_data.stoichiometry[complex] = value
 
 
@@ -471,9 +469,9 @@ def add_complex_to_model(me_model, complex_id, complex_stoichiometry,
 
     complex_data = ComplexData(complex_id, me_model)
     # must add update stoichiometry one by one since it is a defaultdict
-    for metabolite, value in complex_stoichiometry.items():
+    for metabolite, value in iteritems(complex_stoichiometry):
         complex_data.stoichiometry[metabolite] += value
-    for modification, value in complex_modifications.items():
+    for modification, value in iteritems(complex_modifications):
         complex_data.modifications[modification] = value
 
 
@@ -534,12 +532,12 @@ def add_model_complexes(me_model, complex_stoichiometry_dict,
                                                   stoichiometry}}}
 
     """
-    for complex_id, stoichiometry in complex_stoichiometry_dict.items():
+    for complex_id, stoichiometry in iteritems(complex_stoichiometry_dict):
         add_complex_to_model(me_model, complex_id, stoichiometry, {})
 
-    for modified_complex_id, info in complex_modification_dict.items():
+    for modified_complex_id, info in iteritems(complex_modification_dict):
         modification_dict = {}
-        for metabolite, number in info['modifications'].items():
+        for metabolite, number in iteritems(info['modifications']):
             modification_id = 'mod_' + metabolite
             add_modification_data(me_model, modification_id, {metabolite: -1},
                                   verbose=verbose)

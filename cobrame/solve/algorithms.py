@@ -1,12 +1,13 @@
-from time import time
-from warnings import warn
+from __future__ import print_function, division, absolute_import
+
+from math import log
 from os.path import join
 from tempfile import mkdtemp
-from math import log
-from sympy import Symbol
+from time import time
+from warnings import warn
 
-from cobra.solvers import solver_dict
 from cobra.flux_analysis.variability import calculate_lp_variability
+from cobra.solvers import solver_dict
 from six import string_types, iteritems
 
 try:
@@ -144,7 +145,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
     return me_model.solution
 
 
-def create_lP_at_growth_rate(me_model, growth_rate, compiled_expressions=None,
+def create_lp_at_growth_rate(me_model, growth_rate, compiled_expressions=None,
                              solver=None, **solver_args):
 
     if growth_rate == 0 and me_model.global_info.get('k_deg', 0) != 0:
@@ -163,7 +164,7 @@ def create_lP_at_growth_rate(me_model, growth_rate, compiled_expressions=None,
 
 
 def solve_at_growth_rate(me_model, growth_rate, **solver_args):
-    lp, solver = create_lP_at_growth_rate(me_model, growth_rate,
+    lp, solver = create_lp_at_growth_rate(me_model, growth_rate,
                                           **solver_args)
     # solve and return
     solver.solve_problem(lp)
@@ -184,7 +185,7 @@ def fva(me_model, growth_rate, reaction_list, skip_check=False, **solver_args):
                 obj[r] = r.objective_coefficient
                 r.objective_coefficient = 0
 
-    lp, solver = create_lP_at_growth_rate(me_model, growth_rate,
+    lp, solver = create_lp_at_growth_rate(me_model, growth_rate,
                                           **solver_args)
     result = calculate_lp_variability(lp, solver, me_model, reaction_list)
 

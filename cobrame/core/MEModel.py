@@ -1,12 +1,15 @@
-from numpy import array
-from scipy.sparse import dok_matrix
+from __future__ import print_function, division, absolute_import
+
 import re
 
 from cobra import Model, DictList
+from numpy import array
+from scipy.sparse import dok_matrix
+from six import iteritems
 
-from cobrame.core.MEReactions import *
-from cobrame.core.ProcessData import *
 from cobrame.core.Components import Constraint
+from cobrame.core.ProcessData import *
+from cobrame.core.MEReactions import *
 from cobrame.util import mu
 
 
@@ -119,7 +122,7 @@ class MEmodel(Model):
             self.reactions.GAM.lower_bound = mu
         atp_hydrolysis = {'atp_c': -1, 'h2o_c': -1, 'adp_c': 1, 'h_c': 1,
                           'pi_c': 1}
-        for met, coeff in atp_hydrolysis.items():
+        for met, coeff in iteritems(atp_hydrolysis):
             self.reactions.GAM.add_metabolites({met: value * coeff},
                                                combine=False)
         self._gam = value
@@ -195,7 +198,7 @@ class MEmodel(Model):
         S = dok_matrix((len(self.metabolites), len(self.reactions)))
         # populate with stoichiometry
         for i, r in enumerate(self.reactions):
-            for met, value in r._metabolites.iteritems():
+            for met, value in iteritems(r._metabolites):
                 met_index = self.metabolites.index(met)
                 if hasattr(value, "subs"):
                     S[met_index, i] = float(value.subs(mu, growth_rate))

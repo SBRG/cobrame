@@ -1,5 +1,5 @@
-from sympy import Basic, lambdify
 from six import iteritems
+from sympy import Basic, lambdify
 
 from cobrame import mu
 

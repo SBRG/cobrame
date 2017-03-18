@@ -1,2 +1,2 @@
-from algorithms import *
-from symbolic import *
+from cobrame.solve.algorithms import *
+from cobrame.solve.symbolic import *

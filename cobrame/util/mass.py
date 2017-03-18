@@ -1,7 +1,8 @@
-from __future__ import division
+from __future__ import division, absolute_import
+
 from six import iteritems
 
-from dogma import transcription_table
+from .dogma import transcription_table
 
 # Mass of amino acids (Daltons) with H and OH removed from either end.
 # This is used to compute protein masses because a water is removed

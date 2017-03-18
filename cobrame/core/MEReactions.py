@@ -1,18 +1,14 @@
-from __future__ import division
+from __future__ import print_function, division, absolute_import
 
+from collections import defaultdict
 from warnings import warn
-from collections import defaultdict, Counter
-from itertools import product
-
-from six import iteritems
 
 from cobra import Reaction
-from cobra.core.Formula import Formula
-
-from cobrame.util.mass import *
-from cobrame.util import mu, dogma
 from sympy import Basic
+from six import iteritems
+
 from cobrame.core.Components import *
+from cobrame.util import mu
 
 
 class MEReaction(Reaction):
@@ -99,7 +95,7 @@ class MEReaction(Reaction):
                 stoichiometry[subreaction_data.enzyme] -= \
                     mu / subreaction_data.keff / 3600. * count
 
-            for met, stoich in subreaction_data.stoichiometry.items():
+            for met, stoich in iteritems(subreaction_data.stoichiometry):
                 stoichiometry[met] += count * stoich
 
         return stoichiometry
@@ -131,18 +127,20 @@ class MEReaction(Reaction):
                 bnum = protein_id.replace('protein_', '')
 
                 if multiplier_dict:
-                    multiplier = multiplier_dict[enzyme].get(bnum, 1)
+                    multiplier = multiplier_dict[enzyme].get(bnum, 1.)
                 else:
-                    multiplier = 1
+                    multiplier = 1.
 
                 if not length_dependent:
-                    protein_length = 1.
+                    length = 1.
+                else:
+                    length = protein_length
 
                 # keff = translocation_data.keff
                 if fixed_keff:
                     keff = 65.
                 else:
-                    keff = translocation_data.keff / protein_length
+                    keff = translocation_data.keff / length
 
                 enzyme_stoichiometry = multiplier * mu / keff / 3600. * count
                 stoichiometry[enzyme] -= enzyme_stoichiometry
@@ -438,7 +436,7 @@ class PostTranslationReaction(MEReaction):
         # applicable
         surface_area = posttranslation_data.surface_area
         if surface_area:
-            for SA, value in surface_area.items():
+            for SA, value in iteritems(surface_area):
                 try:
                     SA_constraint = metabolites.get_by_id(SA)
                 except KeyError:
@@ -562,7 +560,7 @@ class TranscriptionReaction(MEReaction):
         rRNA_mass = 0.
         ncRNA_mass = 0.
         mRNA_mass = 0.
-        for met, v in new_stoich.items():
+        for met, v in iteritems(new_stoich):
             if v < 0 or not hasattr(met, "RNA_type"):
                 continue
             if met.RNA_type == 'tRNA':
@@ -642,7 +640,7 @@ class TranslationReaction(MEReaction):
         c_mRNA = m_nt / f_mRNA / m_aa
 
         # -----------------Add Amino Acids----------------------------------
-        for aa, value in self._translation_data.amino_acid_count.items():
+        for aa, value in iteritems(self._translation_data.amino_acid_count):
             new_stoichiometry[aa] = -value
 
         # -----------------Add Ribosome Coupling----------------------------
@@ -674,7 +672,7 @@ class TranslationReaction(MEReaction):
 
         # ---------------Add Degradation Requirements -------------------------
         # Add degraded nucleotides to stoichiometry
-        for nucleotide, count in transcript.nucleotide_count.items():
+        for nucleotide, count in iteritems(transcript.nucleotide_count):
             new_stoichiometry[nucleotide] += count * deg_amount
 
         # ATP hydrolysis required for cleaving
@@ -682,7 +680,7 @@ class TranslationReaction(MEReaction):
         hydrolysis_amount = (nucleotide_length - 1) / 4. * deg_amount
         atp_hydrolysis = {'atp_c': -1, 'h2o_c': -1, 'adp_c': 1,
                           'pi_c': 1, 'h_c': 1}
-        for metabolite, value in atp_hydrolysis.items():
+        for metabolite, value in iteritems(atp_hydrolysis):
             new_stoichiometry[metabolite] = hydrolysis_amount * value
 
         # Add degradosome coupling, if known

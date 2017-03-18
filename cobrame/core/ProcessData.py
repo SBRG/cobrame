@@ -1,9 +1,9 @@
 from collections import defaultdict
 
-from cobrame.util.dogma import *
-from cobrame.util.mass import *
-from cobrame.util import mu
+from six import iteritems
+
 from cobrame.core.MEReactions import *
+from cobrame.util.dogma import *
 
 
 class ProcessData(object):
@@ -145,7 +145,7 @@ class ComplexData(ProcessData):
         """creates a complex formation reaction
 
         This assumes none exists already. Will create a reaction (prefixed by
-        "formation_") which forms the complex"""
+        "formation") which forms the complex"""
         formation_id = "formation_" + self.id
         if formation_id in self._model.reactions:
             raise ValueError("reaction %s already in model" % formation_id)
@@ -336,7 +336,7 @@ class TranslationData(ProcessData):
         global_info = self._model.global_info
         elongation_subreactions = {}
         # Add the subreaction_data associated with each tRNA/AA addition
-        for codon, count in self.codon_count.items():
+        for codon, count in iteritems(self.codon_count):
             codon = codon.replace('U', 'T')
             if codon == 'TGA':
                 print('Adding selenocystein for %s' % self.id)

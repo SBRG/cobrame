@@ -1,7 +1,9 @@
 from cobra import Metabolite as Component
+
 from cobrame.util import dogma
 from six import iteritems
 from cobrame.util.mass import *
+
 
 class MEComponent(Component):
 
@@ -117,7 +119,7 @@ class Complex(MEComponent):
     def mass(self):
         value = 0
         complex_data = self._model.process_data.get_by_id(self.id)
-        for protein, coefficient in complex_data.stoichiometry.items():
+        for protein, coefficient in iteritems(complex_data.stoichiometry):
             protein_met = self._model.metabolites.get_by_id(protein)
             value += protein_met.mass * coefficient
         return value
