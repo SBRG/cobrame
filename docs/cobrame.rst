@@ -1,5 +1,5 @@
 cobrame package
-==============
+===============
 
 Subpackages
 -----------
@@ -7,8 +7,6 @@ Subpackages
 .. toctree::
 
     cobrame.core
-    cobrame.io
-    cobrame.solve
 
 Module contents
 ---------------

@@ -1,11 +1,11 @@
 cobrame.core package
-==================
+====================
 
 Submodules
 ----------
 
 cobrame.core.MEReactions module
----------------------------------
+-------------------------------
 
 .. automodule:: cobrame.core.MEReactions
     :members:
@@ -13,7 +13,7 @@ cobrame.core.MEReactions module
     :show-inheritance:
 
 cobrame.core.ProcessData module
---------------------------
+-------------------------------
 
 .. automodule:: cobrame.core.ProcessData
     :members:
@@ -21,17 +21,17 @@ cobrame.core.ProcessData module
     :show-inheritance:
 
 cobrame.core.Components module
--------------------------
+------------------------------
 
-.. automodule:: cobra.core.Components
+.. automodule:: cobrame.core.Components
     :members:
     :undoc-members:
     :show-inheritance:
 
 cobra.core.MEModel module
-----------------------
+-------------------------
 
-.. automodule:: cobra.core.MEModel
+.. automodule:: cobrame.core.MEModel
     :members:
     :undoc-members:
     :show-inheritance:
@@ -40,7 +40,7 @@ cobra.core.MEModel module
 Module contents
 ---------------
 
-.. automodule:: cobra.core
+.. automodule:: cobrame.core
     :members:
     :undoc-members:
-    :show-inheritance
+    :show-inheritance:

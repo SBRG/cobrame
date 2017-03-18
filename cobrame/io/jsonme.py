@@ -1,7 +1,10 @@
-from cobra.io.json import json_schema, save_json_model, load_json_model
-from sympy import Basic, sympify
 import copy
 
+from cobra.io.json import save_json_model, load_json_model
+from sympy import Basic, sympify, Symbol
+from cobrame import mu
+
+mu_temp = Symbol('mu')
 
 def save_json_me(me0, file_name, pretty=False):
     """
@@ -30,6 +33,17 @@ def save_json_me(me0, file_name, pretty=False):
     save_json_model(me, file_name)
 
 
+def get_sympy_expression(value):
+    """
+    Return sympy expression from json string using sympify
+
+
+    mu is assumed to be positive but using sympify does not apply this
+    assumption"""
+
+    expression_value = sympify(value)
+    return expression_value.subs(mu_temp, mu)
+
 def load_json_me(file_name):
     """
     Load ME model from json
@@ -45,22 +59,22 @@ def load_json_me(file_name):
             try:
                 rxn._metabolites[met] = float(s)
             except ValueError:
-                rxn._metabolites[met] = sympify(s)
+                rxn._metabolites[met] = get_sympy_expression(s)
         try:
             rxn.lower_bound = float(rxn.lower_bound)
         except ValueError:
-            rxn.lower_bound = sympify(rxn.lower_bound)
+            rxn.lower_bound = get_sympy_expression(rxn.lower_bound)
         try:
             rxn.upper_bound = float(rxn.upper_bound)
         except ValueError:
-            rxn.upper_bound = sympify(rxn.upper_bound)
+            rxn.upper_bound = get_sympy_expression(rxn.upper_bound)
 
     for met in me.metabolites:
         b = met._bound
         try:
             met._bound = float(b)
         except ValueError:
-            met._bound = sympify(b)
+            met._bound = get_sympy_expression(b)
 
     return me
 
