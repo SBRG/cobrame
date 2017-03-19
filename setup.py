@@ -1,7 +1,5 @@
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
+from setuptools import setup, find_packages
+
 
 setup(name="cobrame",
       version="0.0.5",
@@ -9,6 +7,6 @@ setup(name="cobrame",
       author_email="minime_dev@googlegroups.com",
       url="https://github.com/SBRG/cobrame",
       install_requires=["sympy", "six", "Biopython", "cobra", "pandas",
-                        "scipy", "numpy"],
-      packages=["cobrame"]
+                        "scipy", "numpy", "setuptools"],
+      packages=find_packages()
       )
