@@ -234,14 +234,16 @@ class MEmodel(Model):
             if hasattr(r, "update"):
                 r.update()
 
-    def prune(self):
+    def prune(self,skip=[]):
         """remove all unused metabolites and reactions
 
         This should be run after the model is fully built. It will be
         difficult to add new content to the model once this has been run.
 
+        skip: [str]
+            List of complexes/proteins/mRNAs/TUs to remain unpruned from model.
         """
-        complex_data_list = [i.id for i in self.complex_data]
+        complex_data_list = [i.id for i in self.complex_data if i.id not in skip]
         for c_d in complex_data_list:
             c = self.complex_data.get_by_id(c_d)
             cplx = c.complex
@@ -250,7 +252,7 @@ class MEmodel(Model):
                 self.complex_data.remove(self.complex_data.get_by_id(c_d))
 
         for p in self.metabolites.query('_folded'):
-            if 'partially' not in p.id:
+            if 'partially' not in p.id and p.id not in skip:
                 delete = True
                 for rxn in p._reaction:
                     try:
@@ -266,7 +268,7 @@ class MEmodel(Model):
                             self.posttranslation_data.remove(data.id)
 
         for p in self.metabolites.query(re.compile('^protein_')):
-            if isinstance(p, ProcessedProtein):
+            if isinstance(p, ProcessedProtein) and p.id not in skip:
                 delete = True
                 for rxn in p._reaction:
                     try:
@@ -282,7 +284,7 @@ class MEmodel(Model):
                             self.posttranslation_data.remove(data.id)
 
         for p in self.metabolites.query(re.compile('^protein_')):
-            if isinstance(p, TranslatedGene):
+            if isinstance(p, TranslatedGene) and p.id not in skip:
                 delete = True
                 for rxn in p._reaction:
                     try:
@@ -300,7 +302,11 @@ class MEmodel(Model):
 
         removed_RNA = set()
         for m in list(self.metabolites.query(re.compile("^RNA_"))):
-            delete = True
+            if m.id in skip:
+                delete = False
+            else:
+                delete = True
+
             for rxn in m._reaction:
                 if m in rxn.reactants and not rxn.id.startswith('DM_'):
                     delete = False
@@ -316,7 +322,11 @@ class MEmodel(Model):
                     removed_RNA.add(m.id)
 
         for t in self.reactions.query('transcription_TU'):
-            delete = True
+            if t.id in skip:
+                delete = False
+            else:
+                delete = True
+
             for product in t.products:
                 if isinstance(product, TranscribedGene):
                     delete = False
