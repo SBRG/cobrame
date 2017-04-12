@@ -17,5 +17,7 @@ install:
     - pip install .
     - pip install git+https://github.com/sbrg/ecolime.git@devel
 
+script: travis_wait pytest
+
 after_success:
     - pip install codecov; codecov
