@@ -1,0 +1,21 @@
+language: python
+python:
+   - "2.7"
+   - "3.5"
+   - "3.6"
+
+branches:
+   only:
+    - master
+    - devel
+
+before_install:
+    - pip install -U pip wheel
+
+install:
+    - pip install -U pytest
+    - pip install .
+    - pip install git+https://github.com/sbrg/ecolime.git@devel
+
+after_success:
+    - pip install codecov; codecov

@@ -56,6 +56,8 @@ class StoichiometricData(ProcessData):
         model.stoichiometric_data.append(self)
         self._stoichiometry = {}
         self.subreactions = defaultdict(int)
+        self.lower_bound = 0.
+        self.upper_bound = 1000.
 
     @property
     def stoichiometry(self):
@@ -106,6 +108,16 @@ class ComplexData(ProcessData):
 
     """
 
+    def __init__(self, id, model):
+        ProcessData.__init__(self, id, model)
+        model.complex_data.append(self)
+        # {Component.id: stoichiometry}
+        self.stoichiometry = defaultdict(float)
+        self.chaperones = {}
+        # {ModificationData.id : number}
+        self.modifications = {}
+        self._complex_id = None  # assumed to be the same as id if None
+
     @property
     def formation(self):
         """a read-only link to the formation reaction object"""
@@ -129,17 +141,6 @@ class ComplexData(ProcessData):
     @complex_id.setter
     def complex_id(self, value):
         self._complex_id = None if value == self.id else value
-
-    def __init__(self, id, model):
-        ProcessData.__init__(self, id, model)
-        model.complex_data.append(self)
-        # {Component.id: stoichiometry}
-        self.stoichiometry = defaultdict(float)
-        self.chaperones = {}
-        # {ModificationData.id : number}
-        self.modifications = {}
-        self.unmodified_complex_id = ''  # TODO confirm this is unused
-        self._complex_id = None  # assumed to be the same as id if None
 
     def create_complex_formation(self, verbose=True):
         """creates a complex formation reaction
@@ -258,11 +259,6 @@ class GenericData(ProcessData):
 
 
 class TranslationData(ProcessData):
-    _amino_acid_sequence = ""
-    mRNA = None
-    nucleotide_sequence = ""
-    term_enzyme = None
-
     def __init__(self, id, model, mRNA, protein):
         ProcessData.__init__(self, id, model)
         model.translation_data.append(self)
@@ -270,6 +266,9 @@ class TranslationData(ProcessData):
         self.protein = protein
         self.subreactions = defaultdict(int)
         self.modifications = defaultdict(int)
+        self._amino_acid_sequence = ""
+        self.nucleotide_sequence = ""
+        self.term_enzyme = None
 
     @property
     def amino_acid_sequence(self):

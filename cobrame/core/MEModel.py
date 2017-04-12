@@ -13,7 +13,7 @@ from cobrame.core.MEReactions import *
 from cobrame.util import mu
 
 
-class MEmodel(Model):
+class MEModel(Model):
     def __init__(self, *args):
         Model.__init__(self, *args)
         self.global_info = {}

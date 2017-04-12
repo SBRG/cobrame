@@ -5,7 +5,7 @@ from warnings import warn
 
 from cobra import Reaction
 from sympy import Basic
-from six import iteritems
+from six import iteritems, string_types
 
 from cobrame.core.Components import *
 from cobrame.util import mu
@@ -225,6 +225,8 @@ class MetabolicReaction(MEReaction):
 
     @complex_data.setter
     def complex_data(self, process_data):
+        if isinstance(process_data, string_types):
+            process_data = self._model.complex_data.get_by_id(process_data)
         self._complex_data = process_data
         if not hasattr(process_data, 'complex_id'):
             raise TypeError('%s is not a ComplexData instance' %
@@ -238,6 +240,9 @@ class MetabolicReaction(MEReaction):
 
     @stoichiometric_data.setter
     def stoichiometric_data(self, process_data):
+        if isinstance(process_data, string_types):
+            process_data = \
+                self._model.stoichiometric_data.get_by_id(process_data)
         self._stoichiometric_data = process_data
         process_data._parent_reactions.add(self.id)
 
@@ -381,6 +386,9 @@ class PostTranslationReaction(MEReaction):
 
     @posttranslation_data.setter
     def posttranslation_data(self, process_data):
+        if isinstance(process_data, string_types):
+            process_data = \
+                self._model.posttranslation_data.get_by_id(process_data)
         self._posttranslation_data = process_data
         process_data._parent_reactions.add(self.id)
 
@@ -479,6 +487,8 @@ class TranscriptionReaction(MEReaction):
 
     @transcription_data.setter
     def transcription_data(self, process_data):
+        if isinstance(process_data, string_types):
+            process_data = self._model.transcription_data.get_by_id(process_data)
         self._transcription_data = process_data
         process_data._parent_reactions.add(self.id)
 
@@ -594,7 +604,8 @@ class GenericFormationReaction(MEReaction):
     handle this, GenericFormationReactions are used to create generic forms
     of these components.
     """
-    pass
+    def __init__(self, id):
+        MEReaction.__init__(self, id)
 
 
 def stringify(element, number):
@@ -603,7 +614,10 @@ def stringify(element, number):
 
 class TranslationReaction(MEReaction):
     """Translation of a TranscribedGene to a TranslatedGene"""
-    _translation_data = None
+
+    def __init__(self, id):
+        MEReaction.__init__(self, id)
+        self._translation_data = None
 
     @property
     def translation_data(self):
@@ -611,6 +625,8 @@ class TranslationReaction(MEReaction):
 
     @translation_data.setter
     def translation_data(self, process_data):
+        if isinstance(process_data, string_types):
+            process_data = self._model.translation_data.get_by_id(process_data)
         self._translation_data = process_data
         process_data._parent_reactions.add(self.id)
 
@@ -745,12 +761,25 @@ class TranslationReaction(MEReaction):
 
 class tRNAChargingReaction(MEReaction):
 
-    tRNAData = None
+    def __init__(self, id):
+        MEReaction.__init__(self, id)
+        self._tRNA_data = None
+
+    @property
+    def tRNA_data(self):
+        return self._tRNA_data
+
+    @tRNA_data.setter
+    def tRNA_data(self, process_data):
+        if isinstance(process_data, string_types):
+            process_data = self._model.tRNA_data.get_by_id(process_data)
+        self._tRNA_data = process_data
+        process_data._parent_reactions.add(self.id)
 
     def update(self, verbose=True):
         self.clear_metabolites()
         new_stoichiometry = defaultdict(float)
-        data = self.tRNAData
+        data = self.tRNA_data
 
         # set tRNA coupling parameters
         m_tRNA = self._model.global_info['m_tRNA']
@@ -778,7 +807,7 @@ class tRNAChargingReaction(MEReaction):
             new_stoichiometry[data.synthetase] = -synthetase_amount
 
         # Add tRNA modifications to stoichiometry
-        new_stoichiometry = self.add_modifications(self.tRNAData.id,
+        new_stoichiometry = self.add_modifications(self.tRNA_data.id,
                                                    new_stoichiometry,
                                                    tRNA_amount)
 

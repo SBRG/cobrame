@@ -188,7 +188,7 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_to_codon,
                                  "RNA_" + tRNA, codon)
             charging_reaction = tRNAChargingReaction("charging_tRNA_" + tRNA +
                                                      "_" + codon)
-            charging_reaction.tRNAData = tRNA_data
+            charging_reaction.tRNA_data = tRNA_data
 
             me_model.add_reaction(charging_reaction)
             charging_reaction.update(verbose=verbose)
