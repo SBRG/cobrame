@@ -79,7 +79,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
         verbose = True
         save_dir = mkdtemp()
         print("LP files will be saved in " + save_dir)
-        filename_base = join(save_dir, "me_mu_" + num_format + ".lp")
+        filename_base = join(save_dir, "me_mu_" + num_format + ".lp").encode()
     if verbose:
         success_str_base = Green + num_format + "\t+" + Normal
         failure_str_base = Red + num_format + "\t-" + Normal
