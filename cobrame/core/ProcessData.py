@@ -1,9 +1,13 @@
 from collections import defaultdict
 
 from six import iteritems
+import cobra
+import numpy as np
 
 from cobrame.core.MEReactions import *
+from cobrame.core.Components import GenerictRNA
 from cobrame.util.dogma import *
+from cobrame.util.massbalance import elements_to_formula
 
 
 class ProcessData(object):
@@ -71,6 +75,44 @@ class ModificationData(ProcessData):
         self.stoichiometry = {}
         self.enzyme = None
         self.keff = 65.
+        self._element_contribution = {}
+
+    @property
+    def element_contribution(self):
+        if self._element_contribution:
+            return self._element_contribution
+
+        # Return "trivial" cases (only one modifying metabolite in the
+        # reactants and no products) without warning
+        elif len(self.stoichiometry) == 1 and \
+                        list(self.stoichiometry.values())[0] < 0:
+            return self.calculate_element_contribution()
+        elif self.calculate_element_contribution():
+            warn('No element contribution input for modification (%s), '
+                 'calculating based on stoichiometry instead' % self.id)
+            return self.calculate_element_contribution()
+        else:
+            return {}
+
+    def calculate_element_contribution(self):
+        elements = defaultdict(int)
+        for met, coefficient in iteritems(self.stoichiometry):
+            met_obj = self._model.metabolites.get_by_id(met)
+            # elements lost in conversion are added to complex, protein, etc.
+            if not met_obj.elements and not isinstance(met_obj, GenerictRNA):
+                warn('met (%s) does not have formula' % met_obj.id)
+            for e, n in iteritems(met_obj.elements):
+                elements[e] -= n * coefficient
+        return elements
+
+    def calculate_biomass_contribution(self):
+        elements = self.calculate_element_contribution()
+
+        # Create temporary metabolite for calculating formula weight
+        tmp_met = cobra.Metabolite('mass')
+        elements_to_formula(tmp_met, elements)
+
+        return tmp_met.formula_weight
 
     def get_complex_data(self):
         for i in self._model.complex_data:
@@ -85,10 +127,52 @@ class SubreactionData(ProcessData):
         self.stoichiometry = {}
         self.enzyme = None
         self.keff = 65.
+        self._element_contribution = {}
+
+    @property
+    def element_contribution(self):
+        if self._element_contribution:
+            return self._element_contribution
+        else:
+            contribution = {i: v for i, v in
+                            iteritems(self.calculate_element_contribution())
+                            if v}
+
+        # Return "trivial" cases (only one modifying metabolite in the
+        # reactants and no products) without warning
+        if len(self.stoichiometry) == 1 and \
+                        list(self.stoichiometry.values())[0] < 0:
+            return self.calculate_element_contribution()
+        elif contribution:
+            warn('No element contribution input for subreaction (%s), '
+                 'calculating based on stoichiometry instead' % self.id)
+            return self.calculate_element_contribution()
+        else:
+            return {}
+
+    def calculate_element_contribution(self):
+        elements = defaultdict(int)
+        for met, coefficient in iteritems(self.stoichiometry):
+            met_obj = self._model.metabolites.get_by_id(met)
+            # elements lost in conversion are added to complex, protein, etc.
+            if not met_obj.elements and not isinstance(met_obj, GenerictRNA):
+                warn('met (%s) does not have formula' % met_obj.id)
+            for e, n in iteritems(met_obj.elements):
+                elements[e] -= n * coefficient
+        return elements
+
+    def calculate_biomass_contribution(self):
+        elements = self.calculate_element_contribution()
+
+        # Create temporary metabolite for calculating formula weight
+        tmp_met = cobra.Metabolite('mass')
+        elements_to_formula(tmp_met, elements)
+
+        return tmp_met.formula_weight
 
     def get_complex_data(self):
         for i in self._model.complex_data:
-            if self.id in i.modifications:
+            if self.id in i.subreactions:
                 yield i
 
 
@@ -116,6 +200,8 @@ class ComplexData(ProcessData):
         self.chaperones = {}
         # {ModificationData.id : number}
         self.modifications = {}
+        # Forming some metacomplexes occur in multiple steps
+        self.subreactions = {}
         self._complex_id = None  # assumed to be the same as id if None
 
     @property
@@ -277,13 +363,13 @@ class TranslationData(ProcessData):
         amino_acid_sequence = ''.join(codon_table.get(i, "K") for i in codons)
         amino_acid_sequence = amino_acid_sequence.rstrip("*")
         if not amino_acid_sequence.startswith('M'):
-            start_codons = self._model.global_info["met_start_codons"]
+            start_codons = self._model.global_info.get("met_start_codons", {})
             if self.first_codon not in start_codons:
                 warn("%s starts with '%s' which is not a start codon" %
                      (self.mRNA, self.first_codon))
             amino_acid_sequence = 'M' + ''.join(amino_acid_sequence[1:])
         if "*" in amino_acid_sequence:
-            amino_acid_sequence = amino_acid_sequence.replace('*', 'K')
+            amino_acid_sequence = amino_acid_sequence.replace('*', 'C')
         return amino_acid_sequence
 
     @property
@@ -340,7 +426,6 @@ class TranslationData(ProcessData):
             if codon == 'TGA':
                 print('Adding selenocystein for %s' % self.id)
                 aa = 'sec'
-                # TODO account of selenocysteine in formula
             else:
                 abbreviated_aa = dogma.codon_table[codon]
                 if abbreviated_aa == "*":
@@ -375,8 +460,21 @@ class TranslationData(ProcessData):
 
     @property
     def translation_start_subreactions(self):
-        # Read-only link to list of start subreactions for organism
-        return self._model.global_info.get('translation_start_subreactions')
+        # Read-only link to list of start subreactions for organism, if present
+        # in model
+        start_subreactions = []
+        subreactions = \
+            self._model.global_info.get('translation_start_subreactions', [])
+        for subreaction_id in subreactions:
+            try:
+                self._model.subreaction_data.get_by_id(subreaction_id)
+            except KeyError:
+                warn('initiation subreaction %s not in model' %
+                     subreaction_id)
+            else:
+                start_subreactions.append(subreaction_id)
+
+        return start_subreactions
 
     @property
     def translation_termination_subreactions(self):
@@ -385,7 +483,7 @@ class TranslationData(ProcessData):
         global_info = self._model.global_info
         last_codon = self.last_codon
         term_enzyme = global_info["translation_terminators"].get(last_codon)
-        if term_enzyme is not None:
+        if term_enzyme:
             termination_subreaction_id = last_codon + '_' + term_enzyme + \
                                          '_mediated_termination'
             try:

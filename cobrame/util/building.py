@@ -670,10 +670,8 @@ def add_reactions_from_stoichiometric_data(me_model, rxn_to_cplx_dict,
 
         # Reactions can be catalyzed by multiple isozymes so retrieve list of
         # complexes that catalyze the reaction
-        try:
-            complexes_list = rxn_to_cplx_dict[reaction_data.id]
-        except KeyError:
-            complexes_list = [None]
+        complexes_list = rxn_to_cplx_dict.get(reaction_data.id, [None])
+
 
         # Add metabolic reactions for each isozyme
         for complex_id in complexes_list:
