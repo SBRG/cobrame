@@ -32,7 +32,7 @@ class MEModel(Model):
         self._biomass = Constraint("biomass")
         self._biomass_dilution = SummaryVariable("biomass_dilution")
         self._biomass_dilution.add_metabolites({self._biomass: -1})
-        self.add_reaction(self._biomass_dilution)
+        self.add_reactions([self._biomass_dilution])
         self._biomass_dilution.upper_bound = mu
         self._biomass_dilution.lower_bound = mu
         # maintenance energy
@@ -81,12 +81,12 @@ class MEModel(Model):
             self._biomass: 1,
         })
 
-        self.add_reactions((self._protein_biomass_dilution,
+        self.add_reactions([self._protein_biomass_dilution,
                             self._mRNA_biomass_dilution,
                             self._tRNA_biomass_dilution,
                             self._rRNA_biomass_dilution,
                             self._ncRNA_biomass_dilution,
-                            self._DNA_biomass_dilution))
+                            self._DNA_biomass_dilution])
 
     @property
     def unmodeled_protein(self):
@@ -118,7 +118,7 @@ class MEModel(Model):
     def gam(self, value):
         if 'GAM' not in self.reactions:
             warn('Adding GAM reaction to model')
-            self.add_reaction(SummaryVariable("GAM"))
+            self.add_reactions([SummaryVariable("GAM")])
             self.reactions.GAM.lower_bound = mu
         atp_hydrolysis = {'atp_c': -1, 'h2o_c': -1, 'adp_c': 1, 'h_c': 1,
                           'pi_c': 1}
@@ -137,7 +137,7 @@ class MEModel(Model):
             warn('Adding ATPM reaction to model')
             atp_hydrolysis = {'atp_c': -1, 'h2o_c': -1, 'adp_c': 1, 'h_c': 1,
                               'pi_c': 1}
-            self.add_reaction(SummaryVariable("ATPM"))
+            self.add_reactions([SummaryVariable("ATPM")])
             self.reactions.ATPM.add_metabolites(atp_hydrolysis)
         self.reactions.ATPM.lower_bound = value
         self._ngam = value
@@ -237,7 +237,7 @@ class MEModel(Model):
             if hasattr(r, "update"):
                 r.update()
 
-    def prune(self,skip=[]):
+    def prune(self, skip=[]):
         """remove all unused metabolites and reactions
 
         This should be run after the model is fully built. It will be
@@ -318,7 +318,8 @@ class MEModel(Model):
                     self.reactions.get_by_id('DM_' + m.id).remove_from_model(
                             remove_orphans=True)
                     if m in self.metabolites:
-                        m.remove_from_model(method='subtractive')
+                        # Defaults to subtractive when removing reaction
+                        m.remove_from_model()
                 except KeyError:
                     pass
                 else:
@@ -349,7 +350,8 @@ class MEModel(Model):
 
     def remove_genes_from_model(self, gene_list):
         for gene in gene_list:
-            self.metabolites.get_by_id('RNA_'+gene).remove_from_model(method='subtractive')
+            # defaults to subtractive when removing model
+            self.metabolites.get_by_id('RNA_'+gene).remove_from_model()
             protein = self.metabolites.get_by_id('protein_'+gene)
             for cplx in protein.complexes:
                 print('Complex (%s) removed from model' % cplx.id)
@@ -360,7 +362,14 @@ class MEModel(Model):
                         pass
                     rxn.remove_from_model()
 
-            protein.remove_from_model(method='destructive')
+            # If cannot import SymbolicParameter, assume using cobrapy
+            # versions <= 0.5.11
+            try:
+                from optlang.interface import SymbolicParameter
+            except ImportError:
+                protein.remove_from_model(method='destructive')
+            else:
+                protein.remove_from_model(destructive=True)
 
         # Remove all transcription reactions that now do not form a used
         # transcript

@@ -21,6 +21,18 @@ class MEReaction(Reaction):
 
 
     """
+    def __init__(self, id=None, name=''):
+        Reaction.__init__(self, id, name)
+        self._objective_coefficient = 0.
+
+    @property
+    def objective_coefficient(self):
+        """Necessary to allow use of high-level OptLang interface"""
+        return self._objective_coefficient
+
+    @objective_coefficient.setter
+    def objective_coefficient(self, value):
+        self._objective_coefficient = value
 
     def check_me_mass_balance(self):
         mass_balance = self.check_mass_balance()
@@ -198,6 +210,11 @@ class MEReaction(Reaction):
             biomass += mod_obj.calculate_biomass_contribution() / 1000. * count
         return biomass
 
+    def clear_metabolites(self):
+        """Remove all metabolites from the reaction"""
+        for metabolite in list(self._metabolites.keys()):
+            self._metabolites.pop(metabolite)
+
 
 class MetabolicReaction(MEReaction):
     """Metabolic reaction including required enzymatic complex
@@ -285,8 +302,7 @@ class MetabolicReaction(MEReaction):
                                                             verbose=verbose)
 
         # Replace old stoichiometry with new one
-        self.add_metabolites(object_stoichiometry,
-                             add_to_container_model=False)
+        self.add_metabolites(object_stoichiometry)
 
         # Set the bounds
         if self.reverse:
@@ -375,8 +391,7 @@ class ComplexFormation(MEReaction):
         if biomass > 0:
             self.add_metabolites({self._model._biomass: biomass})
 
-        self.add_metabolites(object_stoichiometry, combine=False,
-                             add_to_container_model=False)
+        self.add_metabolites(object_stoichiometry, combine=False)
 
 
 class PostTranslationReaction(MEReaction):
@@ -488,8 +503,7 @@ class PostTranslationReaction(MEReaction):
         # Convert element dict to formula string and associate it with complex
         massbalance.elements_to_formula(protein_met, elements)
 
-        self.add_metabolites(object_stoichiometry, combine=False,
-                             add_to_container_model=True)
+        self.add_metabolites(object_stoichiometry, combine=False)
 
 
 class TranscriptionReaction(MEReaction):
@@ -592,8 +606,7 @@ class TranscriptionReaction(MEReaction):
             self.get_components_from_ids(stoichiometry, verbose=verbose,
                                          default_type=TranscribedGene)
 
-        self.add_metabolites(new_stoich, combine=False,
-                             add_to_container_model=False)
+        self.add_metabolites(new_stoich, combine=False)
 
         # add biomass constraints for RNA products
         tRNA_mass = rRNA_mass = ncRNA_mass = mRNA_mass = 0.
@@ -614,16 +627,16 @@ class TranscriptionReaction(MEReaction):
         # the transcription unit
         if tRNA_mass > 0:
             self.add_metabolites({self._model._tRNA_biomass: tRNA_mass},
-                                 combine=False, add_to_container_model=False)
+                                 combine=False)
         if rRNA_mass > 0:
             self.add_metabolites({self._model._rRNA_biomass: rRNA_mass},
-                                 combine=False, add_to_container_model=False)
+                                 combine=False)
         if ncRNA_mass > 0:
             self.add_metabolites({self._model._ncRNA_biomass: ncRNA_mass},
-                                 combine=False, add_to_container_model=False)
+                                 combine=False)
         if mRNA_mass > 0:
             self.add_metabolites({self._model._mRNA_biomass: mRNA_mass},
-                                 combine=False, add_to_container_model=False)
+                                 combine=False)
 
 
 class GenericFormationReaction(MEReaction):
@@ -776,7 +789,7 @@ class TranslationReaction(MEReaction):
                                                             verbose=verbose)
         # add metabolites to reaction
         self.add_metabolites(object_stoichiometry,
-                             combine=False, add_to_container_model=False)
+                             combine=False)
 
         # -------------Update Element Dictionary and Formula-------------------
         self._add_formula_to_protein(translation_data, protein)
@@ -785,12 +798,12 @@ class TranslationReaction(MEReaction):
         # add biomass constraint for protein translated
         protein_mass = protein.mass  # kDa
         self.add_metabolites({self._model._protein_biomass: protein_mass},
-                             combine=False, add_to_container_model=False)
+                             combine=False)
         # RNA biomass consumed due to degradation
         mRNA_mass = transcript.mass  # kDa
         self.add_metabolites(
             {self._model._mRNA_biomass: (-mRNA_mass * deg_amount)},
-            combine=False, add_to_container_model=False)
+            combine=False)
 
 
 class tRNAChargingReaction(MEReaction):
@@ -850,8 +863,7 @@ class tRNAChargingReaction(MEReaction):
                                                             verbose=verbose)
 
         # Replace reaction stoichiometry with updated stoichiometry
-        self.add_metabolites(object_stoichiometry,
-                             add_to_container_model=False)
+        self.add_metabolites(object_stoichiometry)
 
 
 class SummaryVariable(MEReaction):

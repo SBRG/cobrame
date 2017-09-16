@@ -1,5 +1,6 @@
 import copy
 import json
+from collections import OrderedDict
 from warnings import warn
 import os
 
@@ -8,16 +9,25 @@ from numpy import bool_, float_
 from six import iteritems, string_types
 from jsonschema import validate, ValidationError
 
-from cobra.io.json import save_json_model, load_json_model
 import cobrame
 from cobrame import mu
+from cobrame.util import me_model_interface
+
+try:
+    # If cannot import SymbolicParameter, assume using cobrapy
+    # versions <= 0.5.11
+    from optlang.interface import SymbolicParameter
+except ImportError:
+    from cobra.io.json import metabolite_from_dict, save_json_model
+else:
+    from cobra.io.json import save_json_model
+    from cobra.io.dict import metabolite_from_dict
 
 mu_temp = Symbol('mu')
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 
-
-def save_json_me(me0, file_name, pretty=False):
+def save_json_me(me0, file_name):
     """
     Save a stripped-down JSON version of the ME-model. This will exclude all of
     ME-Model information except the reaction stoichiometry information and the
@@ -65,6 +75,13 @@ def get_sympy_expression(value):
     return expression_value.subs(mu_temp, mu)
 
 
+def get_numeric_from_string(string):
+    try:
+        return float(string)
+    except ValueError:
+        return get_sympy_expression(string)
+
+
 def load_json_me(file_name):
     """
     Load a stripped-down JSON version of the ME-model. This will exclude all of
@@ -80,33 +97,56 @@ def load_json_me(file_name):
         COBRA Model representation of the full ME-model. This will not include
         all of the functionality of a :class:`~cobrame.core.MEModel.MEModel`
     """
-    me = load_json_model(file_name)
 
-    # Re-convert stoichiometries back to sympy
-    for rxn in me.reactions:
-        for met in rxn.metabolites:
-            s = rxn._metabolites[met]
-            try:
-                rxn._metabolites[met] = float(s)
-            except ValueError:
-                rxn._metabolites[met] = get_sympy_expression(s)
-        try:
-            rxn.lower_bound = float(rxn.lower_bound)
-        except ValueError:
-            rxn.lower_bound = get_sympy_expression(rxn.lower_bound)
-        try:
-            rxn.upper_bound = float(rxn.upper_bound)
-        except ValueError:
-            rxn.upper_bound = get_sympy_expression(rxn.upper_bound)
+    with open(file_name, 'r') as f:
+        obj = json.load(f)
 
-    for met in me.metabolites:
-        b = met._bound
-        try:
-            met._bound = float(b)
-        except ValueError:
-            met._bound = get_sympy_expression(b)
+    model = cobrame.MEModel()
 
-    return me
+    # If cannot import SymbolicParameter, assume using cobrapy
+    # versions <= 0.5.11. If versions >= 0.8.0 are used, a ME-model interface
+    # must be assigned as the solver interface
+    try:
+        from optlang.interface import SymbolicParameter
+    except ImportError:
+        pass
+    else:
+        model.solver = me_model_interface
+
+    default_reactions = [i.id for i in model.reactions]
+
+    for k, v in iteritems(obj):
+        if k in {'id', 'name'}:
+            setattr(model, k, v)
+
+    def _reaction_from_dict(reaction, model):
+        new_reaction = cobrame.Reaction()
+        for k, v in iteritems(reaction):
+            if k in {'objective_coefficient', 'reversibility', 'reaction'}:
+                continue
+            elif k == 'metabolites':
+                new_reaction.add_metabolites(OrderedDict(
+                    (model.metabolites.get_by_id(str(met)),
+                     get_numeric_from_string(coeff))
+                    for met, coeff in iteritems(v)))
+            elif k in {'upper_bound', 'lower_bound'}:
+                v = get_numeric_from_string(v)
+                setattr(new_reaction, k, v)
+            else:
+                setattr(new_reaction, k, v)
+        return new_reaction
+
+    model.add_metabolites(
+        [metabolite_from_dict(metabolite) for metabolite in obj['metabolites']]
+    )
+
+    new_reactions = [
+        _reaction_from_dict(reaction, model) for reaction in obj['reactions']]
+
+    model.remove_reactions(default_reactions)
+    model.add_reactions(new_reactions)
+
+    return model
 
 # -----------------------------------------------------------------------------
 # Functions below here facilitate json dumping/loading of full ME-models with
