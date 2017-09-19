@@ -15,7 +15,7 @@ before_install:
 install:
     - pip install -U pytest
     - pip install .
-    - pip install git+https://github.com/sbrg/ecolime.git@devel
+    - pip install git+https://github.com/sbrg/ecolime.git
 
 script: travis_wait pytest
 

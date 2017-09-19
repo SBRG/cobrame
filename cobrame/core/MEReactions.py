@@ -57,7 +57,7 @@ class MEReaction(Reaction):
                 for enzyme in modification.enzyme:
                     stoichiometry[enzyme] -= \
                         mu / modification.keff / 3600. * scale * abs(count)
-            elif type(modification.enzyme) == str:
+            elif isinstance(modification.enzyme, string_types):
                 stoichiometry[modification.enzyme] -= \
                     mu / modification.keff / 3600. * scale * abs(count)
 
@@ -91,7 +91,7 @@ class MEReaction(Reaction):
                 for enzyme in subreaction_data.enzyme:
                     stoichiometry[enzyme] -= mu / subreaction_data.keff / \
                                              3600. * count
-            elif type(subreaction_data.enzyme) == str:
+            elif isinstance(subreaction_data.enzyme, string_types):
                 stoichiometry[subreaction_data.enzyme] -= \
                     mu / subreaction_data.keff / 3600. * count
 
