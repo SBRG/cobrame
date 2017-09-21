@@ -213,7 +213,7 @@ class MEReaction(Reaction):
     def clear_metabolites(self):
         """Remove all metabolites from the reaction"""
         for metabolite in list(self._metabolites.keys()):
-            self._metabolites.pop(metabolite)
+            self.add_metabolites({metabolite: 0}, combine=False)
 
 
 class MetabolicReaction(MEReaction):

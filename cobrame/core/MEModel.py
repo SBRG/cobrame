@@ -259,7 +259,7 @@ class MEModel(Model):
                 delete = True
                 for rxn in p._reaction:
                     try:
-                        if p in rxn.reactants:
+                        if rxn.metabolites[p] < 0:
                             delete = False
                     except Exception as e:
                         print(rxn)
@@ -275,7 +275,7 @@ class MEModel(Model):
                 delete = True
                 for rxn in p._reaction:
                     try:
-                        if p in rxn.reactants:
+                        if rxn.metabolites[p] < 0:
                             delete = False
                     except Exception as e:
                         print(rxn)
@@ -291,7 +291,7 @@ class MEModel(Model):
                 delete = True
                 for rxn in p._reaction:
                     try:
-                        if p in rxn.reactants and not rxn.id.startswith('degradation'):
+                        if rxn.metabolites[p] < 0 and not rxn.id.startswith('degradation'):
                             delete = False
                     except Exception as e:
                         print(rxn)
@@ -311,7 +311,7 @@ class MEModel(Model):
                 delete = True
 
             for rxn in m._reaction:
-                if m in rxn.reactants and not rxn.id.startswith('DM_'):
+                if rxn.metabolites[m] < 0 and not rxn.id.startswith('DM_'):
                     delete = False
             if delete:
                 try:

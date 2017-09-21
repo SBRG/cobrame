@@ -27,6 +27,7 @@ mu_temp = Symbol('mu')
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 
+
 def save_json_me(me0, file_name):
     """
     Save a stripped-down JSON version of the ME-model. This will exclude all of
@@ -178,7 +179,8 @@ _PROCESS_DATA_TYPE_DEPENDENCIES = \
     {'StoichiometricData': ['_stoichiometry', 'lower_bound', 'upper_bound',
                             'subreactions'],
 
-     'ComplexData': ['stoichiometry', 'complex_id', 'modifications'],
+     'ComplexData': ['stoichiometry', 'complex_id', 'modifications',
+                     'subreactions'],
 
      'TranscriptionData': ['modifications', 'subreactions',
                            'nucleotide_sequence', 'RNA_products',
@@ -198,9 +200,11 @@ _PROCESS_DATA_TYPE_DEPENDENCIES = \
                              'translocation', 'modifications', 'subreactions',
                              'surface_area', 'keq_folding', 'k_folding'],
 
-     'ModificationData': ['stoichiometry', 'enzyme', 'keff'],
+     'ModificationData': ['stoichiometry', 'enzyme', 'keff',
+                          'element_contribution'],
 
-     'SubreactionData': ['stoichiometry', 'enzyme', 'keff'],
+     'SubreactionData': ['stoichiometry', 'enzyme', 'keff',
+                         'element_contribution'],
 
      'GenericData': ['component_list']
      }
@@ -500,11 +504,11 @@ def add_process_data_from_dict(model, process_data_type, process_data_info):
     for attribute in _PROCESS_DATA_TYPE_DEPENDENCIES.get(process_data_type,
                                                          []):
         value = process_data_info[attribute]
-        if type(value) != dict:
+        try:
             setattr(process_data, attribute, value)
-        else:
-            for k, v in value.items():
-                getattr(process_data, attribute)[k] = v
+        except AttributeError:
+            # set to the hidden attribute instead
+            setattr(process_data, '_' + attribute, value)
 
 
 def add_reaction_from_dict(model, reaction_info):

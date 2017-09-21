@@ -78,7 +78,7 @@
                 "properties": {
                     "id": {"type": "string"},
                     "name": {"type": "string"},
-                    "_stoichiometry": {
+                    "stoichiometry": {
                         "type": "object",
                         "patternProperties": {
                             ".*": {"type": "number"}
@@ -108,6 +108,12 @@
                         }
                     },
                     "modifications": {
+                        "type": "object",
+                        "patternProperties": {
+                            ".*": {"type": "number"}
+                        }
+                    },
+                    "subreactions": {
                         "type": "object",
                         "patternProperties": {
                             ".*": {"type": "number"}
@@ -291,7 +297,13 @@
                         "type": ["string", "null", "array"],
                         "default": "null"
                     },
-                    "keff": {"type": "number"}
+                    "keff": {"type": "number"},
+                    "element_contribution": {
+                        "type": "object",
+                        "patternProperties": {
+                            ".*": {"type": "number"}
+                        }
+                    }
                 }
             }
         },
@@ -312,7 +324,13 @@
                         "type": ["string", "null", "array"],
                         "default": "null"
                     },
-                    "keff": {"type": "number"}
+                    "keff": {"type": "number"},
+                    "element_contribution": {
+                        "type": "object",
+                        "patternProperties": {
+                            ".*": {"type": "number"}
+                        }
+                    }
                 }
             }
         },
