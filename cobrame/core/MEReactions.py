@@ -42,7 +42,7 @@ class MEReaction(Reaction):
             mass_balance.pop('charge')
 
         return {met: value for met, value in iteritems(mass_balance)
-                if abs(value) > 1e-12}
+                if abs(value) > 1e-11}
 
     def add_modifications(self, process_data_id, stoichiometry, scale=1.):
         """
@@ -231,9 +231,6 @@ class MetabolicReaction(MEReaction):
         If True, the reaction corresponds to the reverse direction of the
         reaction. This is necessary since all reversible enzymatic reactions
         in an ME-model are broken into two irreversible reactions
-    :param set complex_dilution_set:
-        If an enzyme involved of this reaction acts as a "carrier" (i.e. enzyme
-        that transfers a sidechain to another enzyme or metabolite)
     :param cobrame.core.ProcessData.ComplexData complex_data:
         ComplexData instance for the enzyme that catalzes the metabolic
         reaction
@@ -248,7 +245,6 @@ class MetabolicReaction(MEReaction):
         self._stoichiometric_data = None
         self.keff = 65.  # in per second
         self.reverse = False
-        self.complex_dilution_set = set()
 
     @property
     def complex_data(self):
@@ -291,8 +287,6 @@ class MetabolicReaction(MEReaction):
         sign = -1 if self.reverse else 1
         for component, value in iteritems(stoichiometric_data.stoichiometry):
             new_stoichiometry[component] += value * sign
-            if component in self.complex_dilution_set:
-                new_stoichiometry[component] += - mu / self.keff / 3600.
 
         new_stoichiometry = self.add_subreactions(stoichiometric_data.id,
                                                   new_stoichiometry)
