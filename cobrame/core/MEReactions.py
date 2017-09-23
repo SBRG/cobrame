@@ -130,10 +130,6 @@ class MEReaction(Reaction):
         process_info = self._model.process_data.get_by_id(process_data_id)
         protein = self._model.metabolites.get_by_id(protein_id)
         protein_length = len(protein.amino_acid_sequence)
-        # Requirement of some translocation complexes vary depending
-        # on protein being translocated
-        multiplier_dict = \
-            self._model.global_info.get("translocation_multipliers", {})
 
         for translocation, count in iteritems(process_info.translocation):
             translocation_data = all_translocation.get_by_id(translocation)
@@ -144,13 +140,15 @@ class MEReaction(Reaction):
                 else:
                     stoichiometry[metabolite] += amount * count
 
+            # Requirement of some translocation complexes vary depending
+            # on protein being translocated
+            multiplier_dict = process_info.translocation_multipliers
             for enzyme, enzyme_info in iteritems(
                     translocation_data.enzyme_dict):
                 length_dependent = enzyme_info['length_dependent']
                 fixed_keff = enzyme_info['fixed_keff']
-                bnum = protein_id.replace('protein_', '')
 
-                multiplier = multiplier_dict[enzyme].get(bnum, 1.)
+                multiplier = multiplier_dict.get(enzyme, 1.)
 
                 length = protein_length if length_dependent else 1.
 

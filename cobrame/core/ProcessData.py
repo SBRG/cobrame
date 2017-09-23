@@ -250,7 +250,6 @@ class TranscriptionData(ProcessData):
         self.nucleotide_sequence = ''
         self.RNA_products = RNA_products
         self.RNA_polymerase = ''
-        self.rho_dependent = False
         # {ModificationData.id : number}
         self.modifications = defaultdict(int)
         self.subreactions = defaultdict(int)
@@ -536,6 +535,7 @@ class PostTranslationData(ProcessData):
         self.processed_protein_id = processed_protein
         self.unprocessed_protein_id = preprocessed_protein
         self.translocation = defaultdict(float)
+        self.translocation_multipliers = {}
 
         self.folding_mechanism = ''
         self.aggregation_propensity = 0.

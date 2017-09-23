@@ -29,7 +29,6 @@
                 "f_mRNA": {"type": "number"},
                 "m_tRNA": {"type": "number"},
                 "f_tRNA": {"type": "number"},
-                "RNA_polymerase": {"type": "array"},
                 "translation_terminators": {
                     "type": "object",
                     "patternProperties": {
@@ -37,36 +36,11 @@
                     }
                 },
                 "met_start_codons": {"type": "array"},
-                "peptide_processing_subreactions": {
-                    "type": "object",
-                    "patternProperties": {
-                        ".*": {"type": "number"}
-
-                    }
-                },
                 "translation_elongation_subreactions": {"type": "array"},
                 "translation_start_subreactions": {"type": "array"},
-                "translocation_multipliers": {
-                    "type": "object",
-                    "patternProperties": {
-                        ".*": {"type": "object"}
-                    }
-                },
                 "temperature": {"type": "number"},
                 "propensity_scaling": {"type": "number"},
-                "GC_fraction": {"type": "number"},
-                "modification_formula": {
-                    "type": "object",
-                    "patternProperties": {
-                        ".*": {
-                            "type": "object",
-                            "properties": {
-                                "formula": {"type": "string"}
-                            },
-                            "additionalProperties": false
-                        }
-                    }
-                }
+                "GC_fraction": {"type": "number"}
 
             }
         },
@@ -146,11 +120,7 @@
                         "type": "array",
                         "items": {"type": "string"}
                     },
-                    "RNA_polymerase": {"type": "string"},
-                    "rho_dependent": {
-                        "type": "boolean",
-                        "default": "false"
-                    }
+                    "RNA_polymerase": {"type": "string"}
                 }
             }
         },
@@ -272,6 +242,12 @@
                         }
                     },
                     "k_folding": {
+                        "type": "object",
+                        "patternProperties": {
+                            ".*": {"type": "number"}
+                        }
+                    },
+                    "translocation_multipliers": {
                         "type": "object",
                         "patternProperties": {
                             ".*": {"type": "number"}

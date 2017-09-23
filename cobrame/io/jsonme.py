@@ -184,7 +184,7 @@ _PROCESS_DATA_TYPE_DEPENDENCIES = \
 
      'TranscriptionData': ['modifications', 'subreactions',
                            'nucleotide_sequence', 'RNA_products',
-                           'RNA_polymerase', 'rho_dependent'],
+                           'RNA_polymerase'],
 
      'TranslationData': ['modifications', 'subreactions',
                          'nucleotide_sequence', 'mRNA', 'protein'],
