@@ -29,15 +29,6 @@
                 "f_mRNA": {"type": "number"},
                 "m_tRNA": {"type": "number"},
                 "f_tRNA": {"type": "number"},
-                "translation_terminators": {
-                    "type": "object",
-                    "patternProperties": {
-                        ".*": {"type": "string"}
-                    }
-                },
-                "met_start_codons": {"type": "array"},
-                "translation_elongation_subreactions": {"type": "array"},
-                "translation_start_subreactions": {"type": "array"},
                 "temperature": {"type": "number"},
                 "propensity_scaling": {"type": "number"},
                 "GC_fraction": {"type": "number"}

@@ -1,7 +1,9 @@
 from __future__ import print_function, absolute_import, division
 
+from copy import deepcopy
 from six import iteritems
 from collections import defaultdict
+
 from sympy import Basic
 
 import cobrame
@@ -87,7 +89,9 @@ def check_transcription_mass_balance(reaction):
     return mass_balance
 
 
-def check_me_model_mass_balance(model):
+def check_me_model_mass_balance(model0):
+
+    model = deepcopy(model0)
 
     def should_skip(reaction):
 

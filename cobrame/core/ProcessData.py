@@ -359,13 +359,10 @@ class TranslationData(ProcessData):
     def amino_acid_sequence(self):
         codons = (self.nucleotide_sequence[i: i + 3]
                   for i in range(0, (len(self.nucleotide_sequence)), 3))
-        amino_acid_sequence = ''.join(codon_table.get(i, "K") for i in codons)
+        amino_acid_sequence = ''.join(codon_table[i] for i in codons)
         amino_acid_sequence = amino_acid_sequence.rstrip("*")
         if not amino_acid_sequence.startswith('M'):
-            start_codons = self._model.global_info.get("met_start_codons", {})
-            if self.first_codon not in start_codons:
-                warn("%s starts with '%s' which is not a start codon" %
-                     (self.mRNA, self.first_codon))
+            # alternate start codons translated as methionine
             amino_acid_sequence = 'M' + ''.join(amino_acid_sequence[1:])
         if "*" in amino_acid_sequence:
             amino_acid_sequence = amino_acid_sequence.replace('*', 'C')
@@ -387,19 +384,11 @@ class TranslationData(ProcessData):
     def codon_count(self):
         # exclude the last three stop codons from count
         codons = (self.nucleotide_sequence[i: i + 3]
-                  for i in range(0, (len(self.nucleotide_sequence)-3), 3))
+                  for i in range(0, len(self.nucleotide_sequence), 3))
         codon_count = defaultdict(int)
         for i in codons:
             codon_count[i.replace('T', 'U')] += 1
 
-        # Remove one methionine (AUG) from codon count to account for start
-        first_codon = self.first_codon
-        start_codons = self._model.global_info.get("met_start_codons", {})
-        if first_codon in start_codons:
-            codon_count[first_codon] -= 1
-        else:
-            warn("%s starts with '%s' which is not a start codon" %
-                 (self.mRNA, first_codon))
         return codon_count
 
     @property
@@ -416,11 +405,21 @@ class TranslationData(ProcessData):
         return compute_protein_mass(self.amino_acid_count)
 
     @property
-    def elongation_subreactions(self):
-        global_info = self._model.global_info
-        elongation_subreactions = {}
-        # Add the subreaction_data associated with each tRNA/AA addition
-        for codon, count in iteritems(self.codon_count):
+    def subreactions_from_sequence(self):
+        """
+        Returns subreactions associated with each tRNA/AA addition.
+        """
+        subreactions = {}
+
+        # Trip first and last codon. Not translated during elongation
+        codon_count = self.codon_count
+        codon_count[self.first_codon] -= 1
+        codon_count[self.last_codon] -= 1
+
+        for codon, count in iteritems(codon_count):
+            if count == 0:
+                continue
+
             codon = codon.replace('U', 'T')
             if codon == 'TGA':
                 print('Adding selenocystein for %s' % self.id)
@@ -438,13 +437,14 @@ class TranslationData(ProcessData):
             except KeyError:
                 warn('elongation subreaction %s not in model' % subreaction_id)
             else:
-                elongation_subreactions[subreaction_id] = count
+                subreactions[subreaction_id] = count
 
+        return subreactions
+
+    def add_elongation_subreactions(self, elongation_subreactions=set()):
         # Some additional enzymatic processes are required for each amino acid
         # addition during translation elongation
-        translation_elongation_subreactions = \
-            global_info.get('translation_elongation_subreactions', [])
-        for subreaction_id in translation_elongation_subreactions:
+        for subreaction_id in elongation_subreactions:
             try:
                 self._model.subreaction_data.get_by_id(subreaction_id)
             except KeyError:
@@ -452,47 +452,45 @@ class TranslationData(ProcessData):
                      subreaction_id)
             else:
                 # No elongation subreactions needed for start codon
-                elongation_subreactions[subreaction_id] = \
+                self.subreactions[subreaction_id] = \
                     len(self.amino_acid_sequence) - 1.
 
-        return elongation_subreactions
+        for subreaction_id, value in self.subreactions_from_sequence.items():
+            self.subreactions[subreaction_id] = value
 
-    @property
-    def translation_start_subreactions(self):
+    def add_initiation_subreactions(self, start_codons=set(),
+                                    start_subreactions=set()):
         # Read-only link to list of start subreactions for organism, if present
         # in model
-        start_subreactions = []
-        subreactions = \
-            self._model.global_info.get('translation_start_subreactions', [])
-        for subreaction_id in subreactions:
+        if self.first_codon not in start_codons:
+            warn("%s starts with '%s' which is not a start codon" %
+                 (self.mRNA, self.first_codon))
+
+        for subreaction_id in start_subreactions:
             try:
                 self._model.subreaction_data.get_by_id(subreaction_id)
             except KeyError:
                 warn('initiation subreaction %s not in model' %
                      subreaction_id)
             else:
-                start_subreactions.append(subreaction_id)
+                self.subreactions[subreaction_id] = 1
 
-        return start_subreactions
-
-    @property
-    def translation_termination_subreactions(self):
-        termination_subreactions = []
+    def add_termination_subreactions(self, translation_terminator_dict={}):
         all_subreactions = self._model.subreaction_data
-        global_info = self._model.global_info
         last_codon = self.last_codon
-        term_enzyme = global_info["translation_terminators"].get(last_codon)
+        term_enzyme = translation_terminator_dict.get(last_codon, None)
         if term_enzyme:
-            termination_subreaction_id = last_codon + '_' + term_enzyme + \
-                                         '_mediated_termination'
+            termination_subreaction_id = \
+                last_codon + '_' + term_enzyme + '_mediated_termination'
             try:
                 all_subreactions.get_by_id(termination_subreaction_id)
             except KeyError:
                 warn("Termination subreaction '%s' not in model" %
                      (termination_subreaction_id))
             else:
-                termination_subreactions.append(termination_subreaction_id)
-        return termination_subreactions
+                self.subreactions[termination_subreaction_id] = 1
+        else:
+            warn("No termination enzyme for %s" % self.mRNA)
 
 
 class tRNAData(ProcessData):
