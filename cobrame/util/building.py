@@ -463,7 +463,7 @@ def add_complex_to_model(me_model, complex_id, complex_stoichiometry,
             {complex_id: {protein_<locus_tag>: stoichiometry}}
 
         complex_modifications: dict
-            {modification_id: stoichiometry}
+            {subreaction_id: stoichiometry}
 
     """
 
@@ -472,20 +472,21 @@ def add_complex_to_model(me_model, complex_id, complex_stoichiometry,
     for metabolite, value in iteritems(complex_stoichiometry):
         complex_data.stoichiometry[metabolite] += value
     for modification, value in iteritems(complex_modifications):
-        complex_data.modifications[modification] = value
+        complex_data.subreactions[modification] = value
 
 
-def add_modification_data(me_model, modification_id,
-                          modification_stoichiometry,
-                          modification_enzyme=None, verbose=True):
+def add_subreaction_data(me_model, modification_id,
+                         modification_stoichiometry,
+                         modification_enzyme=None, verbose=True):
     """
-    Creates a ModificationData object for each modification defined by the
+    Creates a SubreactionData object for each modification defined by the
     function inputs.
 
-    It's assumed every complex modification occurs spontaneously, unless
+    It's assumed every complex modification occurs spontaneously, unless a
+    modification_enzyme argument is passed.
 
     If a modification uses an enzyme this can be updated after the
-    ModificationData object is already created
+    SubreactionData object is already created
 
 
     Args:
@@ -495,13 +496,13 @@ def add_modification_data(me_model, modification_id,
 
     """
 
-    if modification_id in me_model.modification_data:
+    if modification_id in me_model.subreaction_data:
         if verbose:
-            warn('Modification (%s) already in model' % modification_id)
+            warn('Subreaction (%s) already in model' % modification_id)
         else:
             pass
     else:
-        modification_data = ModificationData(modification_id, me_model)
+        modification_data = SubreactionData(modification_id, me_model)
         modification_data.stoichiometry = modification_stoichiometry
         modification_data.enzyme = modification_enzyme
 
@@ -539,7 +540,9 @@ def add_model_complexes(me_model, complex_stoichiometry_dict,
         modification_dict = {}
         for metabolite, number in iteritems(info['modifications']):
             modification_id = 'mod_' + metabolite
-            add_modification_data(me_model, modification_id, {metabolite: -1},
+
+            # add modification as subreaction
+            add_subreaction_data(me_model, modification_id, {metabolite: -1},
                                   verbose=verbose)
             # stoichiometry of modification determined in
             # modification_data.stoichiometry

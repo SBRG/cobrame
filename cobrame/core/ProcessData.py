@@ -2,7 +2,6 @@ from collections import defaultdict
 
 from six import iteritems
 import cobra
-import numpy as np
 
 from cobrame.core.MEReactions import *
 from cobrame.core.Components import GenerictRNA
@@ -68,58 +67,6 @@ class StoichiometricData(ProcessData):
         return self._stoichiometry
 
 
-class ModificationData(ProcessData):
-    def __init__(self, id, model):
-        ProcessData.__init__(self, id, model)
-        model.modification_data.append(self)
-        self.stoichiometry = {}
-        self.enzyme = None
-        self.keff = 65.
-        self._element_contribution = {}
-
-    @property
-    def element_contribution(self):
-        if self._element_contribution:
-            return self._element_contribution
-
-        # Return "trivial" cases (only one modifying metabolite in the
-        # reactants and no products) without warning
-        elif len(self.stoichiometry) == 1 and \
-                        list(self.stoichiometry.values())[0] < 0:
-            return self.calculate_element_contribution()
-        elif self.calculate_element_contribution():
-            warn('No element contribution input for modification (%s), '
-                 'calculating based on stoichiometry instead' % self.id)
-            return self.calculate_element_contribution()
-        else:
-            return {}
-
-    def calculate_element_contribution(self):
-        elements = defaultdict(int)
-        for met, coefficient in iteritems(self.stoichiometry):
-            met_obj = self._model.metabolites.get_by_id(met)
-            # elements lost in conversion are added to complex, protein, etc.
-            if not met_obj.elements and not isinstance(met_obj, GenerictRNA):
-                warn('met (%s) does not have formula' % met_obj.id)
-            for e, n in iteritems(met_obj.elements):
-                elements[e] -= n * coefficient
-        return elements
-
-    def calculate_biomass_contribution(self):
-        elements = self.calculate_element_contribution()
-
-        # Create temporary metabolite for calculating formula weight
-        tmp_met = cobra.Metabolite('mass')
-        elements_to_formula(tmp_met, elements)
-
-        return tmp_met.formula_weight
-
-    def get_complex_data(self):
-        for i in self._model.complex_data:
-            if self.id in i.modifications:
-                yield i
-
-
 class SubreactionData(ProcessData):
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
@@ -162,7 +109,7 @@ class SubreactionData(ProcessData):
         return elements
 
     def calculate_biomass_contribution(self):
-        elements = self.calculate_element_contribution()
+        elements = self.element_contribution
 
         # Create temporary metabolite for calculating formula weight
         tmp_met = cobra.Metabolite('mass')
@@ -185,10 +132,10 @@ class ComplexData(ProcessData):
         Dictionary containing {protein_id: count} for all protein subunits
         comprising enzyme complex
 
-    :param dict modifications:
-        Dictionary of {modfication_data_id: count} for all protein
-        modifications. This can include cofactor/prosthetic group binding
-        or enzyme side group addition.
+    :param dict subreactions:
+        Dictionary of {subreaction_data_id: count} for all complex formation
+        subreactions/modifications. This can include cofactor/prosthetic group
+        binding or enzyme side group addition.
 
     """
 
@@ -198,8 +145,7 @@ class ComplexData(ProcessData):
         # {Component.id: stoichiometry}
         self.stoichiometry = defaultdict(float)
         self.chaperones = {}
-        # {ModificationData.id : number}
-        self.modifications = {}
+        # {SubreactionData.id : number}
         # Forming some metacomplexes occur in multiple steps
         self.subreactions = {}
         self._complex_id = None  # assumed to be the same as id if None
@@ -250,8 +196,7 @@ class TranscriptionData(ProcessData):
         self.nucleotide_sequence = ''
         self.RNA_products = RNA_products
         self.RNA_polymerase = ''
-        # {ModificationData.id : number}
-        self.modifications = defaultdict(int)
+        # {SubreactionData.id : number}
         self.subreactions = defaultdict(int)
 
     @property
@@ -350,10 +295,8 @@ class TranslationData(ProcessData):
         self.mRNA = mRNA
         self.protein = protein
         self.subreactions = defaultdict(int)
-        self.modifications = defaultdict(int)
         self._amino_acid_sequence = ""
         self.nucleotide_sequence = ""
-        self.term_enzyme = None
 
     @property
     def amino_acid_sequence(self):
@@ -503,7 +446,7 @@ class tRNAData(ProcessData):
         self.codon = codon
         self.amino_acid = amino_acid
         self.RNA = RNA
-        self.modifications = defaultdict(int)
+        self.subreactions = defaultdict(int)
 
 
 class TranslocationData(ProcessData):
@@ -544,7 +487,6 @@ class PostTranslationData(ProcessData):
         # chaperones. This is accounted for using propensity_scaling.
         self.propensity_scaling = 1.
 
-        self.modifications = defaultdict(float)
         self.subreactions = defaultdict(float)
         self.surface_area = {}
         model.posttranslation_data.append(self)

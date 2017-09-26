@@ -247,33 +247,6 @@
                 }
             }
         },
-        "modification_data": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string"},
-                    "name": {"type": "string"},
-                    "stoichiometry": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "enzyme": {
-                        "type": ["string", "null", "array"],
-                        "default": "null"
-                    },
-                    "keff": {"type": "number"},
-                    "element_contribution": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    }
-                }
-            }
-        },
         "subreaction_data": {
             "type": "array",
             "items": {

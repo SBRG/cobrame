@@ -44,10 +44,9 @@ class MEReaction(Reaction):
         return {met: value for met, value in iteritems(mass_balance)
                 if abs(value) > 1e-11}
 
-    def add_modifications(self, process_data_id, stoichiometry, scale=1.):
+    def add_subreactions(self, process_data_id, stoichiometry, scale=1.):
         """
-        Function to add modification process data to reaction stoichiometry
-
+        Function to add subreaction process data to reaction stoichiometry
 
         process_data_id: String
             ID of the process data associated with the metabolic reaction.
@@ -64,44 +63,6 @@ class MEReaction(Reaction):
            Some processes (ie. tRNA charging) are reformulated such that other
            involved metabolites need scaling
 
-
-        return: stoichiometry
-            The dictionary with updated entries
-        """
-
-        all_modifications = self._model.modification_data
-        process_info = self._model.process_data.get_by_id(process_data_id)
-        for modification_id, count in iteritems(process_info.modifications):
-            modification = all_modifications.get_by_id(modification_id)
-            for mod_comp, mod_count in iteritems(modification.stoichiometry):
-                stoichiometry[mod_comp] += count * mod_count * scale
-
-            if type(modification.enzyme) == list:
-                for enzyme in modification.enzyme:
-                    stoichiometry[enzyme] -= \
-                        mu / modification.keff / 3600. * scale * abs(count)
-            elif isinstance(modification.enzyme, string_types):
-                stoichiometry[modification.enzyme] -= \
-                    mu / modification.keff / 3600. * scale * abs(count)
-
-        return stoichiometry
-
-    def add_subreactions(self, process_data_id, stoichiometry):
-        """
-        Function to add subreaction process data to reaction stoichiometry
-
-        process_data_id: String
-            ID of the process data associated with the metabolic reaction.
-
-            For example, if the modifications are being added to a complex
-            formation reaction, the process data id would be the name of the
-            complex.
-
-
-        stoichiometry: Dictionary {metabolite_id: float} or
-                                  {metabolite_id: float * (sympy.Symbol)}
-
-
         return: stoichiometry
             The dictionary with updated entries
         """
@@ -113,13 +74,13 @@ class MEReaction(Reaction):
             if type(subreaction_data.enzyme) == list:
                 for enzyme in subreaction_data.enzyme:
                     stoichiometry[enzyme] -= mu / subreaction_data.keff / \
-                                             3600. * count
+                                             3600. * count * scale
             elif isinstance(subreaction_data.enzyme, string_types):
                 stoichiometry[subreaction_data.enzyme] -= \
-                    mu / subreaction_data.keff / 3600. * count
+                    mu / subreaction_data.keff / 3600. * count * scale
 
             for met, stoich in iteritems(subreaction_data.stoichiometry):
-                stoichiometry[met] += count * stoich
+                stoichiometry[met] += count * stoich * scale
 
         return stoichiometry
 
@@ -197,15 +158,16 @@ class MEReaction(Reaction):
                 self._model.add_metabolites([new_met])
         return object_stoichiometry
 
-    def add_biomass_from_modifications(self, process_data, biomass):
+    def add_biomass_from_subreactions(self, process_data, biomass):
         """
         Account for the biomass of metabolites added to macromolecule (protein,
         complex, etc.) due to a modification such as prosthetic group addition.
 
         """
-        for mod, count in iteritems(process_data.modifications):
-            mod_obj = self._model.modification_data.get_by_id(mod)
-            biomass += mod_obj.calculate_biomass_contribution() / 1000. * count
+        for subrxn, count in iteritems(process_data.subreactions):
+            subrxn_obj = self._model.subreaction_data.get_by_id(subrxn)
+            biomass += \
+                subrxn_obj.calculate_biomass_contribution() / 1000. * count
         return biomass
 
     def clear_metabolites(self):
@@ -317,8 +279,9 @@ class ComplexFormation(MEReaction):
 
     :param str complex_data_id:
         Name of ComplexData that defines the subunit stoichiometry or
-        modifications. This will not always be the same as the _complex_id.
-        Sometimes complexes can be modified using different processes/enzymes
+        subreactions (modfications). This will not always be the same as the
+        _complex_id. Sometimes complexes can be modified using different
+        processes/enzymes
 
     """
     def __init__(self, id):
@@ -363,10 +326,7 @@ class ComplexFormation(MEReaction):
         for component_id, value in iteritems(complex_info.stoichiometry):
             stoichiometry[component_id] -= value
 
-        # add in the modifications
-        stoichiometry = self.add_modifications(complex_info.id, stoichiometry)
-
-        # add in the subreactions
+        # add in the subreactions and modifications
         stoichiometry = self.add_subreactions(complex_info.id, stoichiometry)
 
         # convert string stoichiometry representations to cobrame metabolites
@@ -379,7 +339,7 @@ class ComplexFormation(MEReaction):
         # Biomass inclusion for proteins are handled in translation
         # reactions. Handle cofactors and prosthetic groups here
         biomass = 0.
-        biomass = self.add_biomass_from_modifications(complex_info, biomass)
+        biomass = self.add_biomass_from_subreactions(complex_info, biomass)
         if biomass > 0:
             self.add_metabolites({self._model._biomass: biomass})
 
@@ -441,8 +401,6 @@ class PostTranslationReaction(MEReaction):
                                            unprocessed_protein)
             self._model.add_metabolites(protein_met)
 
-        stoichiometry = self.add_modifications(posttranslation_data.id,
-                                               stoichiometry)
         stoichiometry = self.add_subreactions(posttranslation_data.id,
                                               stoichiometry)
 
@@ -581,7 +539,6 @@ class TranscriptionReaction(MEReaction):
             self._add_formula_to_transcript(transcript)
 
         # Add modifications and subreactions to reaction stoichiometry
-        stoichiometry = self.add_modifications(TU_id, stoichiometry)
         stoichiometry = self.add_subreactions(TU_id, stoichiometry)
 
         base_counts = self.transcription_data.nucleotide_count
@@ -774,8 +731,7 @@ class TranslationReaction(MEReaction):
         # add subreactions to stoichiometry
         new_stoichiometry = self.add_subreactions(self.translation_data.id,
                                                   new_stoichiometry)
-        new_stoichiometry = self.add_modifications(self.translation_data.id,
-                                                   new_stoichiometry)
+
         # convert metabolite ids to cobra metabolites
         object_stoichiometry = self.get_components_from_ids(new_stoichiometry,
                                                             verbose=verbose)
@@ -846,9 +802,9 @@ class tRNAChargingReaction(MEReaction):
             new_stoichiometry[data.synthetase] = -synthetase_amount
 
         # Add tRNA modifications to stoichiometry
-        new_stoichiometry = self.add_modifications(self.tRNA_data.id,
-                                                   new_stoichiometry,
-                                                   scale=tRNA_amount)
+        new_stoichiometry = self.add_subreactions(self.tRNA_data.id,
+                                                  new_stoichiometry,
+                                                  scale=tRNA_amount)
 
         # Convert component ids to cobra metabolites
         object_stoichiometry = self.get_components_from_ids(new_stoichiometry,

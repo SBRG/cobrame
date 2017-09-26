@@ -39,10 +39,6 @@ def get_elements_from_process_data(reaction, process_data, elements):
     update the element dictionary accordingly.
 
     """
-    for mod, count in iteritems(process_data.modifications):
-        mod_obj = reaction._model.modification_data.get_by_id(mod)
-        for e, n in iteritems(mod_obj.element_contribution):
-            elements[e] += n * count
 
     for sub, count in iteritems(process_data.subreactions):
         sub_obj = reaction._model.subreaction_data.get_by_id(sub)

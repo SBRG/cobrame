@@ -179,17 +179,15 @@ _PROCESS_DATA_TYPE_DEPENDENCIES = \
     {'StoichiometricData': ['_stoichiometry', 'lower_bound', 'upper_bound',
                             'subreactions'],
 
-     'ComplexData': ['stoichiometry', 'complex_id', 'modifications',
-                     'subreactions'],
+     'ComplexData': ['stoichiometry', 'complex_id', 'subreactions'],
 
-     'TranscriptionData': ['modifications', 'subreactions',
-                           'nucleotide_sequence', 'RNA_products',
-                           'RNA_polymerase'],
+     'TranscriptionData': ['subreactions', 'nucleotide_sequence',
+                           'RNA_products', 'RNA_polymerase'],
 
-     'TranslationData': ['modifications', 'subreactions',
-                         'nucleotide_sequence', 'mRNA', 'protein'],
+     'TranslationData': ['subreactions', 'nucleotide_sequence', 'mRNA',
+                         'protein'],
 
-     'tRNAData': ['modifications', 'codon', 'RNA', 'amino_acid',
+     'tRNAData': ['subreactions', 'codon', 'RNA', 'amino_acid',
                   'synthetase', 'synthetase_keff'],
 
      'TranslocationData': ['enzyme_dict', 'stoichiometry', 'keff',
@@ -197,12 +195,9 @@ _PROCESS_DATA_TYPE_DEPENDENCIES = \
 
      'PostTranslationData': ['processed_protein_id', 'unprocessed_protein_id',
                              'propensity_scaling', 'aggregation_propensity',
-                             'translocation', 'modifications', 'subreactions',
-                             'surface_area', 'keq_folding', 'k_folding',
+                             'translocation', 'subreactions', 'surface_area',
+                             'keq_folding', 'k_folding',
                              'translocation_multipliers'],
-
-     'ModificationData': ['stoichiometry', 'enzyme', 'keff',
-                          'element_contribution'],
 
      'SubreactionData': ['stoichiometry', 'enzyme', 'keff',
                          'element_contribution'],
@@ -237,7 +232,6 @@ def get_process_data_class(name):
                          'tRNA_data': 'tRNAData',
                          'translocation_data': 'TranslocationData',
                          'posttranslation_data': 'PostTranslationData',
-                         'modification_data': 'ModificationData',
                          'subreaction_data': 'SubreactionData',
                          'generic_data': 'GenericData'}
 
@@ -296,9 +290,9 @@ def _process_data_to_dict(data):
     new_data = {key: _fix_type(getattr(data, key))
                 for key in _REQUIRED_PROCESS_DATA_ATTRIBUTES}
 
-    special_list = ['_stoichiometry', 'subreactions', 'modifications',
-                    'stoichiometry', 'enzyme_dict', 'translocation',
-                    'surface_area', 'keq_folding', 'k_folding']
+    special_list = ['subreactions', 'stoichiometry', 'enzyme_dict',
+                    'translocation', 'surface_area', 'keq_folding',
+                    'k_folding']
 
     for attribute in _PROCESS_DATA_TYPE_DEPENDENCIES[process_data_type]:
         if attribute not in special_list:
@@ -321,13 +315,6 @@ def _process_data_to_dict(data):
 
 
 def _metabolite_to_dict(metabolite):
-
-    # TODO this is incrrectly in model as transcribed gene
-    if metabolite.id == 'RNA_degradosome':
-        metabolite.left_pos = 1
-        metabolite.right_pos = 1
-        metabolite.strand = '+'
-        metabolite.RNA_type = 'mRNA'
 
     metabolite_type = metabolite.__class__.__name__
 
@@ -383,8 +370,6 @@ def _to_dict(model):
                                                'process_data'),
         posttranslation_data=get_attribute_array(model.posttranslation_data,
                                                  'process_data'),
-        modification_data=get_attribute_array(model.modification_data,
-                                              'process_data'),
         subreaction_data=get_attribute_array(model.subreaction_data,
                                              'process_data'),
         generic_data=get_attribute_array(model.generic_data, 'process_data'),

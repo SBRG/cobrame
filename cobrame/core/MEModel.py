@@ -19,7 +19,6 @@ class MEModel(Model):
         self.global_info = {}
         self.stoichiometric_data = DictList()
         self.complex_data = DictList()
-        self.modification_data = DictList()
         self.translation_data = DictList()
         self.transcription_data = DictList()
         self.generic_data = DictList()
