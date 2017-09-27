@@ -1,3 +1,5 @@
+from __future__ import print_function, division, absolute_import
+
 amino_acids = {
     "A": "ala__L_c",
     "R": "arg__L_c",
@@ -64,7 +66,7 @@ def extract_sequence(full_seq, left_pos, right_pos, strand):
         raise ValueError("strand must be either '+' or '-'")
 
 
-def get_amino_acid_sequence_from_DNA(dna_seq):
+def get_amino_acid_sequence_from_dna(dna_seq):
     if len(dna_seq) % 3 != 0:
         raise ValueError('Gene nucleotide sequence is not a valid length')
 

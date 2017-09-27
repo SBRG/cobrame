@@ -362,7 +362,7 @@
                             },
                             {
                                 "type": "object",
-                                "required": ["Reaction"],
+                                "required": ["MEReaction"],
                                 "properties": {
                                     "Reaction": {
                                         "type": "object"

@@ -1,8 +1,10 @@
+from __future__ import print_function, division, absolute_import
+
+from six import iteritems, string_types
+
 from cobra import Metabolite as Component
 
-from cobrame.util import dogma
-from six import iteritems
-from cobrame.util.mass import *
+from cobrame.util import dogma, mass
 
 
 class MEComponent(Component):
@@ -11,14 +13,26 @@ class MEComponent(Component):
         Component.__init__(self, id)
         pass
 
-    def remove_from_MEmodel(self, method='subtractive'):
-        try:
+    def remove_from_me_model(self, method='subtractive'):
+        if self.id in self._model.process_data:
             self._model.process_data.remove(self.id)
+        if self.id in self._model.complex_data:
             self._model.complex_data.remove(self.id)
-        except:
-            pass
-        if method == 'subtractive':
+
+        # If cannot import SymbolicParameter, assume using cobrapy
+        # versions <= 0.5.11
+        try:
+            from optlang.interface import SymbolicParameter
+        except ImportError:
             self.remove_from_model(method=method)
+        else:
+            if method.lower() == 'subtractive':
+                self.remove_from_model(destructive=False)
+            elif method.lower() == 'destructive':
+                self.remove_from_model(destructive=True)
+            else:
+                raise AttributeError("method must be subtractive or "
+                                     "destructive")
 
 
 class Metabolite(MEComponent):
@@ -46,7 +60,7 @@ class TranscribedGene(MEComponent):
 
     @property
     def mass(self):
-        return compute_RNA_mass(self.nucleotide_sequence)
+        return mass.compute_rna_mass(self.nucleotide_sequence)
 
 
 class TranslatedGene(MEComponent):
@@ -145,14 +159,9 @@ class Constraint(MEComponent):
     pass
 
 
-class ModComplex(MEComponent):
-    pass
-
-
-def create_component(component_id, default_type=MEComponent, RNAP_set={}):
+def create_component(component_id, default_type=MEComponent, rnap_set=set()):
     """creates a component and attempts to set the correct type"""
-    if not isinstance(component_id, str) and \
-            not isinstance(component_id, unicode):
+    if not isinstance(component_id, string_types):
         raise TypeError("%s must be a str, not %s" %
                         (repr(component_id), str(type(component_id))))
     if component_id.startswith("protein_"):
@@ -161,7 +170,7 @@ def create_component(component_id, default_type=MEComponent, RNAP_set={}):
         return TranscribedGene(component_id)
     elif component_id.startswith("ribosome"):
         return Ribosome(component_id)
-    elif component_id.startswith("RNA_Polymerase") or component_id in RNAP_set:
+    elif component_id.startswith("RNA_Polymerase") or component_id in rnap_set:
         return RNAP(component_id)
     elif component_id.startswith("generic_tRNA"):
         return GenerictRNA(component_id)

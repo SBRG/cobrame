@@ -24,7 +24,6 @@ else:
                 raise ValueError("ME-models require continuous variables.")
             super(Variable, self).__init__(name, lb, ub, type, *args, **kwargs)
 
-
     @six.add_metaclass(inheritdocstring)
     class Constraint(interface.Constraint):
 
@@ -35,7 +34,6 @@ else:
         def set_linear_coefficients(self, coefficients):
             return
 
-
     @six.add_metaclass(inheritdocstring)
     class Objective(interface.Objective):
         def __init__(self, expression, sloppy=False, **kwargs):
@@ -44,7 +42,6 @@ else:
 
         def set_linear_coefficients(self, coefficients):
             return
-
 
     @six.add_metaclass(inheritdocstring)
     class OptimizationExpression(interface.OptimizationExpression):
@@ -56,12 +53,10 @@ else:
         def set_linear_coefficients(self, coefficients):
             return
 
-
     @six.add_metaclass(inheritdocstring)
     class Configuration(interface.MathematicalProgrammingConfiguration):
         def __init__(self, *args, **kwargs):
             super(Configuration, self).__init__(*args, **kwargs)
-
 
     @six.add_metaclass(inheritdocstring)
     class Model(interface.Model):

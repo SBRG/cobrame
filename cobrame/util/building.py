@@ -1,24 +1,26 @@
 from __future__ import print_function, division, absolute_import
 
-import cobra
-import pandas
-from Bio import SeqIO
+from warnings import warn
 from six import iteritems
 
-from cobrame import *
+import pandas
+from Bio import SeqIO
+
+import cobrame
+from cobrame.util import dogma, mass
 
 
-def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
+def add_transcription_reaction(me_model, tu_name, locus_ids, sequence,
                                update=True):
     """
     Create TranscriptionReaction object and add it to ME-Model.
     This includes the necessary transcription data.
 
     Args:
-        me_model: cobra.model.MEModel
+        me_model: cobrame.model.MEModel
             The MEModel object to which the reaction will be added
 
-        TU_name: String
+        tu_name: String
             ID of TU being transcribed.
             The TranscriptionReaction will be added as "transcription_+TU_name"
             The TranscriptionData will be added as just "TU_name"
@@ -33,12 +35,13 @@ def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
             If True, use TranscriptionReaction's update function to update and
             add reaction stoichiometry
 
-    Returns: cobra.core.Reaction.TranscriptionReaction
+    Returns: cobrame.core.reaction.TranscriptionReaction
         Return TranscriptionReaction for the TU
     """
 
-    transcription = TranscriptionReaction("transcription_" + TU_name)
-    transcription.transcription_data = TranscriptionData(TU_name, me_model)
+    transcription = cobrame.TranscriptionReaction("transcription_" + tu_name)
+    transcription.transcription_data = \
+        cobrame.TranscriptionData(tu_name, me_model)
     transcription.transcription_data.nucleotide_sequence = sequence
     transcription.transcription_data.RNA_products = {"RNA_" + i
                                                      for i in locus_ids}
@@ -50,12 +53,12 @@ def add_transcription_reaction(me_model, TU_name, locus_ids, sequence,
 
 
 def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
-                            strand, RNA_type):
+                            strand, rna_type):
     """
      Creates a TranscribedGene metabolite object and adds it to the ME-model
 
     Args:
-        me_model: cobra.model.MEModel
+        me_model: cobrame.core..model.MEModel
             The MEModel object to which the reaction will be added
 
         locus_id: String
@@ -77,18 +80,18 @@ def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
             (+) if the RNA product is on the leading strand
             (-) if the RNA product is on the complementary strand
 
-        RNA_type: String
+        rna_type: String
             Type of RNA of the product.
             tRNA, rRNA, or mRNA
             Used for determining how RNA product will be processed.
 
     Returns:
-        cobra.core.Metabolite.TranscribedGene object for the RNA product
+        cobrame.core.component.TranscribedGene object for the RNA product
     """
-    gene = TranscribedGene('RNA_' + locus_id)
+    gene = cobrame.TranscribedGene('RNA_' + locus_id)
     gene.left_pos = left_pos
     gene.right_pos = right_pos
-    gene.RNA_type = RNA_type
+    gene.RNA_type = rna_type
     gene.strand = strand
     gene.nucleotide_sequence = seq
 
@@ -119,29 +122,26 @@ def add_translation_reaction(me_model, locus_id, dna_sequence=None,
             transcribed if it originates on the complement strand.
 
         update: Boolean
-            If True, use TranslationReaction's update function to update and add
-            reaction stoichiometry
+            If True, use TranslationReaction's update function to update and
+            add reaction stoichiometry
 
-        terminator_dict: Dict
-            {stop_codon: release_factor}
-
-            Used to determine which ProcessData.SubReaction to add to the
-            TranslationReaction to account for termination of peptide
     """
 
     # Create TranslationData
-    translation_data = TranslationData(locus_id, me_model, "RNA_" + locus_id,
-                                       "protein_" + locus_id)
+    translation_data = \
+        cobrame.TranslationData(locus_id, me_model, "RNA_" + locus_id,
+                                "protein_" + locus_id)
     translation_data.nucleotide_sequence = dna_sequence
 
     # Add RNA to model if it doesn't exist
     if "RNA_" + locus_id not in me_model.metabolites:
-        RNA = TranscribedGene('RNA_c')
-        RNA.nucleotide_sequence = dna_sequence
-        me_model.add_metabolites(RNA)
+        rna = cobrame.TranscribedGene('RNA_c')
+        rna.nucleotide_sequence = dna_sequence
+        me_model.add_metabolites(rna)
 
     # Create and add TranslationReaction with TranslationData
-    translation_reaction = TranslationReaction("translation_" + locus_id)
+    translation_reaction = \
+        cobrame.TranslationReaction("translation_" + locus_id)
     me_model.add_reaction(translation_reaction)
     translation_reaction.translation_data = translation_data
 
@@ -149,7 +149,7 @@ def add_translation_reaction(me_model, locus_id, dna_sequence=None,
         translation_reaction.update()
 
 
-def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_to_codon,
+def convert_aa_codes_and_add_charging(me_model, trna_aa, trna_to_codon,
                                       verbose=True):
     """
     Adds tRNA charging reactions for all tRNAs in ME-model
@@ -158,7 +158,7 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_to_codon,
         me_model: cobra.model.MEModel
             The MEModel object to which the reaction will be added
 
-        tRNA_aa: Dict
+        trna_aa: Dict
             Dictionary of tRNA locus ID to 3 letter codes of the amino acid
             that the tRNA contributes
 
@@ -169,35 +169,37 @@ def convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_to_codon,
             model and were thus added when creating charging reactions
     """
     # convert amino acid 3 letter codes to metabolites
-    for tRNA, aa in iteritems(tRNA_aa):
+    for tRNA, aa in list(iteritems(trna_aa)):
         if aa == "OTHER":
-            tRNA_aa.pop(tRNA)
+            trna_aa.pop(tRNA)
         elif aa == "Sec":
             # Charge with precursor to selenocysteine
-            tRNA_aa[tRNA] = me_model.metabolites.get_by_id('cys__L_c')
+            trna_aa[tRNA] = me_model.metabolites.get_by_id('cys__L_c')
         elif aa == "Gly":
-            tRNA_aa[tRNA] = me_model.metabolites.get_by_id("gly_c")
+            trna_aa[tRNA] = me_model.metabolites.get_by_id("gly_c")
         else:
-            tRNA_aa[tRNA] = \
+            trna_aa[tRNA] = \
                 me_model.metabolites.get_by_id(aa.lower() + "__L_c")
 
     # add in all the tRNA charging reactions
-    for tRNA, aa in iteritems(tRNA_aa):
-        for codon in tRNA_to_codon[tRNA]:
-            tRNA_data = tRNAData("tRNA_" + tRNA + "_" + codon, me_model, aa.id,
-                                 "RNA_" + tRNA, codon)
-            charging_reaction = tRNAChargingReaction("charging_tRNA_" + tRNA +
-                                                     "_" + codon)
-            charging_reaction.tRNA_data = tRNA_data
+    for tRNA, aa in iteritems(trna_aa):
+        for codon in trna_to_codon[tRNA]:
+            trna_data = cobrame.tRNAData("tRNA_" + tRNA + "_" + codon,
+                                         me_model, aa.id, "RNA_" + tRNA, codon)
+            charging_reaction = \
+                cobrame.tRNAChargingReaction("charging_tRNA_%s_%s" % (tRNA,
+                                                                      codon))
+            charging_reaction.tRNA_data = trna_data
 
             me_model.add_reaction(charging_reaction)
             charging_reaction.update(verbose=verbose)
 
 
-def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
-                                 element_types={'CDS', 'rRNA', 'tRNA', 'ncRNA'},
-                                 verbose=True, frameshift_dict={},
-                                 tRNA_to_codon={}, update=True):
+def build_reactions_from_genbank(me_model, gb_filename, tu_frame=None,
+                                 element_types={'CDS', 'rRNA',
+                                                'tRNA', 'ncRNA'},
+                                 verbose=True, frameshift_dict=None,
+                                 trna_to_codon=None, update=True):
 
     # TODO handle special RNAse without type ('b3123')
     """Creates and adds transcription and translation reactions using genomic
@@ -213,7 +215,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             Local name of the genbank file that will be used for ME-model
             construction
 
-        TU_frame: pandas.DataFrame
+        tu_frame: pandas.DataFrame
             DataFrame with indexes of the transcription unit name and columns
             containing the transcription unit starting and stopping location on
             the genome and whether the transcription unit is found on the
@@ -233,11 +235,6 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             If True, display metabolites that were not previously added to the
             model and were thus added when creating charging reactions
 
-        translation_terminators: Dict
-            {stop_codon: release_factor}
-
-            Used to determine which ProcessData.SubReaction to add to the
-            TranslationReaction to account for termination of peptide
 
         frameshift_dict: Dict
             {locus_id: genome_position_of_TU}
@@ -246,6 +243,11 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
             sequence to account of the frameshift
 
     """
+    if not frameshift_dict:
+        frameshift_dict = {}
+
+    if not trna_to_codon:
+        trna_to_codon = {}
 
     # Load genbank file and extract DNA sequence
     gb_file = SeqIO.read(gb_filename, 'gb')
@@ -253,13 +255,13 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
 
     # Dictionary of tRNA locus ID to the 3 letter code for the amino acid it
     # contributes
-    tRNA_aa = {}
+    trna_aa = {}
 
-    # If no TU_frame is provided generate a new TU frame where each mRNA gets
+    # If no tu_frame is provided generate a new TU frame where each mRNA gets
     # its own TU
-    using_TUs = TU_frame is not None
-    if not using_TUs:
-        TU_frame = pandas.DataFrame.from_dict(
+    using_tus = tu_frame is not None
+    if not using_tus:
+        tu_frame = pandas.DataFrame.from_dict(
             {"TU_" + i.qualifiers["locus_tag"][0]:
                 {"start": int(i.location.start),
                  "stop": int(i.location.end),
@@ -270,13 +272,13 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
 
     # Create transcription reactions for each TU and DNA sequence.
     # RNA_products will be added so no need to update now
-    for TU_id in TU_frame.index:
+    for tu_id in tu_frame.index:
         # subtract 1 from TU start site to account for 0 indexing
-        sequence = dogma.extract_sequence(full_seq, TU_frame.start[TU_id]-1,
-                                          TU_frame.stop[TU_id],
-                                          TU_frame.strand[TU_id])
+        sequence = dogma.extract_sequence(full_seq, tu_frame.start[tu_id]-1,
+                                          tu_frame.stop[tu_id],
+                                          tu_frame.strand[tu_id])
 
-        add_transcription_reaction(me_model, TU_id, set(), sequence,
+        add_transcription_reaction(me_model, tu_id, set(), sequence,
                                    update=False)
 
     # Associate each feature (RNA_product) with a TU and add translation
@@ -291,7 +293,7 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
         bnum = feature.qualifiers["locus_tag"][0]
         left_pos = int(feature.location.start)
         right_pos = int(feature.location.end)
-        RNA_type = 'mRNA' if feature.type == 'CDS' else feature.type
+        rna_type = 'mRNA' if feature.type == 'CDS' else feature.type
         strand = '+' if feature.strand == 1 else '-'
         seq = dogma.extract_sequence(full_seq, left_pos, right_pos, strand)
 
@@ -305,73 +307,74 @@ def build_reactions_from_genbank(me_model, gb_filename, TU_frame=None,
 
         # Add TranscribedGene metabolite
         gene = create_transcribed_gene(me_model, bnum, left_pos,
-                                       right_pos, seq, strand, RNA_type)
+                                       right_pos, seq, strand, rna_type)
 
         # ---- Add translation reaction for mRNA ----
-        if RNA_type == "mRNA":
+        if rna_type == "mRNA":
             add_translation_reaction(me_model, bnum, dna_sequence=seq)
 
         # ---- Create dict to use for adding tRNAChargingReactions ----
         # tRNA_aa = {'amino_acid':'tRNA'}
-        elif RNA_type == "tRNA":
-            tRNA_aa[bnum] = feature.qualifiers["product"][0].split("-")[1]
+        elif rna_type == "tRNA":
+            trna_aa[bnum] = feature.qualifiers["product"][0].split("-")[1]
 
         # ---- Add in a demand reaction for each mRNA ---
         # This is in case the TU makes multiple products and one needs a sink.
         # If the demand reaction is used, it means the mRNA doesn't count
         # towards biomass
-        demand_reaction = cobra.Reaction("DM_" + gene.id)
+        demand_reaction = cobrame.MEReaction("DM_" + gene.id)
         me_model.add_reaction(demand_reaction)
         demand_reaction.add_metabolites({gene: -1})
 
         # mRNA biomass is handled during translation
-        if RNA_type == 'tRNA':
+        if rna_type == 'tRNA':
             demand_reaction.add_metabolites({
-                me_model._tRNA_biomass: -compute_RNA_mass(seq)})
-        elif RNA_type == 'rRNA':
+                me_model._tRNA_biomass: -mass.compute_rna_mass(seq)})
+        elif rna_type == 'rRNA':
             demand_reaction.add_metabolites({
-                me_model._rRNA_biomass: -compute_RNA_mass(seq)})
-        elif RNA_type == 'ncRNA':
+                me_model._rRNA_biomass: -mass.compute_rna_mass(seq)})
+        elif rna_type == 'ncRNA':
             demand_reaction.add_metabolites({
-                me_model._ncRNA_biomass: -compute_RNA_mass(seq)})
-        elif RNA_type == 'mRNA':
+                me_model._ncRNA_biomass: -mass.compute_rna_mass(seq)})
+        elif rna_type == 'mRNA':
             demand_reaction.add_metabolites({
-                me_model._mRNA_biomass: -compute_RNA_mass(seq)})
+                me_model._mRNA_biomass: -mass.compute_rna_mass(seq)})
 
         # ---- Associate TranscribedGene to a TU ----
-        parent_TU = TU_frame[
-            (TU_frame.start - 1 <= left_pos) & (TU_frame.stop >= right_pos) & (
-            TU_frame.strand == strand)].index
+        parent_tu = tu_frame[
+            (tu_frame.start - 1 <= left_pos) & (tu_frame.stop >= right_pos) & (
+             tu_frame.strand == strand)].index
 
-        if len(parent_TU) == 0:
+        if len(parent_tu) == 0:
             if verbose:
-                warn('No TU found for %s %s' % (RNA_type, bnum))
-            TU_id = "TU_" + bnum
-            parent_TU = [TU_id]
-            add_transcription_reaction(me_model, TU_id, set(), seq,
+                warn('No TU found for %s %s' % (rna_type, bnum))
+            tu_id = "TU_" + bnum
+            parent_tu = [tu_id]
+            add_transcription_reaction(me_model, tu_id, set(), seq,
                                        update=False)
 
-        for TU_id in parent_TU:
+        for TU_id in parent_tu:
             me_model.transcription_data.get_by_id(TU_id).RNA_products.add(
                     "RNA_" + bnum)
 
-    convert_aa_codes_and_add_charging(me_model, tRNA_aa, tRNA_to_codon,
+    convert_aa_codes_and_add_charging(me_model, trna_aa, trna_to_codon,
                                       verbose=verbose)
 
     if update:
         for r in me_model.reactions:
-            if isinstance(r, (TranscriptionReaction, TranslationReaction)):
+            if isinstance(r, (cobrame.TranscriptionReaction,
+                              cobrame.TranslationReaction)):
                 r.update()
 
 
-def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
+def add_m_model_content(me_model, m_model, complex_metabolite_ids=None):
     """
     Add metabolite and reaction attributes to me_model from m_model. Also
     creates StoichiometricData objects for each reaction in m_model, and adds
     reactions directly to me_model if they are exchanges or demands.
 
     Args:
-        me_model: cobra.model.MEModel
+        me_model: cobrame.model.MEModel
             The MEModel object to which the content will be added
 
         m_model: cobra.model
@@ -383,13 +386,16 @@ def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
             matrix, but should be treated as complexes
 
     """
+    if not complex_metabolite_ids:
+        complex_metabolite_ids = []
+
     for met in m_model.metabolites:
         if met.id in complex_metabolite_ids:
-            new_met = Complex(met.id)
+            new_met = cobrame.Complex(met.id)
         elif met.id.startswith("RNA"):
-            new_met = TranscribedGene(met.id)
+            new_met = cobrame.TranscribedGene(met.id)
         else:
-            new_met = Metabolite(met.id)
+            new_met = cobrame.Metabolite(met.id)
         new_met.name = met.name
         new_met.formula = met.formula
         new_met.compartment = met.compartment
@@ -400,7 +406,7 @@ def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
 
     for reaction in m_model.reactions:
         if reaction.id.startswith("EX_") or reaction.id.startswith("DM_"):
-            new_reaction = cobra.Reaction(reaction.id)
+            new_reaction = cobrame.MEReaction(reaction.id)
             me_model.add_reaction(new_reaction)
             new_reaction.lower_bound = reaction.lower_bound
             new_reaction.upper_bound = reaction.upper_bound
@@ -409,7 +415,7 @@ def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
                     {me_model.metabolites.get_by_id(met.id): stoichiometry})
 
         else:
-            reaction_data = StoichiometricData(reaction.id, me_model)
+            reaction_data = cobrame.StoichiometricData(reaction.id, me_model)
             reaction_data.lower_bound = reaction.lower_bound
             reaction_data.upper_bound = reaction.upper_bound
             reaction_data._stoichiometry = {k.id: v for k, v
@@ -417,7 +423,7 @@ def add_m_model_content(me_model, m_model, complex_metabolite_ids=[]):
 
 
 def add_dummy_reactions(me_model, dna_seq, update=True):
-    dummy = StoichiometricData("dummy_reaction", me_model)
+    dummy = cobrame.StoichiometricData("dummy_reaction", me_model)
     dummy.lower_bound = 0
     dummy.upper_bound = 1000
     dummy._stoichiometry = {'CPLX_dummy': -1}
@@ -425,11 +431,11 @@ def add_dummy_reactions(me_model, dna_seq, update=True):
     create_transcribed_gene(me_model, 'dummy', 0, len(dna_seq), dna_seq, '+',
                             'mRNA')
     add_transcription_reaction(me_model, "RNA_dummy", {"dummy"}, dna_seq)
-    me_model.add_metabolites(TranslatedGene("protein_" + "dummy"))
+    me_model.add_metabolites(cobrame.TranslatedGene("protein_" + "dummy"))
     add_translation_reaction(me_model, "dummy", dna_sequence=dna_seq,
                              update=update)
     try:
-        complex_data = ComplexData("CPLX_dummy", me_model)
+        complex_data = cobrame.ComplexData("CPLX_dummy", me_model)
     except ValueError:
         warn('CPLX_dummy already in model')
         complex_data = me_model.complex_data.get_by_id('CPLX_dummy')
@@ -438,23 +444,13 @@ def add_dummy_reactions(me_model, dna_seq, update=True):
         complex_data.create_complex_formation()
 
 
-def add_complex_stoichiometry_data(me_model, ME_complex_dict):
-    warn('deprecated')
-    for cplx, stoichiometry in iteritems(ME_complex_dict):
-        complex_data = ComplexData(cplx, me_model)
-
-        # stoichiometry is a defaultdict so much build as follows
-        for complex, value in iteritems(stoichiometry):
-            complex_data.stoichiometry[complex] = value
-
-
 def add_complex_to_model(me_model, complex_id, complex_stoichiometry,
-                         complex_modifications={}):
+                         complex_modifications=None):
     """
     Adds ComplexData to the model for a given complex.
 
     Args:
-        me_model: cobrame.MEModel
+        me_model: cobrame.core.model.MEModel
 
         complex_id: string
             ID of the complex and thus the model ComplexData
@@ -467,7 +463,10 @@ def add_complex_to_model(me_model, complex_id, complex_stoichiometry,
 
     """
 
-    complex_data = ComplexData(complex_id, me_model)
+    if not complex_modifications:
+        complex_modifications = {}
+
+    complex_data = cobrame.ComplexData(complex_id, me_model)
     # must add update stoichiometry one by one since it is a defaultdict
     for metabolite, value in iteritems(complex_stoichiometry):
         complex_data.stoichiometry[metabolite] += value
@@ -491,8 +490,6 @@ def add_subreaction_data(me_model, modification_id,
 
     Args:
         me_model: class:cobrame.MEModel
-        metabolite: str
-            ID of the metabolite that the enzyme complex is being modified by
 
     """
 
@@ -502,7 +499,7 @@ def add_subreaction_data(me_model, modification_id,
         else:
             pass
     else:
-        modification_data = SubreactionData(modification_id, me_model)
+        modification_data = cobrame.SubreactionData(modification_id, me_model)
         modification_data.stoichiometry = modification_stoichiometry
         modification_data.enzyme = modification_enzyme
 
@@ -543,7 +540,7 @@ def add_model_complexes(me_model, complex_stoichiometry_dict,
 
             # add modification as subreaction
             add_subreaction_data(me_model, modification_id, {metabolite: -1},
-                                  verbose=verbose)
+                                 verbose=verbose)
             # stoichiometry of modification determined in
             # modification_data.stoichiometry
             modification_dict[modification_id] = abs(number)
@@ -619,7 +616,8 @@ def add_metabolic_reaction_to_model(me_model, stoichiometric_data_id,
     else:
         raise NameError("Reaction direction must be 'forward' or 'reverse'")
 
-    r = MetabolicReaction(stoichiometric_data_id + direction + complex_id)
+    r = cobrame.MetabolicReaction(''.join([stoichiometric_data_id,
+                                          direction, complex_id]))
     me_model.add_reaction(r)
     r.keff = keff
     r.stoichiometric_data = stoichiometric_data
@@ -675,7 +673,6 @@ def add_reactions_from_stoichiometric_data(me_model, rxn_to_cplx_dict,
         # complexes that catalyze the reaction
         complexes_list = rxn_to_cplx_dict.get(reaction_data.id, [None])
 
-
         # Add metabolic reactions for each isozyme
         for complex_id in complexes_list:
             directionality_list = []
@@ -684,7 +681,7 @@ def add_reactions_from_stoichiometric_data(me_model, rxn_to_cplx_dict,
             if reaction_data.upper_bound > 0:
                 directionality_list.append('forward')
             elif reaction_data.upper_bound == 0 and \
-                            reaction_data.lower_bound == 0:
+                    reaction_data.lower_bound == 0:
                 directionality_list.append('forward')
                 warn('Reaction (%s) cannot carry flux' % reaction_data.id)
             for directionality in directionality_list:

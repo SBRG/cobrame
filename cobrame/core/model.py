@@ -1,15 +1,19 @@
 from __future__ import print_function, division, absolute_import
 
 import re
+from six import iteritems
+from warnings import warn
 
 from cobra import Model, DictList
 from numpy import array
 from scipy.sparse import dok_matrix
-from six import iteritems
 
-from cobrame.core.Components import Constraint
-from cobrame.core.ProcessData import *
-from cobrame.core.MEReactions import *
+from cobrame.core.reaction import (SummaryVariable, MetabolicReaction,
+                                   TranscriptionReaction,
+                                   TranslationReaction)
+from cobrame.core.component import (Constraint, ProcessedProtein,
+                                    TranslatedGene, TranscribedGene)
+from cobrame.core.processdata import TranslocationData
 from cobrame.util import mu
 
 
@@ -42,7 +46,8 @@ class MEModel(Model):
         # protein
         self._unmodeled_protein_fraction = None
         self._protein_biomass = Constraint("protein_biomass")
-        self._protein_biomass_dilution = SummaryVariable("protein_biomass_dilution")
+        self._protein_biomass_dilution = \
+            SummaryVariable("protein_biomass_dilution")
         self._protein_biomass_dilution.add_metabolites({
             self._protein_biomass: -1,
             self._biomass: 1,
@@ -67,7 +72,8 @@ class MEModel(Model):
         })
 
         self._ncRNA_biomass = Constraint("ncRNA_biomass")
-        self._ncRNA_biomass_dilution = SummaryVariable("ncRNA_biomass_dilution")
+        self._ncRNA_biomass_dilution = \
+            SummaryVariable("ncRNA_biomass_dilution")
         self._ncRNA_biomass_dilution.add_metabolites({
             self._ncRNA_biomass: -1,
             self._biomass: 1,
@@ -104,7 +110,7 @@ class MEModel(Model):
         # see the Biomass_formulations for an explanation
         amount = value / (1 - value)
         self._protein_biomass_dilution.add_metabolites(
-                {self.unmodeled_protein_biomass: -amount}, combine=False)
+            {self.unmodeled_protein_biomass: -amount}, combine=False)
         self._protein_biomass_dilution.add_metabolites(
             {self._biomass: 1 + amount}, combine=False)
         self._unmodeled_protein_fraction = value
@@ -191,19 +197,19 @@ class MEModel(Model):
                 flux_dict[protein_id] += solution.x_dict[reaction.id]
         return flux_dict
 
-    def construct_S(self, growth_rate):
+    def construct_s_matrix(self, growth_rate):
         """build the stoichiometric matrix at a specific growth rate"""
         # intialize to 0
-        S = dok_matrix((len(self.metabolites), len(self.reactions)))
+        s = dok_matrix((len(self.metabolites), len(self.reactions)))
         # populate with stoichiometry
         for i, r in enumerate(self.reactions):
             for met, value in iteritems(r._metabolites):
                 met_index = self.metabolites.index(met)
                 if hasattr(value, "subs"):
-                    S[met_index, i] = float(value.subs(mu, growth_rate))
+                    s[met_index, i] = float(value.subs(mu, growth_rate))
                 else:
-                    S[met_index, i] = float(value)
-        return S
+                    s[met_index, i] = float(value)
+        return s
 
     def construct_attribute_vector(self, attr_name, growth_rate):
         """build a vector of a reaction attribute at a specific growth rate
@@ -217,11 +223,11 @@ class MEModel(Model):
         errors = {}
         if solution is None:
             solution = self.solution
-        S = self.construct_S(solution.f)
+        s = self.construct_s_matrix(solution.f)
         lb = self.construct_attribute_vector("lower_bound", solution.f)
         ub = self.construct_attribute_vector("upper_bound", solution.f)
         x = array(solution.x)
-        err = abs(S * x)
+        err = abs(s * x)
         errors["max_error"] = err.max()
         errors["sum_error"] = err.sum()
         ub_err = min(ub - x)
@@ -236,16 +242,20 @@ class MEModel(Model):
             if hasattr(r, "update"):
                 r.update()
 
-    def prune(self, skip=[]):
+    def prune(self, skip=None):
         """remove all unused metabolites and reactions
 
         This should be run after the model is fully built. It will be
         difficult to add new content to the model once this has been run.
 
-        skip: [str]
+        skip: list
             List of complexes/proteins/mRNAs/TUs to remain unpruned from model.
         """
-        complex_data_list = [i.id for i in self.complex_data if i.id not in skip]
+        if not skip:
+            skip = []
+
+        complex_data_list = [i.id for i in self.complex_data
+                             if i.id not in skip]
         for c_d in complex_data_list:
             c = self.complex_data.get_by_id(c_d)
             cplx = c.complex
@@ -256,7 +266,7 @@ class MEModel(Model):
         for p in self.metabolites.query('_folded'):
             if 'partially' not in p.id and p.id not in skip:
                 delete = True
-                for rxn in p._reaction:
+                for rxn in p.reactions:
                     try:
                         if rxn.metabolites[p] < 0:
                             delete = False
@@ -264,15 +274,15 @@ class MEModel(Model):
                         print(rxn)
                         raise e
                 if delete:
-                    while len(p._reaction) > 0:
-                        list(p._reaction)[0].delete(remove_orphans=True)
+                    while len(p.reactions) > 0:
+                        list(p.reactions)[0].delete(remove_orphans=True)
                         for data in self.posttranslation_data.query(p.id):
                             self.posttranslation_data.remove(data.id)
 
         for p in self.metabolites.query(re.compile('^protein_')):
             if isinstance(p, ProcessedProtein) and p.id not in skip:
                 delete = True
-                for rxn in p._reaction:
+                for rxn in p.reactions:
                     try:
                         if rxn.metabolites[p] < 0:
                             delete = False
@@ -280,49 +290,48 @@ class MEModel(Model):
                         print(rxn)
                         raise e
                 if delete:
-                    while len(p._reaction) > 0:
-                        list(p._reaction)[0].delete(remove_orphans=True)
+                    while len(p.reactions) > 0:
+                        list(p.reactions)[0].delete(remove_orphans=True)
                         for data in self.posttranslation_data.query(p.id):
                             self.posttranslation_data.remove(data.id)
 
         for p in self.metabolites.query(re.compile('^protein_')):
             if isinstance(p, TranslatedGene) and p.id not in skip:
                 delete = True
-                for rxn in p._reaction:
+                for rxn in p.reactions:
                     try:
-                        if rxn.metabolites[p] < 0 and not rxn.id.startswith('degradation'):
+                        if rxn.metabolites[p] < 0 and not rxn.id.startswith(
+                                'degradation'):
                             delete = False
                     except Exception as e:
                         print(rxn)
                         raise e
                 if delete:
-                    while len(p._reaction) > 0:
-                        list(p._reaction)[0].delete(remove_orphans=True)
+                    while len(p.reactions) > 0:
+                        list(p.reactions)[0].delete(remove_orphans=True)
                         p_id = p.id.replace('protein_', '')
                         for data in self.translation_data.query(p_id):
                             self.translation_data.remove(data.id)
 
-        removed_RNA = set()
+        removed_rna = set()
         for m in list(self.metabolites.query(re.compile("^RNA_"))):
-            if m.id in skip:
-                delete = False
-            else:
-                delete = True
 
-            for rxn in m._reaction:
+            delete = False if m.id in skip else True
+
+            for rxn in m.reactions:
                 if rxn.metabolites[m] < 0 and not rxn.id.startswith('DM_'):
                     delete = False
             if delete:
                 try:
                     self.reactions.get_by_id('DM_' + m.id).remove_from_model(
-                            remove_orphans=True)
+                        remove_orphans=True)
                     if m in self.metabolites:
                         # Defaults to subtractive when removing reaction
                         m.remove_from_model()
                 except KeyError:
                     pass
                 else:
-                    removed_RNA.add(m.id)
+                    removed_rna.add(m.id)
 
         for t in self.reactions.query('transcription_TU'):
             if t.id in skip:
@@ -340,7 +349,7 @@ class MEModel(Model):
             else:
                 # gets rid of the removed RNA from the products
                 self.transcription_data.get_by_id(
-                    t_process_id).RNA_products.difference_update(removed_RNA)
+                    t_process_id).RNA_products.difference_update(removed_rna)
 
             # update to update the TranscriptionReaction mRNA biomass
             # stoichiometry with new RNA_products
@@ -382,16 +391,16 @@ class MEModel(Model):
                 t_process_id = t.id.replace('transcription_', '')
                 self.transcription_data.remove(t_process_id)
 
-    def set_SASA_keffs(self, avg_keff):
-        SASA_list = []
+    def set_sasa_keffs(self, avg_keff):
+        sasa_list = []
         for rxn in self.reactions:
             if hasattr(rxn, 'keff') and rxn.complex_data is not None:
                 weight = rxn.complex_data.complex.mass
-                SASA = weight ** (3. / 4.)
-                if SASA == 0:
+                sasa = weight ** (3. / 4.)
+                if sasa == 0:
                     warn('Keff not updated for %s' % rxn)
                 else:
-                    SASA_list.append(SASA)
+                    sasa_list.append(sasa)
 
         for data in self.process_data:
             cplx_mw = 0.
@@ -406,26 +415,27 @@ class MEModel(Model):
                     if cplx in self.complex_data:
                         try:
                             cplx_mw += self.metabolites.get_by_id(cplx).mass \
-                                       ** (3. / 4)
+                                ** (3. / 4)
                         except:
                             warn('Complex (%s) cannot access mass' % cplx)
                     elif cplx.split('_mod_')[0] in self.complex_data:
-                        cplx_mw += self.metabolites.get_by_id(cplx.split('_mod_')[0]).mass ** (3. / 4)
+                        cplx_mw += self.metabolites.get_by_id(
+                            cplx.split('_mod_')[0]).mass ** (3. / 4)
 
-                SASA_list.append(cplx_mw)
+                sasa_list.append(cplx_mw)
 
-        avg_SASA = array(SASA_list).mean()
+        avg_sasa = array(sasa_list).mean()
 
         # redo scaling average SASA to 65.
         for rxn in self.reactions:
             if hasattr(rxn, 'keff') and rxn.complex_data is not None:
                 weight = rxn.complex_data.complex.mass
-                SASA = weight ** (3. / 4.)
-                if SASA == 0:
-                    SASA = avg_SASA
-                rxn.keff = SASA * avg_keff / avg_SASA
+                sasa = weight ** (3. / 4.)
+                if sasa == 0:
+                    sasa = avg_sasa
+                rxn.keff = sasa * avg_keff / avg_sasa
         for data in self.process_data:
-            SASA = 0.
+            sasa = 0.
             if isinstance(data, TranslocationData):
                 continue
             if hasattr(data, 'keff') and data.enzyme is not None:
@@ -435,13 +445,14 @@ class MEModel(Model):
                     cplxs = data.enzyme
                 for cplx in cplxs:
                     if cplx in self.complex_data:
-                        SASA += self.metabolites.get_by_id(cplx).mass ** (3. / 4)
+                        sasa += \
+                            self.metabolites.get_by_id(cplx).mass ** (3. / 4)
                     elif cplx.split('_mod_')[0] in self.complex_data:
-                        SASA += self.metabolites.get_by_id(
+                        sasa += self.metabolites.get_by_id(
                             cplx.split('_mod_')[0]).mass ** (3. / 4)
 
-                if SASA == 0:
-                    SASA = avg_SASA
-                data.keff = SASA * avg_keff / avg_SASA
+                if sasa == 0:
+                    sasa = avg_sasa
+                data.keff = sasa * avg_keff / avg_sasa
 
         self.update()

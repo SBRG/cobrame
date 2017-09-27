@@ -1,17 +1,19 @@
+from __future__ import print_function, division, absolute_import
+
+import os
 import copy
 import json
 from collections import OrderedDict
 from warnings import warn
-import os
+from six import iteritems, string_types
 
 from sympy import Basic, sympify, Symbol
 from numpy import bool_, float_
-from six import iteritems, string_types
 from jsonschema import validate, ValidationError
+import cobra
 
 import cobrame
-from cobrame import mu
-from cobrame.util import me_model_interface
+from cobrame.util import me_model_interface, mu
 
 try:
     # If cannot import SymbolicParameter, assume using cobrapy
@@ -36,7 +38,7 @@ def save_json_me(me0, file_name):
     quicker, but limit the ability to edit the model and use most of its
     features.
 
-    :param :class:`~cobrame.core.MEModel.MEModel` model:
+    :param :class:`~cobrame.core.MEModel.MEModel` me0:
         A full ME-model
 
     :param str or file-like object file_name:
@@ -102,7 +104,7 @@ def load_json_me(file_name):
     with open(file_name, 'r') as f:
         obj = json.load(f)
 
-    model = cobrame.MEModel()
+    model = cobra.Model()
 
     # If cannot import SymbolicParameter, assume using cobrapy
     # versions <= 0.5.11. If versions >= 0.8.0 are used, a ME-model interface
@@ -121,7 +123,7 @@ def load_json_me(file_name):
             setattr(model, k, v)
 
     def _reaction_from_dict(reaction, model):
-        new_reaction = cobrame.Reaction()
+        new_reaction = cobra.Reaction()
         for k, v in iteritems(reaction):
             if k in {'objective_coefficient', 'reversibility', 'reaction'}:
                 continue
@@ -167,7 +169,7 @@ _REACTION_TYPE_DEPENDENCIES = \
          ['posttranslation_data'],
      'TranscriptionReaction': ['transcription_data'],
      'GenericFormationReaction': [],
-     'Reaction': [],
+     'MEReaction': [],
      'SummaryVariable': [],
      'TranslationReaction': ['translation_data'],
      'tRNAChargingReaction': ['tRNA_data']}
@@ -241,7 +243,7 @@ def get_process_data_class(name):
         raise TypeError('Not a valid process_data dictlist')
 
 
-def _fix_type(value, kind=''):
+def _fix_type(value):
     """convert possible types to str, float, and bool"""
     # Because numpy floats can not be pickled to json
     if isinstance(value, string_types):
@@ -256,13 +258,13 @@ def _fix_type(value, kind=''):
         return str(value)
     if hasattr(value, 'id'):
         return str(value.id)
-    #if value is None:
-    #    return ''
+    # if value is None:
+    #     return ''
     return value
 
 
 def _reaction_to_dict(reaction):
-    new_reaction = {key: _fix_type(getattr(reaction, key), 'reaction')
+    new_reaction = {key: _fix_type(getattr(reaction, key))
                     for key in _REQUIRED_REACTION_ATTRIBUTES
                     if key != 'metabolites'}
 
@@ -298,7 +300,7 @@ def _process_data_to_dict(data):
         if attribute not in special_list:
             data_attribute = getattr(data, attribute)
 
-            new_data[attribute] = _fix_type(data_attribute, 'reaction')
+            new_data[attribute] = _fix_type(data_attribute)
 
         elif attribute == 'enzyme_dict':
             new_data[attribute] = {}
@@ -455,16 +457,16 @@ def add_process_data_from_dict(model, process_data_type, process_data_info):
     # Create process data instances. Handel certain types individually
     id = process_data_info['id']
     if process_data_type == 'TranslationData':
-        mRNA = process_data_info['mRNA']
+        mrna = process_data_info['mRNA']
         protein = process_data_info['protein']
         process_data = \
-            getattr(cobrame, process_data_type)(id, model, mRNA, protein)
+            getattr(cobrame, process_data_type)(id, model, mrna, protein)
     elif process_data_type == 'tRNAData':
         amino_acid = process_data_info['amino_acid']
-        RNA = process_data_info['RNA']
+        rna = process_data_info['RNA']
         codon = process_data_info['codon']
         process_data = \
-            getattr(cobrame, process_data_type)(id, model, amino_acid, RNA,
+            getattr(cobrame, process_data_type)(id, model, amino_acid, rna,
                                                 codon)
     elif process_data_type == 'PostTranslationData':
         processed_protein_id = process_data_info['processed_protein_id']
@@ -525,7 +527,7 @@ def add_reaction_from_dict(model, reaction_info):
 
     # Some reactions are added to model when ME-models are initialized
     try:
-        model.add_reaction(reaction_obj)
+        model.add_reactions([reaction_obj])
     except Exception:
         reaction_obj = model.reactions.get_by_id(reaction_obj.id)
         if reaction_type not in ['SummaryVariable',
@@ -534,7 +536,7 @@ def add_reaction_from_dict(model, reaction_info):
 
     # These reactions types do not have update functions and need their
     # stoichiometries set explicitly .
-    if reaction_type in ['SummaryVariable', 'Reaction']:
+    if reaction_type in ['SummaryVariable', 'MEReaction']:
         for key, value in reaction_info['metabolites'].items():
             reaction_obj.add_metabolites({key: get_sympy_expression(value)},
                                          combine=False)

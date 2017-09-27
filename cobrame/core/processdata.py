@@ -1,12 +1,16 @@
-from collections import defaultdict
+from __future__ import absolute_import, print_function, division
 
+from collections import defaultdict
 from six import iteritems
+from warnings import warn
+
 import cobra
 
-from cobrame.core.MEReactions import *
-from cobrame.core.Components import GenerictRNA
-from cobrame.util.dogma import *
+from cobrame.core.reaction import GenericFormationReaction, ComplexFormation
+from cobrame.core.component import GenerictRNA, GenericComponent
+from cobrame.util.mass import compute_rna_mass, compute_protein_mass
 from cobrame.util.massbalance import elements_to_formula
+from cobrame.util import dogma
 
 
 class ProcessData(object):
@@ -88,7 +92,7 @@ class SubreactionData(ProcessData):
         # Return "trivial" cases (only one modifying metabolite in the
         # reactants and no products) without warning
         if len(self.stoichiometry) == 1 and \
-                        list(self.stoichiometry.values())[0] < 0:
+                list(self.stoichiometry.values())[0] < 0:
             return self.calculate_element_contribution()
         elif contribution:
             warn('No element contribution input for subreaction (%s), '
@@ -144,7 +148,6 @@ class ComplexData(ProcessData):
         model.complex_data.append(self)
         # {Component.id: stoichiometry}
         self.stoichiometry = defaultdict(float)
-        self.chaperones = {}
         # {SubreactionData.id : number}
         # Forming some metacomplexes occur in multiple steps
         self.subreactions = {}
@@ -190,18 +193,18 @@ class ComplexData(ProcessData):
 
 
 class TranscriptionData(ProcessData):
-    def __init__(self, id, model, RNA_products=set()):
+    def __init__(self, id, model, rna_products=set()):
         ProcessData.__init__(self, id, model)
         model.transcription_data.append(self)
         self.nucleotide_sequence = ''
-        self.RNA_products = RNA_products
+        self.RNA_products = rna_products
         self.RNA_polymerase = ''
         # {SubreactionData.id : number}
         self.subreactions = defaultdict(int)
 
     @property
     def nucleotide_count(self):
-        return {transcription_table[i]: self.nucleotide_sequence.count(i)
+        return {dogma.transcription_table[i]: self.nucleotide_sequence.count(i)
                 for i in ["A", "T", "G", "C"]}
 
     @property
@@ -211,7 +214,7 @@ class TranscriptionData(ProcessData):
 
     @property
     def mass(self):
-        return compute_RNA_mass(self.nucleotide_sequence, self.excised_bases)
+        return compute_rna_mass(self.nucleotide_sequence, self.excised_bases)
 
     # Bases to be excised due to splicing tRNA, rRNA, or ncRNA in RNA_products
     # i.e. {"amp_c": 10, "gmp_c": 11, "ump_c": 9, "cmp_c": 11}
@@ -222,8 +225,8 @@ class TranscriptionData(ProcessData):
             return {}
 
         # Skip if TU only codes for mRNA
-        RNA_types = set(self.RNA_types)
-        if RNA_types == {"mRNA"}:
+        rna_types = set(self.RNA_types)
+        if rna_types == {"mRNA"}:
             return {}
 
         # Get dictionary of all nucleotide counts for TU
@@ -289,10 +292,10 @@ class GenericData(ProcessData):
 
 
 class TranslationData(ProcessData):
-    def __init__(self, id, model, mRNA, protein):
+    def __init__(self, id, model, mrna, protein):
         ProcessData.__init__(self, id, model)
         model.translation_data.append(self)
-        self.mRNA = mRNA
+        self.mRNA = mrna
         self.protein = protein
         self.subreactions = defaultdict(int)
         self._amino_acid_sequence = ""
@@ -302,7 +305,7 @@ class TranslationData(ProcessData):
     def amino_acid_sequence(self):
         codons = (self.nucleotide_sequence[i: i + 3]
                   for i in range(0, (len(self.nucleotide_sequence)), 3))
-        amino_acid_sequence = ''.join(codon_table[i] for i in codons)
+        amino_acid_sequence = ''.join(dogma.codon_table[i] for i in codons)
         amino_acid_sequence = amino_acid_sequence.rstrip("*")
         if not amino_acid_sequence.startswith('M'):
             # alternate start codons translated as methionine
@@ -320,8 +323,7 @@ class TranslationData(ProcessData):
         return self.nucleotide_sequence[:3].replace('T', 'U')
 
     def _itercodons(self):
-        None
-        yield "AAU"
+        yield [i for i in self.codon_count]
 
     @property
     def codon_count(self):
@@ -339,7 +341,7 @@ class TranslationData(ProcessData):
         """count of each amino acid in the protein"""
         aa_count = defaultdict(int)
         for i in self.amino_acid_sequence:
-            aa_count[amino_acids[i]] += 1
+            aa_count[dogma.amino_acids[i]] += 1
         return aa_count
 
     @property
@@ -418,7 +420,9 @@ class TranslationData(ProcessData):
             else:
                 self.subreactions[subreaction_id] = 1
 
-    def add_termination_subreactions(self, translation_terminator_dict={}):
+    def add_termination_subreactions(self, translation_terminator_dict=None):
+        if not translation_terminator_dict:
+            translation_terminator_dict = {}
         all_subreactions = self._model.subreaction_data
         last_codon = self.last_codon
         term_enzyme = translation_terminator_dict.get(last_codon, None)
@@ -429,7 +433,7 @@ class TranslationData(ProcessData):
                 all_subreactions.get_by_id(termination_subreaction_id)
             except KeyError:
                 warn("Termination subreaction '%s' not in model" %
-                     (termination_subreaction_id))
+                     termination_subreaction_id)
             else:
                 self.subreactions[termination_subreaction_id] = 1
         else:
@@ -440,12 +444,12 @@ class tRNAData(ProcessData):
     synthetase = None
     synthetase_keff = 65.
 
-    def __init__(self, id, model, amino_acid, RNA, codon):
+    def __init__(self, id, model, amino_acid, rna, codon):
         ProcessData.__init__(self, id, model)
         model.tRNA_data.append(self)
         self.codon = codon
         self.amino_acid = amino_acid
-        self.RNA = RNA
+        self.RNA = rna
         self.subreactions = defaultdict(int)
 
 

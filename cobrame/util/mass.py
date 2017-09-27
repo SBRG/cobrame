@@ -1,4 +1,4 @@
-from __future__ import division, absolute_import
+from __future__ import division, absolute_import, print_function
 
 from six import iteritems
 
@@ -55,20 +55,23 @@ def compute_protein_mass(amino_acid_count):
     return protein_mass / 1000
 
 
-def compute_RNA_mass(DNA_sequence, excised_bases={}):
+def compute_rna_mass(dna_sequence, excised_bases=None):
     """compute RNA mass in kDA from nucleotide count
 
     nucleotide_count: {nucleotide: number}
 
     """
-    nuc_count = {transcription_table[i]: DNA_sequence.count(i)
-                 for i in set(DNA_sequence)}
+    if not excised_bases:
+        excised_bases = {}
+
+    nuc_count = {transcription_table[i]: dna_sequence.count(i)
+                 for i in set(dna_sequence)}
     nuc_count["gtp_c"] -= excised_bases.get("gmp_c", 0)
     nuc_count["utp_c"] -= excised_bases.get("ump_c", 0)
     nuc_count["ctp_c"] -= excised_bases.get("cmp_c", 0)
     nuc_count["atp_c"] -= excised_bases.get("amp_c", 0)
-    RNA_mass = sum(rna_no_ppi[nuc] * count
+    rna_mass = sum(rna_no_ppi[nuc] * count
                    for nuc, count in iteritems(nuc_count))
     if sum(excised_bases.values()) > 0:
-        RNA_mass += 174.951262  # 5' has 3 phosphates
-    return RNA_mass / 1000
+        rna_mass += 174.951262  # 5' has 3 phosphates
+    return rna_mass / 1000

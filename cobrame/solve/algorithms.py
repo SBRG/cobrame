@@ -14,7 +14,7 @@ try:
     import soplex
 except ImportError as e:
     soplex = None
-    warn("soplex import failed with error '%s'" % e.message)
+    warn("soplex import failed with error '%s'" % e)
 
 from cobrame.solve.symbolic import *
 
@@ -27,7 +27,7 @@ except ImportError:
     Red = Green = Normal = ""
 
 
-def get_ME_solver(solver=None):
+def get_me_solver(solver=None):
     if solver is None:
         if soplex is None:
             raise RuntimeError("soplex not installed")
@@ -57,7 +57,7 @@ def binary_search(me_model, min_mu=0, max_mu=2, mu_accuracy=1e-9,
 
     if solver is not None:
         debug = False  # other solvers can't handle debug mode
-    solver = get_ME_solver(solver)
+    solver = get_me_solver(solver)
     lp = solver.create_problem(me_model)
     # reset the objective for faster feasibility solving
     if reset_obj:
@@ -152,7 +152,7 @@ def create_lp_at_growth_rate(me_model, growth_rate, compiled_expressions=None,
         warn('Due to mRNA degradation constraint formulation the model is '
              'infeasible at mu = 0. Using mu = .1 instead.')
         growth_rate = .1
-    solver = get_ME_solver(solver)
+    solver = get_me_solver(solver)
     lp = solver.create_problem(me_model)
     for name, value in iteritems(solver_args):
         lp.set_parameter(name, value)

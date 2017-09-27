@@ -25,7 +25,7 @@ def eval_reaction_at_growth_rate(reaction, growth_rate):
             reaction._metabolites[key] = value.subs(cobrame.mu, growth_rate)
         if isinstance(reaction, cobrame.TranslationReaction) and \
                 (isinstance(key, cobrame.Ribosome) or
-                     isinstance(key, cobrame.TranscribedGene)):
+                 isinstance(key, cobrame.TranscribedGene)):
             reaction._metabolites[key] = 0.
         if isinstance(reaction, cobrame.TranscriptionReaction) and \
                 isinstance(key, cobrame.RNAP):

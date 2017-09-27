@@ -1,4 +1,7 @@
+from __future__ import print_function, absolute_import, division
+
 from six import iteritems
+
 from sympy import Basic, lambdify
 
 from cobrame import mu
@@ -9,11 +12,11 @@ def _compile(expr, variable=mu):
     return lambdify(variable, expr) if isinstance(expr, Basic) else expr
 
 
-def _eval(expr, mu):
+def _eval(expr, mu0):
     """evaluate the expression as a function of mu
 
     will return the expr if it is not a function"""
-    return expr(mu) if callable(expr) else expr
+    return expr(mu0) if callable(expr) else expr
 
 
 def compile_expressions(me_model, variable=mu):
@@ -45,7 +48,7 @@ def compile_expressions(me_model, variable=mu):
     return expressions
 
 
-def substitute_mu(lp, mu, compiled_exressions, solver_module=None):
+def substitute_mu(lp, mu_value, compiled_expressions, solver_module=None):
     """substitute mu into a constructed LP
 
     mu: float
@@ -54,13 +57,14 @@ def substitute_mu(lp, mu, compiled_exressions, solver_module=None):
     # solvers, need to pass in solver_module
     if solver_module is None:
         solver_module = lp.__class__
-    for index, expr in iteritems(compiled_exressions):
+    for index, expr in iteritems(compiled_expressions):
         if index[0] is None:  # reaction bounds
             solver_module.change_variable_bounds(
-                lp, index[1], _eval(expr[0], mu), _eval(expr[1], mu))
+                lp, index[1],
+                _eval(expr[0], mu_value), _eval(expr[1], mu_value))
         elif index[1] is None:  # metabolite _bound
             solver_module.change_constraint(lp, index[0], expr[1],
-                                            _eval(expr[0], mu))
+                                            _eval(expr[0], mu_value))
         else:  # stoichiometry
             solver_module.change_coefficient(lp, index[0], index[1],
-                                             _eval(expr, mu))
+                                             _eval(expr, mu_value))
