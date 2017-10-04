@@ -7,6 +7,7 @@ Subpackages
 .. toctree::
 
     cobrame.core
+    cobrame.util
 
 Module contents
 ---------------

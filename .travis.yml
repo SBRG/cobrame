@@ -16,8 +16,9 @@ install:
     - pip install -U pytest
     - pip install .
     - ./travis_install.sh
+    - pip install --user codecov
 
 script: travis_wait 50 pytest
 
 after_success:
-    - pip install codecov; codecov
+    - codecov

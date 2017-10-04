@@ -16,27 +16,30 @@ def add_transcription_reaction(me_model, tu_name, locus_ids, sequence,
     Create TranscriptionReaction object and add it to ME-Model.
     This includes the necessary transcription data.
 
-    Args:
-        me_model: cobrame.model.MEModel
-            The MEModel object to which the reaction will be added
+    Parameters
+    ----------
+    me_model : :class:`cobrame.core.model.MEModel`
+        The MEModel object to which the reaction will be added
 
-        tu_name: String
-            ID of TU being transcribed.
-            The TranscriptionReaction will be added as "transcription_+TU_name"
-            The TranscriptionData will be added as just "TU_name"
+    tu_name : str
+        ID of TU being transcribed.
+        The TranscriptionReaction will be added as "transcription_+TU_name"
+        The TranscriptionData will be added as just "TU_name"
 
-        locus_ids: Set
-            Set of locus IDs that the TU transcribes
+    locus_ids : set
+        Set of locus IDs that the TU transcribes
 
-        sequence: String
-            Nucleotide sequence of the TU.
+    sequence : str
+        Nucleotide sequence of the TU.
 
-        update: Boolean
-            If True, use TranscriptionReaction's update function to update and
-            add reaction stoichiometry
+    update : bool
+        If True, use TranscriptionReaction's update function to update and
+        add reaction stoichiometry
 
-    Returns: cobrame.core.reaction.TranscriptionReaction
-        Return TranscriptionReaction for the TU
+    Returns
+    -------
+    :class:`cobrame.core.reaction.TranscriptionReaction`
+        TranscriptionReaction for the TU
     """
 
     transcription = cobrame.TranscriptionReaction("transcription_" + tu_name)
@@ -55,38 +58,41 @@ def add_transcription_reaction(me_model, tu_name, locus_ids, sequence,
 def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
                             strand, rna_type):
     """
-     Creates a TranscribedGene metabolite object and adds it to the ME-model
+     Creates a `TranscribedGene` metabolite object and adds it to the ME-model
 
-    Args:
-        me_model: cobrame.core..model.MEModel
-            The MEModel object to which the reaction will be added
+    Parameters
+    ----------
+    me_model : :class:`cobrame.core.model.MEModel`
+        The MEModel object to which the reaction will be added
 
-        locus_id: String
-            Locus ID of RNA product.
-            The TranscribedGene will be added as "RNA_ + locus_id"
+    locus_id : str
+        Locus ID of RNA product.
+        The TranscribedGene will be added as "RNA + _ + locus_id"
 
-        left_pos: Integer
-            Left position of gene on the sequence of the (+) strain
+    left_pos : int
+        Left position of gene on the sequence of the (+) strain
 
-        right_pos: Integer
-            Right position of gene on the sequence of the (+) strain
+    right_pos : int
+        Right position of gene on the sequence of the (+) strain
 
-        seq: String
-            Nucleotide sequence of RNA product.
-            Amino acid sequence, codon counts, etc. will be calculated based on
-            this string.
+    seq : str
+        Nucleotide sequence of RNA product.
+        Amino acid sequence, codon counts, etc. will be calculated based on
+        this string.
 
-        strand: String
-            (+) if the RNA product is on the leading strand
-            (-) if the RNA product is on the complementary strand
+    strand : str
+        - (+) if the RNA product is on the leading strand
+        - (-) if the RNA product is on the complementary strand
 
-        rna_type: String
-            Type of RNA of the product.
-            tRNA, rRNA, or mRNA
-            Used for determining how RNA product will be processed.
+    rna_type : str
+        Type of RNA of the product.
+        tRNA, rRNA, or mRNA
+        Used for determining how RNA product will be processed.
 
-    Returns:
-        cobrame.core.component.TranscribedGene object for the RNA product
+    Returns
+    -------
+        :class:`cobrame.core.component.TranscribedGene`
+            Metabolite object for the RNA product
     """
     gene = cobrame.TranscribedGene('RNA_' + locus_id)
     gene.left_pos = left_pos
@@ -99,31 +105,32 @@ def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
     return gene
 
 
-def add_translation_reaction(me_model, locus_id, dna_sequence=None,
+def add_translation_reaction(me_model, locus_id, dna_sequence,
                              update=False):
     """
     Creates and adds a TranslationReaction to the ME-model as well as the
     associated TranslationData
 
-    A dna_sequence  is required in order to add a TranslationReaction to the
+    A dna_sequence is required in order to add a TranslationReaction to the
     ME-model
 
-    Args:
-        me_model: cobra.model.MEModel
-            The MEModel object to which the reaction will be added
+    Parameters
+    ----------
+    me_model : :class:`cobra.core.model.MEModel`
+        The MEModel object to which the reaction will be added
 
-        locus_id: String
-            Locus ID of RNA product.
-            The TranslationReaction will be added as "translation_ + locus_id"
-            The TranslationData will be added as "locus_id"
+    locus_id : str
+        Locus ID of RNA product.
+        The TranslationReaction will be added as "translation_ + locus_id"
+        The TranslationData will be added as "locus_id"
 
-        dna_sequence: String
-            DNA sequence of the RNA product. This string should be reverse
-            transcribed if it originates on the complement strand.
+    dna_sequence : str
+        DNA sequence of the RNA product. This string should be reverse
+        transcribed if it originates on the complement strand.
 
-        update: Boolean
-            If True, use TranslationReaction's update function to update and
-            add reaction stoichiometry
+    update : bool
+        If True, use TranslationReaction's update function to update and
+        add reaction stoichiometry
 
     """
 
@@ -154,19 +161,25 @@ def convert_aa_codes_and_add_charging(me_model, trna_aa, trna_to_codon,
     """
     Adds tRNA charging reactions for all tRNAs in ME-model
 
-    Args:
-        me_model: cobra.model.MEModel
-            The MEModel object to which the reaction will be added
+    Parameters
+    ----------
+    me_model : :class:`cobra.core.model.MEModel`
+        The MEModel object to which the reaction will be added
 
-        trna_aa: Dict
-            Dictionary of tRNA locus ID to 3 letter codes of the amino acid
-            that the tRNA contributes
+    trna_aa : dict
+        Dictionary of tRNA locus ID to 3 letter codes of the amino acid
+        that the tRNA contributes
 
-            {locus_id: amino_acid_3_letter_code}
+        {tRNA identifier (locus_id): amino_acid_3_letter_code}
 
-        verbose: Boolean
-            If True, display metabolites that were not previously added to the
-            model and were thus added when creating charging reactions
+    trna_to_codon : dict
+        Dictionary of tRNA identifier to the codon which it associates
+
+        {tRNA identifier (locus_id): codon_sequence}
+
+    verbose : bool
+        If True, display metabolites that were not previously added to the
+        model and were thus added when creating charging reactions
     """
     # convert amino acid 3 letter codes to metabolites
     for tRNA, aa in list(iteritems(trna_aa)):
@@ -207,40 +220,39 @@ def build_reactions_from_genbank(me_model, gb_filename, tu_frame=None,
      requirements for these reactions. Organism specific components are added
      ...
 
-    Args:
-        me_model: cobra.model.MEModel
-            The MEModel object to which the reaction will be added
+    Parameters
+    ----------
+    me_model : :class:`cobrame.core.model.MEModel`
+        The MEModel object to which the reaction will be added
 
-        gb_filename: String
-            Local name of the genbank file that will be used for ME-model
-            construction
+    gb_filename : str
+        Local name of the genbank file that will be used for ME-model
+        construction
 
-        tu_frame: pandas.DataFrame
-            DataFrame with indexes of the transcription unit name and columns
-            containing the transcription unit starting and stopping location on
-            the genome and whether the transcription unit is found on the
-            main (+) strand or complementary (-) strand.
+    tu_frame : :class:`pandas.DataFrame`
+        DataFrame with indexes of the transcription unit name and columns
+        containing the transcription unit starting and stopping location on
+        the genome and whether the transcription unit is found on the
+        main (+) strand or complementary (-) strand.
 
-            If no transcription unit DataFrame is passed into the function,
-            transcription units are added corresponding to each transcribed
-            gene in the genbank file.
+        If no transcription unit DataFrame is passed into the function,
+        transcription units are added corresponding to each transcribed
+        gene in the genbank file.
 
-        element_types: Set
-            Transcription reactions will be added to the ME-model for all RNA
-            feature.types in this set. This uses the nomenclature of the
-            genbank file (gb_filename)
+    element_types : set
+        Transcription reactions will be added to the ME-model for all RNA
+        feature.types in this set. This uses the nomenclature of the
+        genbank file (gb_filename)
 
+    verbose : bool
+        If True, display metabolites that were not previously added to the
+        model and were thus added when creating charging reactions
 
-        verbose: Boolean
-            If True, display metabolites that were not previously added to the
-            model and were thus added when creating charging reactions
+    frameshift_dict : dict
+        {locus_id: genome_position_of_TU}
 
-
-        frameshift_dict: Dict
-            {locus_id: genome_position_of_TU}
-
-            If a locus_id is in the frameshift_dict, update it's nucleotide
-            sequence to account of the frameshift
+        If a locus_id is in the frameshift_dict, update it's nucleotide
+        sequence to account of the frameshift
 
     """
     if not frameshift_dict:
@@ -373,17 +385,18 @@ def add_m_model_content(me_model, m_model, complex_metabolite_ids=None):
     creates StoichiometricData objects for each reaction in m_model, and adds
     reactions directly to me_model if they are exchanges or demands.
 
-    Args:
-        me_model: cobrame.model.MEModel
-            The MEModel object to which the content will be added
+    Parameters
+    ----------
+    me_model : :class:`cobrame.core.model.MEModel`
+        The MEModel object to which the content will be added
 
-        m_model: cobra.model
-            The m_model which will act as the source of metabolic content for
-            MEModel
+    m_model : :class:`cobra.core.model.Model`
+        The m_model which will act as the source of metabolic content for
+        MEModel
 
-        complex_metabolite_ids: list
-            List of complexes which are 'metabolites' in the m-model reaction
-            matrix, but should be treated as complexes
+    complex_metabolite_ids : list
+        List of complexes which are 'metabolites' in the m-model reaction
+        matrix, but should be treated as complexes
 
     """
     if not complex_metabolite_ids:
@@ -423,6 +436,26 @@ def add_m_model_content(me_model, m_model, complex_metabolite_ids=None):
 
 
 def add_dummy_reactions(me_model, dna_seq, update=True):
+    """
+    Add all reactions necessary to produce a dummy reaction catalyzed by
+    "CPLX_dummy".
+
+    Parameters
+    ----------
+    me_model : :class:`cobrame.core.model.MEModel`
+        The MEModel object to which the content will be added
+
+    dna_seq : str
+        DNA sequence of dummy gene. Should be representative of the average
+        codon composition, amino acid composition, length of a gene in the
+        organism being modeled
+
+    update : bool
+        If True, run update functions on all transcription, translation,
+        complex formation, and metabolic reactions added when constructing
+        dummy reactions.
+
+    """
     dummy = cobrame.StoichiometricData("dummy_reaction", me_model)
     dummy.lower_bound = 0
     dummy.upper_bound = 1000
@@ -449,17 +482,18 @@ def add_complex_to_model(me_model, complex_id, complex_stoichiometry,
     """
     Adds ComplexData to the model for a given complex.
 
-    Args:
-        me_model: cobrame.core.model.MEModel
+    Parameters
+    ----------
+    me_model : :class:`cobrame.core.model.MEModel`
 
-        complex_id: string
-            ID of the complex and thus the model ComplexData
+    complex_id : str
+        ID of the complex and thus the model ComplexData
 
-        complex_stoichiometry: dict
-            {complex_id: {protein_<locus_tag>: stoichiometry}}
+    complex_stoichiometry : dict
+        {complex_id: {protein_<locus_tag>: stoichiometry}}
 
-        complex_modifications: dict
-            {subreaction_id: stoichiometry}
+    complex_modifications : dict
+        {subreaction_id: stoichiometry}
 
     """
 
@@ -488,8 +522,9 @@ def add_subreaction_data(me_model, modification_id,
     SubreactionData object is already created
 
 
-    Args:
-        me_model: class:cobrame.MEModel
+    Parameters
+    ----------
+        me_model : :class:`cobrame.core.model.MEModel`
 
     """
 
@@ -513,21 +548,20 @@ def add_model_complexes(me_model, complex_stoichiometry_dict,
     It is assumed that each modification adds one equivalent of the
     modification metabolite. Multiple
 
-
     Intended to be used as a function for large-scale complex addition.
 
     For adding individual ComplexData objects, use add_complex_to_model
 
-    Args:
-        me_model: cobrame.MEModel
+    Parameters
+    ----------
+    me_model : :class:`cobrame.core.model.MEModel`
 
-        complex_stoichiometry_dict: dict
-            {unmodified_complex_id: {protein_<locus_tag>: stoichiometry}}
+    complex_stoichiometry_dict : dict
+        {unmodified_complex_id: {protein_<locus_tag>: stoichiometry}}
 
-        complex_modification_dict: dict
-            {modified_complex_id:{core_enzyme: unmodified_complex_id,
-                                 'modifications: {mod_metabolite:
-                                                  stoichiometry}}}
+    complex_modification_dict : dict
+        {modified_complex_id:{core_enzyme: unmodified_complex_id,
+                             'modifications: {mod_metabolite: stoichiometry}}}
 
     """
     for complex_id, stoichiometry in iteritems(complex_stoichiometry_dict):
@@ -560,26 +594,26 @@ def add_metabolic_reaction_to_model(me_model, stoichiometric_data_id,
     """
     Creates and add a MetabolicReaction to a MEModel.
 
+    Parameters
+    ----------
+    me_model : :class:`cobrame.core.model.MEModel`
+        MEModel that the MetabolicReaction will be added to
 
-    Args:
-        me_model:
-            MEModel that the MetabolicReaction will be added to
+    stoichiometric_data_id : str
+        ID of the StoichiometricData for the reaction being added
 
-        stoichiometric_data_id: string
-            ID of the StoichiometricData for the reaction being added
+    directionality : str
+        - Forward: Add reaction that occurs in the forward direction
+        - Reverse: Add reaction that occurs in the reverse direction
 
-        directionality: string
-            Forward: Add reaction that occurs in the forward direction
-            Reverse: Add reaction that occurs in the reverse direction
+    complex_id : str or None
+        ID of the ComplexData for the enzyme that catalyze the reaction
+        being added.
 
-        complex_id: string or None
-            ID of the ComplexData for the enzyme that catalyze the reaction
-            being added.
-
-        spontaneous: boolean
-            If True and complex_id='' add reaction as spontaneous reaction
-            If False and complex_id='' add reaction as orphan (CPLX_dummy
-            catalyzed)
+    spontaneous : bool
+        - If True and complex_id='' add reaction as spontaneous reaction
+        - If False and complex_id='' add reaction as orphan (CPLX_dummy
+          catalyzed)
 
     """
     # Get stoichiometric data for reaction being added
@@ -639,18 +673,18 @@ def add_reactions_from_stoichiometric_data(me_model, rxn_to_cplx_dict,
 
     For adding an individual reaction use add_metabolic_reaction_to_model()
 
-    Args:
-        me_model:
-            MEModel that the MetabolicReaction will be added to
+    Parameters
+    ----------
+    me_model : :class:`cobrame.core.model.MEModel`
+        MEModel that the MetabolicReaction will be added to
 
-        rxn_to_cplx_dict: Dict
-            {StoichiometricData.id: catalytic_enzyme_id}
+    rxn_to_cplx_dict : dict
+        {StoichiometricData.id: catalytic_enzyme_id}
 
-
-        rxn_info_frame: :class:`pandas.Dataframe
-            Contains the ids, names and reversibility for each reaction in the
-            metabolic reaction matrix as well as whether the reaction is
-            spontaneous
+    rxn_info_frame: :class:`pandas.Dataframe`
+        Contains the ids, names and reversibility for each reaction in the
+        metabolic reaction matrix as well as whether the reaction is
+        spontaneous
     """
 
     for reaction_data in me_model.stoichiometric_data:

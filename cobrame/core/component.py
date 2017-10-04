@@ -8,12 +8,33 @@ from cobrame.util import dogma, mass
 
 
 class MEComponent(Component):
+    """
+    COBRAme component representation. Inherits from
+    :class:`cobra.core.metabolite.Metabolite`
 
+    Parameters
+    ----------
+    id : str
+        Identifier of the component. Should follow best practices of child
+        classes
+
+    """
     def __init__(self, id):
         Component.__init__(self, id)
-        pass
 
     def remove_from_me_model(self, method='subtractive'):
+        """
+        Remove metabolite from me model along with any relevant
+        :class:`cobrame.core.processdata.ProcessData`
+
+        Parameters
+        ----------
+        method : str
+            - destructive: remove metabolite from model and remove reactions
+              it is involved in
+            - subtractive: remove only metabolite from model
+
+        """
         if self.id in self._model.process_data:
             self._model.process_data.remove(self.id)
         if self.id in self._model.complex_data:
@@ -36,10 +57,45 @@ class MEComponent(Component):
 
 
 class Metabolite(MEComponent):
-    pass
+    """
+    COBRAme metabolite representation
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the metabolite
+
+    """
+    def __init__(self, id):
+        MEComponent.__init__(self, id)
 
 
 class TranscribedGene(MEComponent):
+    """
+    Metabolite class for gene created from
+    :class:`cobrame.core.reaction.TranscriptionReaction`
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the transcribed gene. As a best practice, this ID should
+        be prefixed with 'RNA + _'
+
+    Attributes
+    ----------
+    left_pos : int
+        Left position of gene on the sequence of the (+) strain
+
+    right_pos : int
+        Right position of gene on the sequence of the (+) strain
+
+    RNA_type : str
+        Type of RNA encoded by gene sequence (mRNA, rRNA, tRNA, or ncRNA)
+
+    nucleotide_sequence : str
+        String of base pair abbreviations for nucleotides contained in the gene
+
+    """
 
     def __init__(self, id):
         MEComponent.__init__(self, id)
@@ -51,6 +107,15 @@ class TranscribedGene(MEComponent):
 
     @property
     def nucleotide_count(self):
+        """
+        Get number of each nucleotide monophosphate
+
+        Returns
+        -------
+        dict
+            {nucleotide_monophosphate_id: count}
+
+        """
         seq = self.nucleotide_sequence
         counts = {i: seq.count(i) for i in ("A", "T", "G", "C")}
         monophosphate_counts = {dogma.transcription_table[k].replace("tp_c",
@@ -60,28 +125,79 @@ class TranscribedGene(MEComponent):
 
     @property
     def mass(self):
-        return mass.compute_rna_mass(self.nucleotide_sequence)
+        """
+        Calculate mass of transcribed gene from nucleotide_sequence
+
+        Returns
+        -------
+        float
+            Mass of gene (in kDA)
+        """
+
+        if not self.nucleotide_sequence:
+            raise UserWarning(
+                'TranscribedGene (%s) must be assigned a nucleotide sequence '
+                'in order to calculate its mass' % self.id)
+        else:
+            return mass.compute_rna_mass(self.nucleotide_sequence)
 
 
 class TranslatedGene(MEComponent):
+    """
+    Metabolite class for protein created from
+    :class:`cobrame.core.reaction.TranslationReaction`
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the translated protein product. Should be prefixed
+        with "protein + _"
+
+    """
+    def __init__(self, id):
+        MEComponent.__init__(self, id)
+
     @property
     def translation_data(self):
+        """
+        Get translation data that defines protein.
+
+        Assumes that TranslatedGene is "protein + _ + <translation data id>"
+
+        Returns
+        -------
+        :class:`cobrame.core.processdata.TranslationData`
+            Translation data used to form translation reaction of protein
+        """
         locus = self.id.replace('protein_', '')
         return self._model.translation_data.get_by_id(locus)
 
     @property
     def complexes(self):
-        """read-only link to the complexes that the gene forms"""
+        """Get the complexes that the protein forms
+
+        Returns
+        -------
+        list
+            List of :class:`cobrame.core.component.Complex` s that the protein
+            is a subunit of
+        """
         complex_list = []
         for reaction in self.reactions:
-            if reaction.__class__.__name__ == 'ComplexFormation':
+            if hasattr(reaction, 'complex'):
                 complex_list.append(reaction.complex)
         return complex_list
 
     @property
     def metabolic_reactions(self):
-        """read-only link to the metabolic reactions that the gene is involved
-        in"""
+        """Get the mtabolic reactions that the protein helps catalyze
+
+        Returns
+        -------
+        list
+            List of :class:`cobrame.core.reactions.MetabolicReaction` s
+            that the protein helps catalyze
+        """
         metabolic_reactions = []
         for complexes in self.complexes:
             metabolic_reactions.extend(complexes.metabolic_reactions)
@@ -89,48 +205,113 @@ class TranslatedGene(MEComponent):
 
     @property
     def mass(self):
+        """
+        Get mass of protein
+
+        Returns
+        -------
+        float
+            Mass of translated protein based on amino acid sequence in kDa
+        """
         return self.translation_data.mass
 
     @property
     def amino_acid_sequence(self):
-        return self.translation_data.amino_acid_sequence
+        """
+        Get amino acid sequence of protein
 
-    def get_surface_area(self, location):
-        thickness = self._model.global_info['membrane_thickness'][location]
-        mass = self.mass
-        nm2_per_m2 = 1e18
-        molecules_per_mmol = 6.022e20
-        # return mass dependent SA from Liu et al 2014
-        return 1.21 / thickness * 2. * mass * molecules_per_mmol / nm2_per_m2
+        Returns
+        -------
+        str
+            Amino acid sequence of protein
+
+        """
+        return self.translation_data.amino_acid_sequence
 
 
 class ProcessedProtein(MEComponent):
+    """
+    Metabolite class for protein created from
+    :class:`cobrame.core.reaction.PostTranslationReaction`
 
-    @property
-    def unprocessed_protein(self):
-        return self._model.metabolites.get_by_id(self.unprocessed_protein_id)
+    Parameters
+    ----------
+    id : str
+        Identifier of the processed protein
 
+    unprocessed_protein_id : str
+        Identifier of protein before being processed by PostTranslationReaction
+
+    """
     def __init__(self, id, unprocessed_protein_id):
         MEComponent.__init__(self, id)
         self.unprocessed_protein_id = unprocessed_protein_id
 
     @property
-    def mass(self):
+    def unprocessed_protein(self):
+        """Get unprocessed protein reactant in PostTranslationReaction
+
+        Returns
+        -------
+        :class:`cobrame.core.component.TranslatedGene`
+            Unprocessed protein object
+        """
+        return self._model.metabolites.get_by_id(self.unprocessed_protein_id)
+
+    @property
+    def unprocessed_protein_mass(self):
+        """
+        Get mass of unprocessed protein
+
+        Returns
+        -------
+        float
+            Mass of unprocessed protein metabolite in kDa
+
+        """
         return self.unprocessed_protein.mass
 
 
 class Complex(MEComponent):
+    """
+    Metabolite class for protein complexes
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the protein complex.
+    """
+
+    def __init__(self, id):
+        MEComponent.__init__(self, id)
+
     @property
     def metabolic_reactions(self):
-        """read-only link to MetabolicReactions"""
+        """Get metabolic reactions catalyzed by complex
+
+        Returns
+        -------
+        list
+            List of :class:`cobrame.core.reaction.MetabolicReaction` s
+            catalyzed by complex.
+        """
         reaction_list = []
         for reaction in self.reactions:
-            if reaction.__class__.__name__ == 'MetabolicReaction':
+            if hasattr(reaction, 'stoichiometric_data'):
                 reaction_list.append(reaction)
         return reaction_list
 
     @property
     def mass(self):
+        """
+        Get mass of complex based on protein subunit stoichiometries
+
+        Returns
+        -------
+        int
+            Mass of complex based on protein subunit composition in kDa
+
+        """
         value = 0
         complex_data = self._model.process_data.get_by_id(self.id)
         for protein, coefficient in iteritems(complex_data.stoichiometry):
@@ -140,23 +321,76 @@ class Complex(MEComponent):
 
 
 class Ribosome(Complex):
-    pass
+    """
+    Metabolite class for Ribosome complexes. Inherits from
+    :class:`cobrame.core.component.Complex`
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the Ribosome.
+    """
+    def __init__(self, id):
+        Complex.__init__(self, id)
 
 
 class GenericComponent(MEComponent):
-    pass
+    """
+    Metabolite class for generic components created from
+    :class:`cobrame.core.reaction.GenericFormationReaction`
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the generic tRNA. As a best practice should follow
+        template: 'generic + _ +  <generic metabolite id>'
+    """
+    def __init__(self, id):
+        MEComponent.__init__(self, id)
 
 
 class GenerictRNA(MEComponent):
-    pass
+    """
+    Metabolite class for generic tRNAs created from
+    :class:`cobrame.core.reaction.tRNAChargingReaction`
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the generic tRNA. As a best practice should follow
+        template: 'generic_tRNA + _ + <codon> + _ + <amino acid metabolite id>'
+
+    """
+    def __init__(self, id):
+        MEComponent.__init__(self, id)
 
 
 class RNAP(Complex):
-    pass
+    """
+    Metabolite class for RNA polymerase complexes. Inherits from
+    :class:`cobrame.core.component.Complex`
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the RNA Polymerase.
+    """
+
+    def __init__(self, id):
+        Complex.__init__(self, id)
 
 
 class Constraint(MEComponent):
-    pass
+    """
+    Metabolite class for global constraints such as biomass
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the constraint
+    """
+    def __init__(self, id):
+        MEComponent.__init__(self, id)
 
 
 def create_component(component_id, default_type=MEComponent, rnap_set=set()):

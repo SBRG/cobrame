@@ -4,34 +4,34 @@ cobrame.core package
 Submodules
 ----------
 
-cobrame.core.MEReactions module
+cobrame.core.reaction module
+----------------------------
+
+.. automodule:: cobrame.core.reaction
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+cobrame.core.processdata module
 -------------------------------
 
-.. automodule:: cobrame.core.MEReactions
+.. automodule:: cobrame.core.processdata
     :members:
     :undoc-members:
     :show-inheritance:
 
-cobrame.core.ProcessData module
--------------------------------
+cobrame.core.component module
+-----------------------------
 
-.. automodule:: cobrame.core.ProcessData
+.. automodule:: cobrame.core.component
     :members:
     :undoc-members:
     :show-inheritance:
 
-cobrame.core.Components module
-------------------------------
+cobra.core.model module
+-----------------------
 
-.. automodule:: cobrame.core.Components
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-cobra.core.MEModel module
--------------------------
-
-.. automodule:: cobrame.core.MEModel
+.. automodule:: cobrame.core.model
     :members:
     :undoc-members:
     :show-inheritance:

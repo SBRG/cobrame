@@ -14,9 +14,28 @@ from cobrame.util import dogma
 
 
 class ProcessData(object):
-    """Generic class for holding information about a process
+    """Generic class for storing information about a process
 
-    ME reactions are built from information in these objects
+    This class essentially acts as a database that contains all of the
+    relevant information needed to construct a particular reaction. For
+    example, to construct a transcription reaction, following information must
+    be accessed in some way:
+
+     - nucleotide sequence of the transcription unit
+     - RNA_polymerase (w/ sigma factor)
+     - RNAs transcribed from transcription unit
+     - other processes involved in transcription of RNAs (splicing, etc.)
+
+    ME-model reactions are built from information in these objects.
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the ProcessData instance.
+
+    model : :class:`cobrame.core.model.MEModel`
+        ME-model that the ProcessData is associated with
+
 
     """
 
@@ -30,14 +49,37 @@ class ProcessData(object):
 
     @property
     def model(self):
+        """
+        Get the ME-model the process data is associated with
+
+        Returns
+        -------
+        :class:`cobrame.core.model.MEModel
+            ME-model that uses this process data
+        """
         return self._model
 
     @property
     def parent_reactions(self):
+        """
+        Get reactions that the ProcessData instance is used to construct.
+
+        Returns
+        -------
+        set
+            Parent reactions of ProcessData
+
+        """
         return {self._model.reactions.get_by_id(i)
                 for i in self._parent_reactions}
 
     def _update_parent_reactions(self):
+        """
+
+        Executes the update() function for all reactions that the ProcessData
+        instance is used to construct.
+
+        """
         reactions = self._model.reactions
         for i in self._parent_reactions:
             reactions.get_by_id(i).update()
@@ -49,14 +91,34 @@ class ProcessData(object):
 class StoichiometricData(ProcessData):
     """Encodes the stoichiometry for a metabolic reaction.
 
-    This stoichiometry and ID will often link directly to M-model reactions
+    StoichiometricData defines the metabolite stoichiometry and upper/lower
+    bounds of metabolic reaction
 
-    :param dict _stoichiometry:
+    Parameters
+    ----------
+    id : str
+        Identifier of the metabolic reaction. Should be identical to the
+        M-model reactions in most cases.
+
+    model : :class:`cobrame.core.model.MEModel`
+        ME-model that the StoichiometricData is associated with
+
+    Attributes
+    ----------
+    _stoichiometry : dict
         Dictionary of {metabolite_id: stoichiometry}
 
-    :param defaultdict subreactions:
-        This should rarely contain anything. Only in special cases where
-        a second diluted enzyme needs added to metabolic reaction
+    subreactions : :class:`collections.DefaultDict(int)`
+        Cases where multiple enzymes (often carriers ie. Acyl Carrier Protein)
+        are involved in a metabolic reactions.
+
+    upper_bound : int
+        Upper reaction bound of metabolic reaction. Should be identical to the
+        M-model reactions in most cases.
+
+    lower_bound : int
+        Lower reaction bound of metabolic reaction. Should be identical to the
+        M-model reactions in most cases.
     """
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
@@ -72,16 +134,68 @@ class StoichiometricData(ProcessData):
 
 
 class SubreactionData(ProcessData):
+    """
+    Parameters
+    ----------
+    id : str
+        Identifier of the subreaction data. As a best practice, if the
+        subreaction data details a modification, the ID should be prefixed
+        with "mod + _"
+
+    model : :class:`cobrame.core.model.MEModel`
+        ME-model that the SubreactionData is associated with
+
+    Attributes
+    ----------
+    enzyme : list or str or None
+        List of :attr:`cobrame.core.component.Complex.id` s for enzymes that
+        catalyze this process
+
+        or
+
+        String of single :attr:`cobrame.core.component.Complex.id` for enzyme
+        that catalyzes this process
+
+    keff : float
+        Effective turnover rate of enzyme(s) in subreaction process
+
+    _element_contribution : dict
+        If subreaction adds a chemical moiety to a macromolecules via a
+        modification or other means, net element contribution of the
+        modification process should be accounted for. This can be used to
+        mass balance check each of the individual processes.
+
+        Dictionary of {element: net_number_of_contributions}
+
+
+    """
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
         model.subreaction_data.append(self)
         self.stoichiometry = {}
         self.enzyme = None
         self.keff = 65.
+        # TODO add setter for element_contribution
         self._element_contribution = {}
 
     @property
     def element_contribution(self):
+        """
+        Get net contribution of elements from subreaction process to
+        macromolecule
+
+        If subreaction adds a chemical moiety to a macromolecules via a
+        modification or other means, net element contribution of the
+        modification process should be accounted for. This can be used to
+        mass balance check each of the individual processes.
+
+
+        Returns
+        -------
+        dict
+            Dictionary of {element: net_number_of_contributions}
+
+        """
         if self._element_contribution:
             return self._element_contribution
         else:
@@ -102,6 +216,16 @@ class SubreactionData(ProcessData):
             return {}
 
     def calculate_element_contribution(self):
+        """
+        Calculate net contribution of chemical elements based on the
+        stoichiometry of the subreaction data
+
+        Returns
+        -------
+        dict
+            Dictionary of {element: net_number_of_contributions}
+
+        """
         elements = defaultdict(int)
         for met, coefficient in iteritems(self.stoichiometry):
             met_obj = self._model.metabolites.get_by_id(met)
@@ -113,6 +237,21 @@ class SubreactionData(ProcessData):
         return elements
 
     def calculate_biomass_contribution(self):
+        """
+        Calculate net biomass increase/decrease as a result of the subreaction
+        process.
+
+        If subreaction adds a chemical moiety to a macromolecules via a
+        modification or other means, the biomass contribution of the
+        modification process should be accounted for and ultimately included
+        in the reaction it is involved in.
+
+        Returns
+        -------
+        float
+            Mass of moiety transferred to macromolecule by subreaction
+
+        """
         elements = self.element_contribution
 
         # Create temporary metabolite for calculating formula weight
@@ -122,6 +261,15 @@ class SubreactionData(ProcessData):
         return tmp_met.formula_weight
 
     def get_complex_data(self):
+        # TODO: Make this function generic to consider all process data
+        """
+        Get the complex data that the subreaction is involved in
+
+        Yields
+        ------
+        :class:`cobrame.core.processdata.ComplexData`
+            ComplexData that subreaction is involved in
+        """
         for i in self._model.complex_data:
             if self.id in i.subreactions:
                 yield i
@@ -130,16 +278,34 @@ class SubreactionData(ProcessData):
 class ComplexData(ProcessData):
 
     """Contains all information associated with the formation of an
-    enzyme complex
+    functional enzyme complex.
 
-    :param dict stoichiometry:
+    This can include any enzyme complex modifications required for the enzyme
+    to become active.
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the complex data. As a best practice, this should
+        typically use the same ID as the complex being formed. In cases with
+        multiple ways to form complex '_ + alt' or similar suffixes can be
+        used.
+
+    model : :class:`cobrame.core.model.MEModel`
+        ME-model that the ComplexData is associated with
+
+    Attributes
+    ----------
+
+    stoichiometry : :class:`collections.DefaultDict(int)`
         Dictionary containing {protein_id: count} for all protein subunits
         comprising enzyme complex
 
-    :param dict subreactions:
+    subreactions : dict
         Dictionary of {subreaction_data_id: count} for all complex formation
         subreactions/modifications. This can include cofactor/prosthetic group
         binding or enzyme side group addition.
+
 
     """
 
@@ -155,7 +321,13 @@ class ComplexData(ProcessData):
 
     @property
     def formation(self):
-        """a read-only link to the formation reaction object"""
+        """Get the formation reaction object
+
+        Returns
+        -------
+        :class:`cobrame.core.reaction.ComplexFormation`
+            Complex formation reaction detailed in ComplexData
+        """
         try:
             return self._model.reactions.get_by_id("formation_" + self.id)
         except KeyError:
@@ -163,14 +335,32 @@ class ComplexData(ProcessData):
 
     @property
     def complex(self):
-        """a read-only link to the complex object"""
+        """
+        Get complex metabolite object
+
+        Returns
+        -------
+        :class:`cobrame.core.component.Complex`
+            Instance of complex metabolite that ComplexData is used to
+            synthesize
+        """
         return self._model.metabolites.get_by_id(self.complex_id)
 
     @property
     def complex_id(self):
-        """There are cases where multiple equivalent processes can result in
+        """
+        Get  and set complex ID for product of complex formation reaction
+
+        There are cases where multiple equivalent processes can result in
         the same final complex. This allows the equivalent final complex
-        complex_id to be queried. This only needs set in the above case"""
+        complex_id to be queried. This only needs set in the above case
+
+        Returns
+        -------
+        str
+            ID of complex that ComplexData is used to synthesize
+        """
+
         return self.id if self._complex_id is None else self._complex_id
 
     @complex_id.setter
@@ -181,7 +371,14 @@ class ComplexData(ProcessData):
         """creates a complex formation reaction
 
         This assumes none exists already. Will create a reaction (prefixed by
-        "formation") which forms the complex"""
+        "formation") which forms the complex
+
+        Parameters
+        ----------
+        verbose : bool
+            If True, print if a metabolite is added to model during update
+
+        """
         formation_id = "formation_" + self.id
         if formation_id in self._model.reactions:
             raise ValueError("reaction %s already in model" % formation_id)
@@ -193,6 +390,40 @@ class ComplexData(ProcessData):
 
 
 class TranscriptionData(ProcessData):
+    """
+    Class for storing information needed to define a transcription reaction
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the transcription unit, typically beginning with 'TU'
+
+    model : :class:`cobrame.core.model.MEModel`
+        ME-model that the TranscriptionData is associated with
+
+    Attributes
+    ----------
+
+    nucleotide_sequence : str
+        String of base pair abbreviations for nucleotides contained in the
+        transcription unit
+
+    RNA_products : set
+        IDs of :class:`cobrame.core.component.TranscribedGene` that the
+        transcription unit encodes. Each member should be prefixed with
+        "RNA + _"
+
+    RNA_polymerase : str
+        ID of the :class:`cobrame.core.component.RNAP` that transcribes the
+        transcription unit. Different IDs are used for different sigma factors
+
+    subreactions : :class:`collections.DefaultDict(int)`
+        Dictionary of
+        {:class:`cobrame.core.processdata.SubreactionData` ID: num_usages}
+        required for the transcription unit to be transcribed
+
+
+    """
     def __init__(self, id, model, rna_products=set()):
         ProcessData.__init__(self, id, model)
         model.transcription_data.append(self)
@@ -204,28 +435,77 @@ class TranscriptionData(ProcessData):
 
     @property
     def nucleotide_count(self):
+        """
+        Get count of each nucleotide contained in the nucleotide sequence
+
+        Returns
+        -------
+        dict
+            {nuclotide_id: number_of_occurances}
+
+        """
         return {dogma.transcription_table[i]: self.nucleotide_sequence.count(i)
                 for i in ["A", "T", "G", "C"]}
 
     @property
     def RNA_types(self):
-        return (self._model.metabolites.get_by_id(i).RNA_type for i in
-                self.RNA_products)
+        """
+        Get generator consisting of the RNA type for each RNA product
+
+        Yields
+        ------
+        str
+            (mRNA, tRNA, rRNA, ncRNA)
+        """
+        for rna in self.RNA_products:
+            rna_type = self._model.metabolites.get_by_id(rna).RNA_type
+            if rna_type:
+                yield rna_type
 
     @property
     def mass(self):
+        """
+        Get mass of transcription unit in kDa from nucleotide sequence
+
+        If transcription unit is spliced, the mass of the excised bases are
+        subtracted
+
+        Returns
+        -------
+        float
+            Mass of transcription unit in kDas
+
+        """
         return compute_rna_mass(self.nucleotide_sequence, self.excised_bases)
 
-    # Bases to be excised due to splicing tRNA, rRNA, or ncRNA in RNA_products
-    # i.e. {"amp_c": 10, "gmp_c": 11, "ump_c": 9, "cmp_c": 11}
     @property
     def excised_bases(self):
+        """
+        Get count of bases that are excised during transcription
+
+        If a stable RNA (e.g. tRNA or rRNA) is coded for in the transcription
+        unit, the transcript must be spliced in order for these to function.
+
+        This determines whether the transcription unit requires splicing and,
+        if so, returns the count of nucleotides within the transcription unit
+        that are not accounted for in the RNA products, thus identifying the
+        appropriate introns nucleotides.
+
+        Returns
+        -------
+        dict
+            {nucleotide_monophosphate_id: number_excised}
+
+            i.e. {"amp_c": 10, "gmp_c": 11, "ump_c": 9, "cmp_c": 11}
+
+        """
+        rna_types = set(self.RNA_types)
+
         # Skip if TU does not have any annotated RNA Products
-        if len(self.RNA_products) == 0:
+        if len(rna_types) == 0:
             return {}
 
         # Skip if TU only codes for mRNA
-        rna_types = set(self.RNA_types)
         if rna_types == {"mRNA"}:
             return {}
 
@@ -251,7 +531,16 @@ class TranscriptionData(ProcessData):
 
     @property
     def codes_stable_rna(self):
-        # Return true if a stable RNA is in RNA_products
+        """
+        Get whether transcription unit codes for a stable RNA
+
+        Returns
+        -------
+        bool
+            True if tRNA or rRNA in RNA products
+            False if not
+
+        """
         has_stable_rna = False
         for RNA in self.RNA_products:
             try:
@@ -265,6 +554,22 @@ class TranscriptionData(ProcessData):
 
 
 class GenericData(ProcessData):
+    """
+    Class for storing information about generic metabolites
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the generic metabolite. As a best practice, this ID
+        should be prefixed with 'generic + _'
+
+    model : :class:`cobrame.core.model.MEModel`
+        ME-model that the GenericData is associated with
+
+    component_list : list
+        List of metabolite ids for all metabolites that can provide
+        identical functionality
+    """
     def __init__(self, id, model, component_list):
         if not id.startswith("generic_"):
             warn("best practice for generic id to start with generic_")
@@ -273,6 +578,14 @@ class GenericData(ProcessData):
         self.component_list = component_list
 
     def create_reactions(self):
+        """
+
+        Adds reaction with id "<metabolite_id> + _ + to + _ + <generic_id>"
+        for each metabolite in self.component_list.
+
+        Creates generic metabolite and generic reaction, if they do not already
+        exist.
+        """
         model = self._model
         try:
             generic_metabolite = model.metabolites.get_by_id(self.id)
@@ -292,17 +605,62 @@ class GenericData(ProcessData):
 
 
 class TranslationData(ProcessData):
+    """
+    Class for storing information about a translation reaction.
+
+    Parameters
+    ----------
+    id : str
+        Identifier of the gene being translated, typically the locus tag
+
+    model : :class:`cobrame.core.model.MEModel`
+        ME-model that the TranslationData is associated with
+
+    mrna : str
+        ID of the mRNA that is being translated
+
+    protein : str
+        ID of the protein product.
+
+
+    Attributes
+    ----------
+    mRNA : str
+        ID of the mRNA that is being translated
+
+    protein : str
+        ID of the protein product.
+
+    subreactions : :class:`collections.DefaultDict(int)`
+        Dictionary of
+        {:attr:`cobrame.core.processdata.SubreactionData.id`: num_usages}
+        required for the mRNA to be translated
+
+    nucleotide_sequence : str
+        String of base pair abbreviations for nucleotides contained in the gene
+        being translated
+
+
+    """
     def __init__(self, id, model, mrna, protein):
         ProcessData.__init__(self, id, model)
         model.translation_data.append(self)
         self.mRNA = mrna
         self.protein = protein
         self.subreactions = defaultdict(int)
-        self._amino_acid_sequence = ""
         self.nucleotide_sequence = ""
 
     @property
     def amino_acid_sequence(self):
+        """
+        Get amino acid sequence from mRNA's nucleotide sequence
+
+        Returns
+        -------
+        str
+            Amino acid sequence
+
+        """
         codons = (self.nucleotide_sequence[i: i + 3]
                   for i in range(0, (len(self.nucleotide_sequence)), 3))
         amino_acid_sequence = ''.join(dogma.codon_table[i] for i in codons)
@@ -316,10 +674,32 @@ class TranslationData(ProcessData):
 
     @property
     def last_codon(self):
+        """
+        Get the last codon contained in the mRNA sequence. This should
+        correspond to the stop codon for the gene.
+
+        Returns
+        -------
+        str
+            Last 3 nucleotides comprising the last codon in the mRNA gene
+            sequence
+
+        """
         return self.nucleotide_sequence[-3:].replace('T', 'U')
 
     @property
     def first_codon(self):
+        """
+        Get the first codon contained in the mRNA sequence. This should
+        correspond to the start codon for the gene.
+
+        Returns
+        -------
+        str
+            First 3 nucleotides comprising the first codon in the mRNA gene
+            sequence
+
+        """
         return self.nucleotide_sequence[:3].replace('T', 'U')
 
     def _itercodons(self):
@@ -327,7 +707,15 @@ class TranslationData(ProcessData):
 
     @property
     def codon_count(self):
-        # exclude the last three stop codons from count
+        """
+        Get the number of each codon contained within the gene sequence
+
+        Returns
+        -------
+        dict
+            {codon_sequence: number_of_occurrences}
+
+        """
         codons = (self.nucleotide_sequence[i: i + 3]
                   for i in range(0, len(self.nucleotide_sequence), 3))
         codon_count = defaultdict(int)
@@ -338,7 +726,14 @@ class TranslationData(ProcessData):
 
     @property
     def amino_acid_count(self):
-        """count of each amino acid in the protein"""
+        """Get number of each amino acid in the translated protein
+
+        Returns
+        -------
+        dict
+            {amino_acid_id: number_of_occurrences}
+        """
+
         aa_count = defaultdict(int)
         for i in self.amino_acid_sequence:
             aa_count[dogma.amino_acids[i]] += 1
@@ -346,13 +741,29 @@ class TranslationData(ProcessData):
 
     @property
     def mass(self):
-        """mass in kDa"""
+        """Get mass of protein from amino acid composition
+
+        Returns
+        -------
+        float
+            Mass of protein (in kDa)
+        """
+
         return compute_protein_mass(self.amino_acid_count)
 
     @property
     def subreactions_from_sequence(self):
         """
-        Returns subreactions associated with each tRNA/AA addition.
+        Get subreactions associated with each tRNA/AA addition.
+
+        tRNA activity is accounted for as subreactions. This returns the
+        subreaction counts associated with each amino acid addition, based
+        on the sequence of the mRNA.
+
+        Returns
+        -------
+        dict
+            {:attr:`cobrame.core.processdata.SubreactionData.id`: num_usages}
         """
         subreactions = {}
 
@@ -380,15 +791,37 @@ class TranslationData(ProcessData):
             try:
                 self._model.subreaction_data.get_by_id(subreaction_id)
             except KeyError:
-                warn('elongation subreaction %s not in model' % subreaction_id)
+                warn('tRNA addition subreaction %s not in model' %
+                     subreaction_id)
             else:
                 subreactions[subreaction_id] = count
 
         return subreactions
 
     def add_elongation_subreactions(self, elongation_subreactions=set()):
-        # Some additional enzymatic processes are required for each amino acid
-        # addition during translation elongation
+        """
+        Add all subreactions involved in translation elongation.
+
+        This includes:
+
+         - tRNA activity subreactions returned with
+           :meth:`subreactions_from_sequence` which is called within this
+           function.
+
+         - Elongation subreactions passed into this function. These will be
+           added with a value of len(amino_acid_sequence) - 1 as these are
+           involved in each amino acid addition
+
+        Some additional enzymatic processes are required for each amino acid
+        addition during translation elongation
+
+        Parameters
+        ----------
+        elongation_subreactions : set
+            Subreactions that are required for each amino acid addition
+
+        """
+
         for subreaction_id in elongation_subreactions:
             try:
                 self._model.subreaction_data.get_by_id(subreaction_id)
@@ -405,8 +838,20 @@ class TranslationData(ProcessData):
 
     def add_initiation_subreactions(self, start_codons=set(),
                                     start_subreactions=set()):
-        # Read-only link to list of start subreactions for organism, if present
-        # in model
+        """
+        Add all subreactions involved in translation initiation.
+
+        Parameters
+        ----------
+        start_codons : set, optional
+            Start codon sequences for the organism being modeled
+
+        start_subreactions : set, optional
+            Subreactions required to initiate translation, including the
+            activity by the start tRNA
+
+        """
+
         if self.first_codon not in start_codons:
             warn("%s starts with '%s' which is not a start codon" %
                  (self.mRNA, self.first_codon))
@@ -421,6 +866,16 @@ class TranslationData(ProcessData):
                 self.subreactions[subreaction_id] = 1
 
     def add_termination_subreactions(self, translation_terminator_dict=None):
+
+        """
+        Add all subreactions involved in translation termination.
+
+        Parameters
+        ----------
+        translation_terminator_dict : dict or None
+            {stop_codon : enzyme_id_of_terminator_enzyme}
+
+        """
         if not translation_terminator_dict:
             translation_terminator_dict = {}
         all_subreactions = self._model.subreaction_data
@@ -441,8 +896,41 @@ class TranslationData(ProcessData):
 
 
 class tRNAData(ProcessData):
-    synthetase = None
-    synthetase_keff = 65.
+    """
+    Class for storing information about a tRNA charging reaction.
+
+    Parameters
+    ----------
+    id : str
+        Identifier for tRNA charging process. As best practice, this should
+        be follow "tRNA + _ + <tRNA_locus> + _ + <codon>" template. If tRNA
+        initiates translation, <codon> should be replaced with START.
+
+    model : :class:`cobrame.core.model.MEModel`
+        ME-model that the tRNAData is associated with
+
+    amino_acid : str
+        Amino acid that the tRNA transfers to an peptide
+
+    rna : str
+        ID of the uncharged tRNA metabolite. As a best practice, this ID should
+        be prefixed with 'RNA + _'
+
+    Attributes
+    ----------
+    subreactions : :class:`collections.DefaultDict(int)`
+        Dictionary of
+        {:attr:`cobrame.core.processdata.SubreactionData.id`: num_usages}
+        required for the tRNA to be charged
+
+    synthetase : str
+        ID of the tRNA synthetase required to charge the tRNA with an amino
+        acid
+
+    synthetase_keff : float
+        Effective turnover rate of the tRNA synthetase
+
+    """
 
     def __init__(self, id, model, amino_acid, rna, codon):
         ProcessData.__init__(self, id, model)
@@ -451,18 +939,46 @@ class tRNAData(ProcessData):
         self.amino_acid = amino_acid
         self.RNA = rna
         self.subreactions = defaultdict(int)
+        self.synthetase = None
+        self.synthetase_keff = 65.
 
 
 class TranslocationData(ProcessData):
     """
+    Class for storing information about a protein translocation pathway
+
+    Parameters
+    ----------
+    id : str
+        Identifier for translocation pathway.
+
+    model : :class:`cobrame.core.model.MEModel`
+        ME-model that the TranslocationData is associated with
+
+    Attributes
+    ----------
+    keff : float
+        Effective turnover rate of the enzymes in the translocation pathway
+
+    enzyme_dict : dict
+        Dictionary containing enzyme specific information about the way it is
+        coupled to protein translocation
+
+        {enzyme_id: {length_dependent: <True or False>,
+         fixed_keff: <True or False>}}
+
+    length_dependent_energy : bool
+        True if the ATP cost of translocation is dependent on the length of
+        the protein
+
+    stoichiometry : dict
+        Stoichiometry of translocation pathway, typically ATP/GTP hydrolysis
 
     """
 
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
         self.keff = 65.
-        # enzyme_dict = {enzyme_id: {length_dependent: <True or False>,
-        #                            fixed_keff: <True or False>}}
         self.enzyme_dict = {}
         self.length_dependent_energy = False
         self.stoichiometry = {}
@@ -471,26 +987,88 @@ class TranslocationData(ProcessData):
 
 class PostTranslationData(ProcessData):
     """
-    PostTranslationData id can be anything, but the preprocessed protein id
-    and processed protein id must be defined
+    Parameters
+    ----------
+    id : str
+        Identifier for post translation process.
+
+    model : :class:`cobrame.core.model.MEModel`
+        ME-model that the PostTranslationData is associated with
+
+    processed_protein : str
+        ID of protein following post translational process
+
+    preprocessed_protein : str
+        ID of protein before post translational process
+
+
+    Attributes
+    ----------
+    translocation : :class:`collections.DefaultDict(float)`
+        Translocation pathways involved in post translation reaction.
+
+        Dictionary of
+        {:attr:`cobrame.core.processdata.TranslocationData.id`: 1.}
+
+    translocation_multipliers : dict
+        Some proteins require different coupling of translocation enzymes.
+
+        Dictionary of
+        {:attr:`cobrame.core.processdata.TranslocationData.id`: float}
+
+    surface_area : dict
+        If protein is translated into the inner or outer membrane, the surface
+        area the protein occupies can be accounted for as well.
+
+        Dictionary of {SA_+<inner_membrane or outer_membrane>: float}
+
+    subreactions : :class:`collections.DefaultDict(float)`
+        If a protein is modified following translation, this is accounted for
+        here
+
+        Dictionary of {subreaction_id: float}
+
+    folding_mechanism : str
+        ID of folding mechanism for post translation reaction
+
+    aggregation_propensity : float
+        Aggregation propensity for the protein
+
+    keq_folding : dict
+        Temperature dependant keq for folding protein
+
+        Dictionary of {str(temperature): value}
+
+    k_folding : dict
+        Temperature dependant rate constant (k) for folding protein
+
+        Dictionary of {str(temperature): value}
+
+    propensity_scaling : float
+        Some small peptides are more likely to be folded by certain
+        chaperones. This is accounted for using propensity_scaling.
+
     """
 
     def __init__(self, id, model, processed_protein, preprocessed_protein):
         ProcessData.__init__(self, id, model)
         self.processed_protein_id = processed_protein
         self.unprocessed_protein_id = preprocessed_protein
+
+        # For translocation post translation reactions
+        # TODO translocation doesn't have to be a dictionary
         self.translocation = defaultdict(float)
         self.translocation_multipliers = {}
+        self.surface_area = {}
 
+        # For post translation modifications
+        self.subreactions = defaultdict(float)
+
+        # For protein folding reactions (FoldME)
         self.folding_mechanism = ''
         self.aggregation_propensity = 0.
-        # Dictionaries of {str(temperature): value}
         self.keq_folding = {}
         self.k_folding = {}
-        # some small peptides are more likely to be folded by certain
-        # chaperones. This is accounted for using propensity_scaling.
         self.propensity_scaling = 1.
 
-        self.subreactions = defaultdict(float)
-        self.surface_area = {}
         model.posttranslation_data.append(self)
