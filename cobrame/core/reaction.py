@@ -129,7 +129,7 @@ class MEReaction(Reaction):
 
         default_type: String
             The type of cobra.Metabolite to default to if the metabolite is not
-             yet present in the model
+            yet present in the model
 
         verbose: Boolean
             If True, print metabolites added to model if not yet present in

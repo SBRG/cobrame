@@ -15,7 +15,7 @@ This resource is intended to:
 
    MEModelFundamentals
    CobrameArchitectureOverview
-   COBRAme_Tutorial
+   building_a_model
    Reaction_Manipulation
    cobrame
 

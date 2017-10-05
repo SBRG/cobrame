@@ -1,5 +1,5 @@
-COBRAme ME-Model Architecture
-=============================
+ME-Model Architecture
+=====================
 
 The COBRAme codebase is constructed with the intention of both
 including all of the metabolic processes associated with gene expression, while also

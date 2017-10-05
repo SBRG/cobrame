@@ -121,7 +121,7 @@ def add_translation_reaction(me_model, locus_id, dna_sequence,
 
     locus_id : str
         Locus ID of RNA product.
-        The TranslationReaction will be added as "translation_ + locus_id"
+        The TranslationReaction will be added as "translation + _ + locus_id"
         The TranslationData will be added as "locus_id"
 
     dna_sequence : str
