@@ -17,8 +17,9 @@ install:
     - pip install .
     - ./travis_install.sh
     - pip install codecov
+    - pip install pytest-cov
 
-script: travis_wait 50 pytest
+script: travis_wait 50 py.test --cov=cobrame
 
 after_success:
     - codecov
