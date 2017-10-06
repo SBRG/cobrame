@@ -13,7 +13,7 @@ from cobrame.core.reaction import (SummaryVariable, MetabolicReaction,
                                    TranslationReaction)
 from cobrame.core.component import (Constraint, ProcessedProtein,
                                     TranslatedGene, TranscribedGene)
-from cobrame.core.processdata import TranslocationData
+from cobrame.core import processdata
 from cobrame.util import mu
 
 
@@ -21,15 +21,6 @@ class MEModel(Model):
     def __init__(self, *args):
         Model.__init__(self, *args)
         self.global_info = {}
-        self.stoichiometric_data = DictList()
-        self.complex_data = DictList()
-        self.translation_data = DictList()
-        self.transcription_data = DictList()
-        self.generic_data = DictList()
-        self.tRNA_data = DictList()
-        self.translocation_data = DictList()
-        self.posttranslation_data = DictList()
-        self.subreaction_data = DictList()
         self.process_data = DictList()
         # create the biomass/dilution constraint
         self._biomass = Constraint("biomass")
@@ -147,6 +138,61 @@ class MEModel(Model):
         self.reactions.ATPM.lower_bound = value
         self._ngam = value
 
+
+    @property
+    def stoichiometric_data(self):
+        for data in self.process_data:
+            if isinstance(data, processdata.StoichiometricData):
+                yield data
+
+    @property
+    def complex_data(self):
+        for data in self.process_data:
+            if isinstance(data, processdata.ComplexData):
+                yield data
+
+    @property
+    def translation_data(self):
+        for data in self.process_data:
+            if isinstance(data, processdata.TranslationData):
+                yield data
+
+    @property
+    def transcription_data(self):
+        for data in self.process_data:
+            if isinstance(data, processdata.TranscriptionData):
+                yield data
+
+    @property
+    def generic_data(self):
+        for data in self.process_data:
+            if isinstance(data, processdata.GenericData):
+                yield data
+
+    @property
+    def tRNA_data(self):
+        for data in self.process_data:
+            if isinstance(data, processdata.tRNAData):
+                yield data
+
+    @property
+    def translocation_data(self):
+        for data in self.process_data:
+            if isinstance(data, processdata.TranslocationData):
+                yield data
+
+    @property
+    def posttranslation_data(self):
+        for data in self.process_data:
+            if isinstance(data, processdata.PostTranslationData):
+                yield data
+
+    @property
+    def subreaction_data(self):
+        for data in self.process_data:
+            if isinstance(data, processdata.SubreactionData):
+                yield data
+
     def get_metabolic_flux(self, solution=None):
         """extract the flux state for metabolic reactions"""
         if solution is None:
@@ -257,61 +303,54 @@ class MEModel(Model):
         complex_data_list = [i.id for i in self.complex_data
                              if i.id not in skip]
         for c_d in complex_data_list:
-            c = self.complex_data.get_by_id(c_d)
+            c = self.process_data.get_by_id(c_d)
             cplx = c.complex
             if len(cplx.reactions) == 1:
                 list(cplx.reactions)[0].delete(remove_orphans=True)
-                self.complex_data.remove(self.complex_data.get_by_id(c_d))
+                self.process_data.remove(self.process_data.get_by_id(c_d))
 
         for p in self.metabolites.query('_folded'):
             if 'partially' not in p.id and p.id not in skip:
                 delete = True
                 for rxn in p.reactions:
-                    try:
-                        if rxn.metabolites[p] < 0:
-                            delete = False
-                    except Exception as e:
-                        print(rxn)
-                        raise e
+                    if rxn.metabolites[p] < 0:
+                        delete = False
+                        break
+
                 if delete:
                     while len(p.reactions) > 0:
                         list(p.reactions)[0].delete(remove_orphans=True)
-                        for data in self.posttranslation_data.query(p.id):
-                            self.posttranslation_data.remove(data.id)
+                        for data in self.process_data.query(p.id):
+                            self.process_data.remove(data.id)
 
         for p in self.metabolites.query(re.compile('^protein_')):
             if isinstance(p, ProcessedProtein) and p.id not in skip:
                 delete = True
                 for rxn in p.reactions:
-                    try:
-                        if rxn.metabolites[p] < 0:
-                            delete = False
-                    except Exception as e:
-                        print(rxn)
-                        raise e
+                    if rxn.metabolites[p] < 0:
+                        delete = False
+                        break
                 if delete:
-                    while len(p.reactions) > 0:
-                        list(p.reactions)[0].delete(remove_orphans=True)
-                        for data in self.posttranslation_data.query(p.id):
-                            self.posttranslation_data.remove(data.id)
+                    for rxn in list(p.reactions):
+                        self.process_data.remove(rxn.posttranslation_data.id)
+                        rxn.delete(remove_orphans=True)
 
         for p in self.metabolites.query(re.compile('^protein_')):
             if isinstance(p, TranslatedGene) and p.id not in skip:
                 delete = True
                 for rxn in p.reactions:
-                    try:
-                        if rxn.metabolites[p] < 0 and not rxn.id.startswith(
-                                'degradation'):
-                            delete = False
-                    except Exception as e:
-                        print(rxn)
-                        raise e
+
+                    if rxn.metabolites[p] < 0 and not rxn.id.startswith(
+                            'degradation'):
+                        delete = False
+                        break
+
                 if delete:
-                    while len(p.reactions) > 0:
-                        list(p.reactions)[0].delete(remove_orphans=True)
+                    for rxn in list(p.reactions):
                         p_id = p.id.replace('protein_', '')
-                        for data in self.translation_data.query(p_id):
-                            self.translation_data.remove(data.id)
+                        data = self.process_data.get_by_id(p_id)
+                        self.process_data.remove(data.id)
+                        rxn.delete(remove_orphans=True)
 
         removed_rna = set()
         for m in list(self.metabolites.query(re.compile("^RNA_"))):
@@ -342,13 +381,14 @@ class MEModel(Model):
             for product in t.products:
                 if isinstance(product, TranscribedGene):
                     delete = False
+
             t_process_id = t.id.replace('transcription_', '')
             if delete:
                 t.remove_from_model(remove_orphans=True)
-                self.transcription_data.remove(t_process_id)
+                self.process_data.remove(t_process_id)
             else:
                 # gets rid of the removed RNA from the products
-                self.transcription_data.get_by_id(
+                self.process_data.get_by_id(
                     t_process_id).RNA_products.difference_update(removed_rna)
 
             # update to update the TranscriptionReaction mRNA biomass
@@ -365,7 +405,7 @@ class MEModel(Model):
                 print('Complex (%s) removed from model' % cplx.id)
                 for rxn in cplx.metabolic_reactions:
                     try:
-                        self.stoichiometric_data.remove(rxn.id.split('_')[0])
+                        self.process_data.remove(rxn.id.split('_')[0])
                     except ValueError:
                         pass
                     rxn.remove_from_model()
@@ -389,7 +429,7 @@ class MEModel(Model):
             if delete:
                 t.remove_from_model(remove_orphans=True)
                 t_process_id = t.id.replace('transcription_', '')
-                self.transcription_data.remove(t_process_id)
+                self.process_data.remove(t_process_id)
 
     def set_sasa_keffs(self, avg_keff):
         sasa_list = []
@@ -404,7 +444,7 @@ class MEModel(Model):
 
         for data in self.process_data:
             cplx_mw = 0.
-            if isinstance(data, TranslocationData):
+            if isinstance(data, processdata.TranslocationData):
                 continue
             if hasattr(data, 'keff') and data.enzyme is not None:
                 if type(data.enzyme) == str:
@@ -412,13 +452,13 @@ class MEModel(Model):
                 else:
                     cplxs = data.enzyme
                 for cplx in cplxs:
-                    if cplx in self.complex_data:
+                    if cplx in self.process_data:
                         try:
                             cplx_mw += self.metabolites.get_by_id(cplx).mass \
                                 ** (3. / 4)
                         except:
                             warn('Complex (%s) cannot access mass' % cplx)
-                    elif cplx.split('_mod_')[0] in self.complex_data:
+                    elif cplx.split('_mod_')[0] in self.process_data:
                         cplx_mw += self.metabolites.get_by_id(
                             cplx.split('_mod_')[0]).mass ** (3. / 4)
 
@@ -436,7 +476,7 @@ class MEModel(Model):
                 rxn.keff = sasa * avg_keff / avg_sasa
         for data in self.process_data:
             sasa = 0.
-            if isinstance(data, TranslocationData):
+            if isinstance(data, processdata.TranslocationData):
                 continue
             if hasattr(data, 'keff') and data.enzyme is not None:
                 if data.enzyme == str:
@@ -444,10 +484,10 @@ class MEModel(Model):
                 else:
                     cplxs = data.enzyme
                 for cplx in cplxs:
-                    if cplx in self.complex_data:
+                    if cplx in self.process_data:
                         sasa += \
                             self.metabolites.get_by_id(cplx).mass ** (3. / 4)
-                    elif cplx.split('_mod_')[0] in self.complex_data:
+                    elif cplx.split('_mod_')[0] in self.process_data:
                         sasa += self.metabolites.get_by_id(
                             cplx.split('_mod_')[0]).mass ** (3. / 4)
 

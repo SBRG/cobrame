@@ -35,253 +35,282 @@
 
             }
         },
-
-        "stoichiometric_data": {
+        "process_data" : {
             "type": "array",
             "items": {
                 "type": "object",
                 "properties": {
                     "id": {"type": "string"},
-                    "name": {"type": "string"},
-                    "stoichiometry": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "lower_bound": {"type": "number"},
-                    "upper_bound": {"type": "number"},
-                    "subreactions": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    }
-                }
-            }
-        },
-        "complex_data": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string"},
-                    "stoichiometry": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "modifications": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "subreactions": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "complex_id": {"type": ["string", "null"]}
-                }
-            }
-        },
-        "transcription_data": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string"},
-                    "modifications": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "subreactions": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "nucleotide_sequence": {"type": "string"},
-                    "RNA_products": {
-                        "type": "array",
-                        "items": {"type": "string"}
-                    },
-                    "RNA_polymerase": {"type": "string"}
-                }
-            }
-        },
-        "translation_data": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string"},
-                    "modifications": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "subreactions": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "nucleotide_sequence": {"type": "string"},
-                    "mRNA": {"type": "string"},
-                    "protein": {"type": "string"}
-
-                }
-            }
-        },
-        "tRNA_data": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string"},
-                    "modifications": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "codon": {"type": "string"},
-                    "RNA": {"type": "string"},
-                    "amino_acid": {"type": "string"},
-                    "synthetase": {
-                        "type": ["string", "null"],
-                        "default": "null"
-                    },
-                    "synthetase_keff": {"type": "number"}
-                }
-            }
-        },
-        "translocation_data": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string"},
-                    "enzyme_dict": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {
+                    "process_data_type": {
+                        "oneOf": [
+                            {
                                 "type": "object",
+                                "required": ["StoichiometricData"],
                                 "properties": {
-                                    "length_dependent": {"type": "boolean"},
-                                    "fixed_keff": {"type": "boolean"}
+                                    "StoichiometricData": {
+                                        "type": "object",
+                                        "properties": {
+                                            "stoichiometry": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "lower_bound": {"type": "number"},
+                                            "upper_bound": {"type": "number"},
+                                            "subreactions": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "type": "object",
+                                "required": ["ComplexData"],
+                                "properties": {
+                                    "ComplexData": {
+                                        "type": "object",
+                                        "properties": {
+                                            "stoichiometry": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "modifications": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "subreactions": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "complex_id": {"type": ["string", "null"]}
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "type": "object",
+                                "required": ["TranscriptionData"],
+                                "properties": {
+                                    "TranscriptionData": {
+                                        "type": "object",
+                                        "properties": {
+                                            "modifications": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "subreactions": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "nucleotide_sequence": {"type": "string"},
+                                            "RNA_products": {
+                                                "type": "array",
+                                                "items": {"type": "string"}
+                                            },
+                                            "RNA_polymerase": {"type": "string"}
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "type": "object",
+                                "required": ["TranslationData"],
+                                "properties": {
+                                    "TranslationData": {
+                                        "type": "object",
+                                        "properties": {
+                                            "modifications": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "subreactions": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "nucleotide_sequence": {"type": "string"},
+                                            "mRNA": {"type": "string"},
+                                            "protein": {"type": "string"}
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "type": "object",
+                                "required": ["tRNAData"],
+                                "properties": {
+                                    "tRNAData": {
+                                        "type": "object",
+                                        "properties": {
+                                            "modifications": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "codon": {"type": "string"},
+                                            "RNA": {"type": "string"},
+                                            "amino_acid": {"type": "string"},
+                                            "synthetase": {
+                                                "type": ["string", "null"],
+                                                "default": "null"
+                                            },
+                                            "synthetase_keff": {"type": "number"}
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "type": "object",
+                                "required": ["TranslocationData"],
+                                "properties": {
+                                    "TranslocationData": {
+                                        "type": "object",
+                                        "properties": {
+                                            "enzyme_dict": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "length_dependent": {"type": "boolean"},
+                                                            "fixed_keff": {"type": "boolean"}
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "stoichiometry": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "keff": {"type": "number"},
+                                            "length_dependent_energy": {"type": "boolean"}
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "type": "object",
+                                "required": ["PostTranslationData"],
+                                "properties": {
+                                    "PostTranslationData": {
+                                        "type": "object",
+                                        "properties": {
+                                            "processed_protein_id": {"type": "string"},
+                                            "unprocessed_protein_id": {"type": "string"},
+                                            "propensity_scaling": {"type": "number"},
+                                            "aggregation_propensity": {"type": "number"},
+                                            "translocation": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "modifications": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "subreactions": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "surface_area": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "keq_folding": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "k_folding": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "translocation_multipliers": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "type": "object",
+                                "required": ["SubreactionData"],
+                                "properties": {
+                                    "SubreactionData": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {"type": "string"},
+                                            "stoichiometry": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            },
+                                            "enzyme": {
+                                                "type": ["string", "null", "array"],
+                                                "default": "null"
+                                            },
+                                            "keff": {"type": "number"},
+                                            "element_contribution": {
+                                                "type": "object",
+                                                "patternProperties": {
+                                                    ".*": {"type": "number"}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "type": "object",
+                                "required": ["GenericData"],
+                                "properties": {
+                                    "GenericData": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {"type": "string"},
+                                            "component_list": {"type": "array"}
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    },
-                    "stoichiometry": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "keff": {"type": "number"},
-                    "length_dependent_energy": {"type": "boolean"}
-                }
-            }
-        },
-        "posttranslation_data": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string"},
-                    "processed_protein_id": {"type": "string"},
-                    "unprocessed_protein_id": {"type": "string"},
-                    "propensity_scaling": {"type": "number"},
-                    "aggregation_propensity": {"type": "number"},
-                    "translocation": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "modifications": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "subreactions": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "surface_area": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "keq_folding": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "k_folding": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "translocation_multipliers": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
+                        ]
                     }
-                }
-            }
-        },
-        "subreaction_data": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string"},
-                    "name": {"type": "string"},
-                    "stoichiometry": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    },
-                    "enzyme": {
-                        "type": ["string", "null", "array"],
-                        "default": "null"
-                    },
-                    "keff": {"type": "number"},
-                    "element_contribution": {
-                        "type": "object",
-                        "patternProperties": {
-                            ".*": {"type": "number"}
-                        }
-                    }
-                }
-            }
-        },
-        "generic_data": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string"},
-                    "name": {"type": "string"},
-                    "component_list": {"type": "array"}
                 }
             }
         },

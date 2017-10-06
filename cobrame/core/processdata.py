@@ -122,7 +122,6 @@ class StoichiometricData(ProcessData):
     """
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
-        model.stoichiometric_data.append(self)
         self._stoichiometry = {}
         self.subreactions = defaultdict(int)
         self.lower_bound = 0.
@@ -171,7 +170,6 @@ class SubreactionData(ProcessData):
     """
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
-        model.subreaction_data.append(self)
         self.stoichiometry = {}
         self.enzyme = None
         self.keff = 65.
@@ -311,7 +309,6 @@ class ComplexData(ProcessData):
 
     def __init__(self, id, model):
         ProcessData.__init__(self, id, model)
-        model.complex_data.append(self)
         # {Component.id: stoichiometry}
         self.stoichiometry = defaultdict(float)
         # {SubreactionData.id : number}
@@ -426,7 +423,6 @@ class TranscriptionData(ProcessData):
     """
     def __init__(self, id, model, rna_products=set()):
         ProcessData.__init__(self, id, model)
-        model.transcription_data.append(self)
         self.nucleotide_sequence = ''
         self.RNA_products = rna_products
         self.RNA_polymerase = ''
@@ -574,7 +570,6 @@ class GenericData(ProcessData):
         if not id.startswith("generic_"):
             warn("best practice for generic id to start with generic_")
         ProcessData.__init__(self, id, model)
-        model.generic_data.append(self)
         self.component_list = component_list
 
     def create_reactions(self):
@@ -644,7 +639,6 @@ class TranslationData(ProcessData):
     """
     def __init__(self, id, model, mrna, protein):
         ProcessData.__init__(self, id, model)
-        model.translation_data.append(self)
         self.mRNA = mrna
         self.protein = protein
         self.subreactions = defaultdict(int)
@@ -789,7 +783,7 @@ class TranslationData(ProcessData):
             codon = codon.replace('T', 'U')
             subreaction_id = aa + '_addition_at_' + codon
             try:
-                self._model.subreaction_data.get_by_id(subreaction_id)
+                self._model.process_data.get_by_id(subreaction_id)
             except KeyError:
                 warn('tRNA addition subreaction %s not in model' %
                      subreaction_id)
@@ -824,7 +818,7 @@ class TranslationData(ProcessData):
 
         for subreaction_id in elongation_subreactions:
             try:
-                self._model.subreaction_data.get_by_id(subreaction_id)
+                self._model.process_data.get_by_id(subreaction_id)
             except KeyError:
                 warn('elongation subreaction %s not in model' %
                      subreaction_id)
@@ -858,7 +852,7 @@ class TranslationData(ProcessData):
 
         for subreaction_id in start_subreactions:
             try:
-                self._model.subreaction_data.get_by_id(subreaction_id)
+                self._model.process_data.get_by_id(subreaction_id)
             except KeyError:
                 warn('initiation subreaction %s not in model' %
                      subreaction_id)
@@ -878,14 +872,13 @@ class TranslationData(ProcessData):
         """
         if not translation_terminator_dict:
             translation_terminator_dict = {}
-        all_subreactions = self._model.subreaction_data
         last_codon = self.last_codon
         term_enzyme = translation_terminator_dict.get(last_codon, None)
         if term_enzyme:
             termination_subreaction_id = \
                 last_codon + '_' + term_enzyme + '_mediated_termination'
             try:
-                all_subreactions.get_by_id(termination_subreaction_id)
+                self._model.process_data.get_by_id(termination_subreaction_id)
             except KeyError:
                 warn("Termination subreaction '%s' not in model" %
                      termination_subreaction_id)
@@ -934,7 +927,6 @@ class tRNAData(ProcessData):
 
     def __init__(self, id, model, amino_acid, rna, codon):
         ProcessData.__init__(self, id, model)
-        model.tRNA_data.append(self)
         self.codon = codon
         self.amino_acid = amino_acid
         self.RNA = rna
@@ -982,7 +974,6 @@ class TranslocationData(ProcessData):
         self.enzyme_dict = {}
         self.length_dependent_energy = False
         self.stoichiometry = {}
-        model.translocation_data.append(self)
 
 
 class PostTranslationData(ProcessData):
@@ -1070,5 +1061,3 @@ class PostTranslationData(ProcessData):
         self.keq_folding = {}
         self.k_folding = {}
         self.propensity_scaling = 1.
-
-        model.posttranslation_data.append(self)

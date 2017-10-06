@@ -37,8 +37,6 @@ class MEComponent(Component):
         """
         if self.id in self._model.process_data:
             self._model.process_data.remove(self.id)
-        if self.id in self._model.complex_data:
-            self._model.complex_data.remove(self.id)
 
         # If cannot import SymbolicParameter, assume using cobrapy
         # versions <= 0.5.11
@@ -170,7 +168,7 @@ class TranslatedGene(MEComponent):
             Translation data used to form translation reaction of protein
         """
         locus = self.id.replace('protein_', '')
-        return self._model.translation_data.get_by_id(locus)
+        return self._model.process_data.get_by_id(locus)
 
     @property
     def complexes(self):

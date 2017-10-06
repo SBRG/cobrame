@@ -96,10 +96,10 @@ class MEReaction(Reaction):
             Stoichiometry dictionary with updated entries
         """
 
-        all_subreactions = self._model.subreaction_data
         process_info = self._model.process_data.get_by_id(process_data_id)
         for subreaction_id, count in iteritems(process_info.subreactions):
-            subreaction_data = all_subreactions.get_by_id(subreaction_id)
+            subreaction_data = \
+                self._model.process_data.get_by_id(subreaction_id)
             if type(subreaction_data.enzyme) == list:
                 for enzyme in subreaction_data.enzyme:
                     stoichiometry[enzyme] -= mu / subreaction_data.keff / \
@@ -175,7 +175,7 @@ class MEReaction(Reaction):
 
         """
         for subrxn, count in iteritems(process_data.subreactions):
-            subrxn_obj = self._model.subreaction_data.get_by_id(subrxn)
+            subrxn_obj = self._model.process_data.get_by_id(subrxn)
             biomass += \
                 subrxn_obj.calculate_biomass_contribution() / 1000. * count
         return biomass
@@ -239,7 +239,7 @@ class MetabolicReaction(MEReaction):
     @complex_data.setter
     def complex_data(self, process_data):
         if isinstance(process_data, string_types):
-            process_data = self._model.complex_data.get_by_id(process_data)
+            process_data = self._model.process_data.get_by_id(process_data)
         self._complex_data = process_data
         if not hasattr(process_data, 'complex_id'):
             raise TypeError('%s is not a ComplexData instance' %
@@ -264,8 +264,7 @@ class MetabolicReaction(MEReaction):
     @stoichiometric_data.setter
     def stoichiometric_data(self, process_data):
         if isinstance(process_data, string_types):
-            process_data = \
-                self._model.stoichiometric_data.get_by_id(process_data)
+            process_data = self._model.process_data.get_by_id(process_data)
         self._stoichiometric_data = process_data
         process_data._parent_reactions.add(self.id)
 
@@ -428,7 +427,7 @@ class ComplexFormation(MEReaction):
         self.clear_metabolites()
         stoichiometry = defaultdict(float)
         metabolites = self._model.metabolites
-        complex_info = self._model.complex_data.get_by_id(self.complex_data_id)
+        complex_info = self._model.process_data.get_by_id(self.complex_data_id)
 
         # Find or create complex product and add it to stoichiometry dict
         try:
@@ -502,8 +501,7 @@ class PostTranslationReaction(MEReaction):
     @posttranslation_data.setter
     def posttranslation_data(self, process_data):
         if isinstance(process_data, string_types):
-            process_data = \
-                self._model.posttranslation_data.get_by_id(process_data)
+            process_data = self._model.process_data.get_by_id(process_data)
         self._posttranslation_data = process_data
         process_data._parent_reactions.add(self.id)
 
@@ -534,13 +532,13 @@ class PostTranslationReaction(MEReaction):
         if not stoichiometry:
             stoichiometry = defaultdict(float)
 
-        all_translocation = self._model.translocation_data
         process_info = self._model.process_data.get_by_id(process_data_id)
         protein = self._model.metabolites.get_by_id(protein_id)
         protein_length = len(protein.amino_acid_sequence)
 
         for translocation, count in iteritems(process_info.translocation):
-            translocation_data = all_translocation.get_by_id(translocation)
+            translocation_data = \
+                self._model.process_data.get_by_id(translocation)
             for metabolite, amount in \
                     iteritems(translocation_data.stoichiometry):
                 if translocation_data.length_dependent_energy:
@@ -718,8 +716,7 @@ class TranscriptionReaction(MEReaction):
     @transcription_data.setter
     def transcription_data(self, process_data):
         if isinstance(process_data, string_types):
-            process_data = \
-                self._model.transcription_data.get_by_id(process_data)
+            process_data = self._model.process_data.get_by_id(process_data)
         self._transcription_data = process_data
         process_data._parent_reactions.add(self.id)
 
@@ -922,7 +919,7 @@ class TranslationReaction(MEReaction):
     @translation_data.setter
     def translation_data(self, process_data):
         if isinstance(process_data, string_types):
-            process_data = self._model.translation_data.get_by_id(process_data)
+            process_data = self._model.process_data.get_by_id(process_data)
         self._translation_data = process_data
         process_data._parent_reactions.add(self.id)
 
@@ -1151,7 +1148,7 @@ class tRNAChargingReaction(MEReaction):
     @tRNA_data.setter
     def tRNA_data(self, process_data):
         if isinstance(process_data, string_types):
-            process_data = self._model.tRNA_data.get_by_id(process_data)
+            process_data = self._model.process_data.get_by_id(process_data)
         self._tRNA_data = process_data
         process_data._parent_reactions.add(self.id)
 

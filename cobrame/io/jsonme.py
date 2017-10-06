@@ -38,7 +38,7 @@ def save_json_me(me0, file_name):
     quicker, but limit the ability to edit the model and use most of its
     features.
 
-    :param :class:`~cobrame.core.MEModel.MEModel` me0:
+    :param :class:`~cobrame.core.model.MEModel` me0:
         A full ME-model
 
     :param str or file-like object file_name:
@@ -96,13 +96,18 @@ def load_json_me(file_name):
     :param str or file-like object file_name:
         Filename of the JSON ME-model
 
-    :returns COBRA Model object:
-        COBRA Model representation of the full ME-model. This will not include
-        all of the functionality of a :class:`~cobrame.core.MEModel.MEModel`
+    Returns
+    -------
+    :class:`cobra.core.model.Model`
+        COBRA Model representation of the ME-model. This will not include
+        all of the functionality of a :class:`~cobrame.core.model.MEModel` but
+        will solve identically compared to the full model.
     """
-
-    with open(file_name, 'r') as f:
-        obj = json.load(f)
+    if isinstance(file_name, string_types):
+        with open(file_name, 'r') as f:
+            obj = json.load(f)
+    else:
+        obj = file_name
 
     model = cobra.Model()
 
@@ -225,24 +230,6 @@ def get_schema():
         return json.load(f)
 
 
-def get_process_data_class(name):
-    # Map name in model dictlist to process data class name
-    dictlist_to_class = {'stoichiometric_data': 'StoichiometricData',
-                         'complex_data': 'ComplexData',
-                         'transcription_data': 'TranscriptionData',
-                         'translation_data': 'TranslationData',
-                         'tRNA_data': 'tRNAData',
-                         'translocation_data': 'TranslocationData',
-                         'posttranslation_data': 'PostTranslationData',
-                         'subreaction_data': 'SubreactionData',
-                         'generic_data': 'GenericData'}
-
-    try:
-        return dictlist_to_class[name]
-    except KeyError:
-        raise TypeError('Not a valid process_data dictlist')
-
-
 def _fix_type(value):
     """convert possible types to str, float, and bool"""
     # Because numpy floats can not be pickled to json
@@ -292,6 +279,11 @@ def _process_data_to_dict(data):
     new_data = {key: _fix_type(getattr(data, key))
                 for key in _REQUIRED_PROCESS_DATA_ATTRIBUTES}
 
+    new_data['process_data_type'] = {}
+    new_data['process_data_type'][process_data_type] = {}
+    new_process_data_type_dict = \
+        new_data['process_data_type'][process_data_type]
+
     special_list = ['subreactions', 'stoichiometry', 'enzyme_dict',
                     'translocation', 'surface_area', 'keq_folding',
                     'k_folding']
@@ -300,18 +292,20 @@ def _process_data_to_dict(data):
         if attribute not in special_list:
             data_attribute = getattr(data, attribute)
 
-            new_data[attribute] = _fix_type(data_attribute)
+            new_process_data_type_dict[attribute] = _fix_type(data_attribute)
 
         elif attribute == 'enzyme_dict':
-            new_data[attribute] = {}
+            new_process_data_type_dict[attribute] = {}
             for cplx, values in getattr(data, attribute).items():
-                new_data[attribute][cplx] = {}
+                new_process_data_type_dict[attribute][cplx] = {}
                 for property, value in values.items():
-                    new_data[attribute][cplx][property] = _fix_type(value)
+                    new_process_data_type_dict[attribute][cplx][property] = \
+                        _fix_type(value)
         else:
-            new_data[attribute] = {}
+            new_process_data_type_dict[attribute] = {}
             for metabolite, coefficient in getattr(data, attribute).items():
-                new_data[attribute][metabolite] = _fix_type(coefficient)
+                new_process_data_type_dict[attribute][metabolite] = \
+                    _fix_type(coefficient)
 
     return new_data
 
@@ -360,21 +354,8 @@ def _to_dict(model):
 
     obj = dict(
         reactions=get_attribute_array(model.reactions, 'reaction'),
-        stoichiometric_data=get_attribute_array(model.stoichiometric_data,
-                                                'process_data'),
-        complex_data=get_attribute_array(model.complex_data, 'process_data'),
-        transcription_data=get_attribute_array(model.transcription_data,
-                                               'process_data'),
-        translation_data=get_attribute_array(model.translation_data,
-                                             'process_data'),
-        tRNA_data=get_attribute_array(model.tRNA_data, 'process_data'),
-        translocation_data=get_attribute_array(model.translocation_data,
-                                               'process_data'),
-        posttranslation_data=get_attribute_array(model.posttranslation_data,
-                                                 'process_data'),
-        subreaction_data=get_attribute_array(model.subreaction_data,
-                                             'process_data'),
-        generic_data=get_attribute_array(model.generic_data, 'process_data'),
+        process_data=get_attribute_array(model.process_data,
+                                         'process_data'),
         metabolites=get_attribute_array(model.metabolites, 'metabolite'),
         global_info=get_global_info_dict(model.global_info)
     )
@@ -443,7 +424,7 @@ def add_metabolite_from_dict(model, metabolite_info):
     model.add_metabolites([metabolite_obj])
 
 
-def add_process_data_from_dict(model, process_data_type, process_data_info):
+def add_process_data_from_dict(model, process_data_dict):
     """
     Builds process_data instances defined in dictionary, then add it to the
     ME-model being constructed.
@@ -455,7 +436,14 @@ def add_process_data_from_dict(model, process_data_type, process_data_info):
     """
 
     # Create process data instances. Handel certain types individually
-    id = process_data_info['id']
+    id = process_data_dict['id']
+    process_data_type_dict = process_data_dict['process_data_type']
+    if len(process_data_type_dict) == 1:
+        process_data_type, process_data_info = process_data_type_dict.popitem()
+    else:
+        print(process_data_type_dict, len(process_data_type_dict))
+        raise Exception('Only 1 reaction_type in valid json')
+
     if process_data_type == 'TranslationData':
         mrna = process_data_info['mRNA']
         protein = process_data_info['protein']
@@ -486,7 +474,7 @@ def add_process_data_from_dict(model, process_data_type, process_data_info):
 
     # Set all of the required attributes using information in info dictionary
     for attribute in _REQUIRED_PROCESS_DATA_ATTRIBUTES:
-        setattr(process_data, attribute, process_data_info[attribute])
+        setattr(process_data, attribute, process_data_dict[attribute])
 
     # Some attributes depend on process data type. Set those here.
     for attribute in _PROCESS_DATA_TYPE_DEPENDENCIES.get(process_data_type,
@@ -556,13 +544,13 @@ def add_reaction_from_dict(model, reaction_info):
 def full_me_model_from_dict(obj):
     """
     Validate and load JSON representation of the ME-model. This will return
-    a full :class:`~cobrame.core.MEModel.MEModel` object identical to the
+    a full :class:`~cobrame.core.model.MEModel` object identical to the
     one saved.
 
     :param str or file-like object obj:
         JSON-serialized ME-model
 
-    :returns :class:`~cobrame.core.MEModel.MEModel`:
+    :returns :class:`~cobrame.core.model.MEModel`:
         Full COBRAme ME-model
     """
 
@@ -580,11 +568,8 @@ def full_me_model_from_dict(obj):
     for metabolite in obj['metabolites']:
         add_metabolite_from_dict(model, metabolite)
 
-    for key in obj:
-        if 'data' in key:
-            for data in obj[key]:
-                add_process_data_from_dict(model, get_process_data_class(key),
-                                           data)
+    for process_data in obj['process_data']:
+        add_process_data_from_dict(model, process_data)
 
     for reaction in obj['reactions']:
         add_reaction_from_dict(model, reaction)

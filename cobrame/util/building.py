@@ -366,7 +366,7 @@ def build_reactions_from_genbank(me_model, gb_filename, tu_frame=None,
                                        update=False)
 
         for TU_id in parent_tu:
-            me_model.transcription_data.get_by_id(TU_id).RNA_products.add(
+            me_model.process_data.get_by_id(TU_id).RNA_products.add(
                     "RNA_" + bnum)
 
     convert_aa_codes_and_add_charging(me_model, trna_aa, trna_to_codon,
@@ -471,7 +471,7 @@ def add_dummy_reactions(me_model, dna_seq, update=True):
         complex_data = cobrame.ComplexData("CPLX_dummy", me_model)
     except ValueError:
         warn('CPLX_dummy already in model')
-        complex_data = me_model.complex_data.get_by_id('CPLX_dummy')
+        complex_data = me_model.process_data.get_by_id('CPLX_dummy')
     complex_data.stoichiometry = {"protein_dummy": 1}
     if update:
         complex_data.create_complex_formation()
@@ -528,7 +528,7 @@ def add_subreaction_data(me_model, modification_id,
 
     """
 
-    if modification_id in me_model.subreaction_data:
+    if modification_id in me_model.process_data:
         if verbose:
             warn('Subreaction (%s) already in model' % modification_id)
         else:
@@ -619,21 +619,21 @@ def add_metabolic_reaction_to_model(me_model, stoichiometric_data_id,
     # Get stoichiometric data for reaction being added
     try:
         stoichiometric_data = \
-            me_model.stoichiometric_data.get_by_id(stoichiometric_data_id)
+            me_model.process_data.get_by_id(stoichiometric_data_id)
     except KeyError:
         raise Exception("Stoichiometric data for %s has not been added to"
                         " model" % stoichiometric_data_id)
 
     # Get complex data and id based on arguments passed into function
     if type(complex_id) == str:
-        complex_data = me_model.complex_data.get_by_id(complex_id)
+        complex_data = me_model.process_data.get_by_id(complex_id)
     elif complex_id is None and spontaneous is True:
         complex_id = "SPONT"
         complex_data = None
     elif complex_id is None and spontaneous is False:
         complex_id = "CPLX_dummy"
         try:
-            complex_data = me_model.complex_data.get_by_id(complex_id)
+            complex_data = me_model.process_data.get_by_id(complex_id)
         except KeyError:
             raise Exception("CPLX_dummy must be added to complex data to add"
                             "orphan reactions")

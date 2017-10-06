@@ -41,7 +41,7 @@ def get_elements_from_process_data(reaction, process_data, elements):
     """
 
     for sub, count in iteritems(process_data.subreactions):
-        sub_obj = reaction._model.subreaction_data.get_by_id(sub)
+        sub_obj = reaction._model.process_data.get_by_id(sub)
         for e, n in iteritems(sub_obj.element_contribution):
             elements[e] += n * count
 
