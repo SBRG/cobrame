@@ -79,6 +79,12 @@ class TranscribedGene(MEComponent):
         Identifier of the transcribed gene. As a best practice, this ID should
         be prefixed with 'RNA + _'
 
+    rna_type : str
+        Type of RNA encoded by gene sequence (mRNA, rRNA, tRNA, or ncRNA)
+
+    nucleotide_sequence : str
+        String of base pair abbreviations for nucleotides contained in the gene
+
     Attributes
     ----------
     left_pos : int
@@ -87,21 +93,19 @@ class TranscribedGene(MEComponent):
     right_pos : int
         Right position of gene on the sequence of the (+) strain
 
-    RNA_type : str
-        Type of RNA encoded by gene sequence (mRNA, rRNA, tRNA, or ncRNA)
-
-    nucleotide_sequence : str
-        String of base pair abbreviations for nucleotides contained in the gene
+    strand : str
+        - (+) if the RNA product is on the leading strand
+        - (-) if the RNA product is on the comple(mentary strand
 
     """
 
-    def __init__(self, id):
+    def __init__(self, id, rna_type, nucleotide_sequence):
         MEComponent.__init__(self, id)
         self.left_pos = None
         self.right_pos = None
         self.strand = None
-        self.RNA_type = ''
-        self.nucleotide_sequence = ''
+        self.RNA_type = rna_type
+        self.nucleotide_sequence = nucleotide_sequence
 
     @property
     def nucleotide_count(self):
@@ -399,7 +403,9 @@ def create_component(component_id, default_type=MEComponent, rnap_set=set()):
     if component_id.startswith("protein_"):
         return TranslatedGene(component_id)
     elif component_id.startswith("RNA_"):
-        return TranscribedGene(component_id)
+        raise ValueError('TranscribedGene (%s) should not be added using '
+                         'create_component. It requires additional information'
+                         'when creating instance.' % component_id)
     elif component_id.startswith("ribosome"):
         return Ribosome(component_id)
     elif component_id.startswith("RNA_Polymerase") or component_id in rnap_set:

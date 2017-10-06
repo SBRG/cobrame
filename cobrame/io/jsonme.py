@@ -404,15 +404,24 @@ def add_metabolite_from_dict(model, metabolite_info):
     metabolite_type = list(metabolite_type_dict.keys())[0]
 
     # ProcessedProtein types require their unprocessed protein id as well
-    if metabolite_type != 'ProcessedProtein':
-        metabolite_obj = \
-            getattr(cobrame, metabolite_type)(metabolite_info['id'])
-    else:
+    if metabolite_type == 'ProcessedProtein':
         unprocessed_id = \
             metabolite_type_dict['ProcessedProtein']['unprocessed_protein_id']
+
         metabolite_obj = \
             getattr(cobrame, metabolite_type)(metabolite_info['id'],
                                               unprocessed_id)
+
+    elif metabolite_type == 'TranscribedGene':
+        rna_type = metabolite_type_dict['TranscribedGene']['RNA_type']
+        nucleotide_sequence = \
+            metabolite_type_dict['TranscribedGene']['nucleotide_sequence']
+        metabolite_obj = \
+            getattr(cobrame, metabolite_type)(metabolite_info['id'],
+                                              rna_type, nucleotide_sequence)
+    else:
+        metabolite_obj = \
+            getattr(cobrame, metabolite_type)(metabolite_info['id'])
 
     for attribute in _REQUIRED_METABOLITE_ATTRIBUTES:
         setattr(metabolite_obj, attribute, metabolite_info[attribute])

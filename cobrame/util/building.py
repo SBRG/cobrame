@@ -55,8 +55,8 @@ def add_transcription_reaction(me_model, tu_name, locus_ids, sequence,
     return transcription
 
 
-def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
-                            strand, rna_type):
+def create_transcribed_gene(me_model, locus_id, rna_type, seq,
+                            left_pos=None, right_pos=None, strand=None):
     """
      Creates a `TranscribedGene` metabolite object and adds it to the ME-model
 
@@ -69,10 +69,10 @@ def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
         Locus ID of RNA product.
         The TranscribedGene will be added as "RNA + _ + locus_id"
 
-    left_pos : int
+    left_pos : int or None
         Left position of gene on the sequence of the (+) strain
 
-    right_pos : int
+    right_pos : int or None
         Right position of gene on the sequence of the (+) strain
 
     seq : str
@@ -80,7 +80,7 @@ def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
         Amino acid sequence, codon counts, etc. will be calculated based on
         this string.
 
-    strand : str
+    strand : str or None
         - (+) if the RNA product is on the leading strand
         - (-) if the RNA product is on the complementary strand
 
@@ -94,12 +94,10 @@ def create_transcribed_gene(me_model, locus_id, left_pos, right_pos, seq,
         :class:`cobrame.core.component.TranscribedGene`
             Metabolite object for the RNA product
     """
-    gene = cobrame.TranscribedGene('RNA_' + locus_id)
+    gene = cobrame.TranscribedGene('RNA_' + locus_id, rna_type, seq)
     gene.left_pos = left_pos
     gene.right_pos = right_pos
-    gene.RNA_type = rna_type
     gene.strand = strand
-    gene.nucleotide_sequence = seq
 
     me_model.add_metabolites([gene])
     return gene
@@ -142,8 +140,8 @@ def add_translation_reaction(me_model, locus_id, dna_sequence,
 
     # Add RNA to model if it doesn't exist
     if "RNA_" + locus_id not in me_model.metabolites:
-        rna = cobrame.TranscribedGene('RNA_c')
-        rna.nucleotide_sequence = dna_sequence
+        warn('RNA_%s not present in model. Adding it now.')
+        rna = cobrame.TranscribedGene('RNA_' + locus_id, 'mRNA', dna_sequence)
         me_model.add_metabolites(rna)
 
     # Create and add TranslationReaction with TranslationData
@@ -318,8 +316,8 @@ def build_reactions_from_genbank(me_model, gb_filename, tu_frame=None,
                 seq = dogma.reverse_transcribe(seq)
 
         # Add TranscribedGene metabolite
-        gene = create_transcribed_gene(me_model, bnum, left_pos,
-                                       right_pos, seq, strand, rna_type)
+        gene = create_transcribed_gene(me_model, bnum, rna_type, seq, left_pos,
+                                       right_pos, strand)
 
         # ---- Add translation reaction for mRNA ----
         if rna_type == "mRNA":
@@ -406,7 +404,8 @@ def add_m_model_content(me_model, m_model, complex_metabolite_ids=None):
         if met.id in complex_metabolite_ids:
             new_met = cobrame.Complex(met.id)
         elif met.id.startswith("RNA"):
-            new_met = cobrame.TranscribedGene(met.id)
+            raise ValueError('Processed M-model should not contain RNAs (%s)' %
+                             met.id)
         else:
             new_met = cobrame.Metabolite(met.id)
         new_met.name = met.name
@@ -461,8 +460,7 @@ def add_dummy_reactions(me_model, dna_seq, update=True):
     dummy.upper_bound = 1000
     dummy._stoichiometry = {'CPLX_dummy': -1}
 
-    create_transcribed_gene(me_model, 'dummy', 0, len(dna_seq), dna_seq, '+',
-                            'mRNA')
+    create_transcribed_gene(me_model, 'dummy', 'mRNA', dna_seq)
     add_transcription_reaction(me_model, "RNA_dummy", {"dummy"}, dna_seq)
     me_model.add_metabolites(cobrame.TranslatedGene("protein_" + "dummy"))
     add_translation_reaction(me_model, "dummy", dna_sequence=dna_seq,

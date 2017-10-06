@@ -554,10 +554,10 @@
                                                      "strand", "RNA_type"],
                                         "properties": {
                                             "nucleotide_sequence": {"type": "string"},
-                                            "left_pos": {"type": "number"},
-                                            "right_pos": {"type": "number"},
+                                            "left_pos": {"type": ["number", "null"]},
+                                            "right_pos": {"type": ["number", "null"]},
                                             "strand": {
-                                                "type": "string",
+                                                "type": ["string", "null"],
                                                 "pattern": "[+]|[-]"
                                             },
                                             "RNA_type": {

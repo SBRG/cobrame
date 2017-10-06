@@ -1004,6 +1004,7 @@ class TranslationReaction(MEReaction):
         protein_id = translation_data.protein
         mrna_id = translation_data.mRNA
         protein_length = len(translation_data.amino_acid_sequence)
+        nucleotide_sequence = translation_data.nucleotide_sequence
         model = self._model
         metabolites = self._model.metabolites
         new_stoichiometry = defaultdict(int)
@@ -1023,7 +1024,7 @@ class TranslationReaction(MEReaction):
         c_mrna = m_nt / f_mrna / m_aa
 
         # -----------------Add Amino Acids----------------------------------
-        for aa, value in iteritems(self._translation_data.amino_acid_count):
+        for aa, value in iteritems(translation_data.amino_acid_count):
             new_stoichiometry[aa] = -value
             new_stoichiometry['h2o_c'] += value
 
@@ -1045,8 +1046,9 @@ class TranslationReaction(MEReaction):
             transcript = metabolites.get_by_id(mrna_id)
         except KeyError:
             # If transcript not found add to the model as the mRNA_id
-            warn("transcript '%s' not found" % mrna_id)
-            transcript = cobrame.TranscribedGene(mrna_id)
+            warn("transcript ('%s') not found" % mrna_id)
+            transcript = \
+                cobrame.TranscribedGene(mrna_id, mrna_id, nucleotide_sequence)
             model.add_metabolites(transcript)
 
         # Calculate coupling constraints for mRNA and degradation
