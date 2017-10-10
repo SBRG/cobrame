@@ -536,16 +536,15 @@ class PostTranslationReaction(MEReaction):
         protein = self._model.metabolites.get_by_id(protein_id)
         protein_length = len(protein.amino_acid_sequence)
 
-        for translocation, count in iteritems(process_info.translocation):
+        for translocation in process_info.translocation:
             translocation_data = \
                 self._model.process_data.get_by_id(translocation)
             for metabolite, amount in \
                     iteritems(translocation_data.stoichiometry):
                 if translocation_data.length_dependent_energy:
-                    stoichiometry[metabolite] += amount * count * \
-                        protein_length
+                    stoichiometry[metabolite] += amount * protein_length
                 else:
-                    stoichiometry[metabolite] += amount * count
+                    stoichiometry[metabolite] += amount
 
             # Requirement of some translocation complexes vary depending
             # on protein being translocated
@@ -562,7 +561,7 @@ class PostTranslationReaction(MEReaction):
                 # keff = translocation_data.keff
                 keff = 65. if fixed_keff else translocation_data.keff / length
 
-                enzyme_stoichiometry = multiplier * mu / keff / 3600. * count
+                enzyme_stoichiometry = multiplier * mu / keff / 3600.
                 stoichiometry[enzyme] -= enzyme_stoichiometry
 
         return stoichiometry

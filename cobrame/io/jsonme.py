@@ -285,8 +285,7 @@ def _process_data_to_dict(data):
         new_data['process_data_type'][process_data_type]
 
     special_list = ['subreactions', 'stoichiometry', 'enzyme_dict',
-                    'translocation', 'surface_area', 'keq_folding',
-                    'k_folding']
+                    'surface_area', 'keq_folding' 'k_folding']
 
     for attribute in _PROCESS_DATA_TYPE_DEPENDENCIES[process_data_type]:
         if attribute not in special_list:

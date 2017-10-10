@@ -131,7 +131,7 @@ def check_me_model_mass_balance(model0):
 
         if me_reaction:
             # Lipoprotein metabolites can have different formulas based on
-            # reaction used to synthesized them (TODO: Correct this)
+            # reaction used to synthesized them (TODO: How to handle this?)
             if 'lipid_modification' in r.id:
                 r.update()
 
@@ -146,5 +146,30 @@ def check_me_model_mass_balance(model0):
             elif not isinstance(r, cobrame.TranscriptionReaction) and \
                     r.check_me_mass_balance():
                 output[r.id] = r.check_me_mass_balance()
+
+    # Each individual subreaction data should be mass balanced, if necessary
+    for data in model.process_data:
+        if hasattr(data, 'element_contribution'):
+            # Skip trivial modifications (only one metabolite as reactant)
+            # These are simple modifications
+            if len(data.stoichiometry) == 1 and \
+                            list(data.stoichiometry.values())[0] < 0:
+                continue
+
+            calculated_element_contribution = {}
+            for key, value in data.calculate_element_contribution().items():
+                if value != 0:
+                    calculated_element_contribution[key] = value
+
+            set_element_contribution = {}
+            for key, value in data._element_contribution.items():
+                if value != 0:
+                    set_element_contribution[key] = value
+
+            if calculated_element_contribution != set_element_contribution:
+                output[data.id] = "Calculated element contribution (%s) not "\
+                                  "equal to user defined element contribution"\
+                                  "(%s)" % (calculated_element_contribution,
+                                            set_element_contribution)
 
     return output

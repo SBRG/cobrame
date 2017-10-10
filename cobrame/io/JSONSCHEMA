@@ -222,10 +222,8 @@
                                             "propensity_scaling": {"type": "number"},
                                             "aggregation_propensity": {"type": "number"},
                                             "translocation": {
-                                                "type": "object",
-                                                "patternProperties": {
-                                                    ".*": {"type": "number"}
-                                                }
+                                                "type": "array",
+                                                "items": {"type": "string"}
                                             },
                                             "modifications": {
                                                 "type": "object",

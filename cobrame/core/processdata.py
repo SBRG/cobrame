@@ -1,7 +1,7 @@
 from __future__ import absolute_import, print_function, division
 
 from collections import defaultdict
-from six import iteritems
+from six import iteritems, string_types
 from warnings import warn
 
 import cobra
@@ -106,7 +106,7 @@ class StoichiometricData(ProcessData):
     Attributes
     ----------
     _stoichiometry : dict
-        Dictionary of {metabolite_id: stoichiometry}
+        Dictionary of {metabolite_id: stoichiometry} for reaction
 
     subreactions : :class:`collections.DefaultDict(int)`
         Cases where multiple enzymes (often carriers ie. Acyl Carrier Protein)
@@ -129,7 +129,26 @@ class StoichiometricData(ProcessData):
 
     @property
     def stoichiometry(self):
+        """
+        Get or set metabolite stoichiometry for reaction.
+
+        Returns
+        -------
+        dict
+            Dictionary of {metabolite_id: stoichiometry}
+        """
         return self._stoichiometry
+
+    @stoichiometry.setter
+    def stoichiometry(self, value):
+        if not isinstance(value, dict):
+            raise TypeError("Stoichiometry must be a dict, not (%s)" %
+                            type(value))
+        for k in value:
+            if not isinstance(k, string_types):
+                raise TypeError('Stoichiometry keys must be strings, not %s' %
+                                type(k))
+        self._stoichiometry = value
 
 
 class SubreactionData(ProcessData):
@@ -173,7 +192,6 @@ class SubreactionData(ProcessData):
         self.stoichiometry = {}
         self.enzyme = None
         self.keff = 65.
-        # TODO add setter for element_contribution
         self._element_contribution = {}
 
     @property
@@ -212,6 +230,13 @@ class SubreactionData(ProcessData):
             return self.calculate_element_contribution()
         else:
             return {}
+
+    @element_contribution.setter
+    def element_contribution(self, value):
+        if not isinstance(value, dict):
+            raise TypeError("Elemental_contribution must be a dict, not (%s)" %
+                            type(value))
+        self._element_contribution = value
 
     def calculate_element_contribution(self):
         """
@@ -259,7 +284,6 @@ class SubreactionData(ProcessData):
         return tmp_met.formula_weight
 
     def get_complex_data(self):
-        # TODO: Make this function generic to consider all process data
         """
         Get the complex data that the subreaction is involved in
 
@@ -270,6 +294,19 @@ class SubreactionData(ProcessData):
         """
         for i in self._model.complex_data:
             if self.id in i.subreactions:
+                yield i
+
+    def get_all_usages(self):
+        """
+        Get all process data that the subreaction is involved in
+
+        Yields
+        ------
+        :class:`cobrame.core.processdata.ProcessData`
+            ProcessData that subreaction is involved in
+        """
+        for i in self._model.process_data:
+            if hasattr(i, 'subreactions') and self.id in i.subreactions:
                 yield i
 
 
@@ -995,11 +1032,10 @@ class PostTranslationData(ProcessData):
 
     Attributes
     ----------
-    translocation : :class:`collections.DefaultDict(float)`
+    translocation : set
         Translocation pathways involved in post translation reaction.
 
-        Dictionary of
-        {:attr:`cobrame.core.processdata.TranslocationData.id`: 1.}
+        Set of {:attr:`cobrame.core.processdata.TranslocationData.id`}
 
     translocation_multipliers : dict
         Some proteins require different coupling of translocation enzymes.
@@ -1047,8 +1083,7 @@ class PostTranslationData(ProcessData):
         self.unprocessed_protein_id = preprocessed_protein
 
         # For translocation post translation reactions
-        # TODO translocation doesn't have to be a dictionary
-        self.translocation = defaultdict(float)
+        self.translocation = set()
         self.translocation_multipliers = {}
         self.surface_area = {}
 
