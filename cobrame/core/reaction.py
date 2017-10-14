@@ -452,7 +452,7 @@ class ComplexFormation(MEReaction):
         # Add formula to complex
         self._add_formula_to_complex(complex_info, complex_met)
 
-        # Biomass inclusion for proteins are handled in translation
+        # Biomass accounting of protein subunits is handled in translation
         # reactions. Handle cofactors and prosthetic groups here
         biomass = 0.
         biomass = self.add_biomass_from_subreactions(complex_info, biomass)
@@ -590,6 +590,9 @@ class PostTranslationReaction(MEReaction):
 
         6) Surface area constraints defined in data.surface_are
 
+        7) Biomass if a significant chemical modification takes place (i.e.
+           lipid modifications for lipoproteins)
+
         Parameters
         ----------
         verbose : bool
@@ -676,6 +679,12 @@ class PostTranslationReaction(MEReaction):
 
         # Convert element dict to formula string and associate it with complex
         massbalance.elements_to_formula(protein_met, elements)
+
+        # Add biomass from significant modifications (i.e. lipids for
+        # lipoproteins)
+        biomass = self.add_biomass_from_subreactions(posttranslation_data)
+        if biomass > 0:
+            self.add_metabolites({self._model._biomass: biomass})
 
         self.add_metabolites(object_stoichiometry, combine=False)
 
@@ -1051,9 +1060,9 @@ class TranslationReaction(MEReaction):
             model.add_metabolites(transcript)
 
         # Calculate coupling constraints for mRNA and degradation
-        k_mrna = mu * c_mrna * kt / (mu + kt * r0)  # in hr-1
+        k_mrna = mu * c_mrna * kt / (mu + kt * r0) * 3.  # 3 nucleotides per AA
         rna_amount = mu / k_mrna
-        deg_amount = 3 * k_deg / k_mrna
+        deg_amount = k_deg / k_mrna
 
         # Add mRNA coupling to stoichiometry
         new_stoichiometry[transcript.id] = -(rna_amount + deg_amount)

@@ -73,7 +73,7 @@ class ProcessData(object):
         return {self._model.reactions.get_by_id(i)
                 for i in self._parent_reactions}
 
-    def _update_parent_reactions(self):
+    def update_parent_reactions(self):
         """
 
         Executes the update() function for all reactions that the ProcessData
