@@ -221,6 +221,7 @@
                                             "unprocessed_protein_id": {"type": "string"},
                                             "propensity_scaling": {"type": "number"},
                                             "aggregation_propensity": {"type": "number"},
+                                            "biomass_type" : {"type": "string"},
                                             "translocation": {
                                                 "type": "array",
                                                 "items": {"type": "string"}

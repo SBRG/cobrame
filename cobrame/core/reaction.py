@@ -457,7 +457,8 @@ class ComplexFormation(MEReaction):
         biomass = 0.
         biomass = self.add_biomass_from_subreactions(complex_info, biomass)
         if biomass > 0:
-            self.add_metabolites({self._model._biomass: biomass})
+            self.add_metabolites({metabolites.prosthetic_group_biomass:
+                                  biomass})
 
         self.add_metabolites(object_stoichiometry, combine=False)
 
@@ -683,8 +684,12 @@ class PostTranslationReaction(MEReaction):
         # Add biomass from significant modifications (i.e. lipids for
         # lipoproteins)
         biomass = self.add_biomass_from_subreactions(posttranslation_data)
-        if biomass > 0:
-            self.add_metabolites({self._model._biomass: biomass})
+        if biomass > 0 and posttranslation_data.biomass_type:
+            self.add_metabolites({metabolites.get_by_id(
+                posttranslation_data.biomass_type): biomass})
+        elif biomass > 0 and not posttranslation_data.biomass_type:
+            raise ValueError('If subreactions in PostTranslationData modify '
+                             'the protein, the biomass_type must be provided')
 
         self.add_metabolites(object_stoichiometry, combine=False)
 
@@ -860,16 +865,16 @@ class TranscriptionReaction(MEReaction):
         # Add the appropriate biomass constraints for each RNA contained in
         # the transcription unit
         if trna_mass > 0:
-            self.add_metabolites({self._model._tRNA_biomass: trna_mass},
+            self.add_metabolites({metabolites.tRNA_biomass: trna_mass},
                                  combine=False)
         if rrna_mass > 0:
-            self.add_metabolites({self._model._rRNA_biomass: rrna_mass},
+            self.add_metabolites({metabolites.rRNA_biomass: rrna_mass},
                                  combine=False)
         if ncrna_mass > 0:
-            self.add_metabolites({self._model._ncRNA_biomass: ncrna_mass},
+            self.add_metabolites({metabolites.ncRNA_biomass: ncrna_mass},
                                  combine=False)
         if mrna_mass > 0:
-            self.add_metabolites({self._model._mRNA_biomass: mrna_mass},
+            self.add_metabolites({metabolites.mRNA_biomass: mrna_mass},
                                  combine=False)
 
 
@@ -1117,12 +1122,12 @@ class TranslationReaction(MEReaction):
         # ------------------ Add biomass constraints --------------------------
         # add biomass constraint for protein translated
         protein_mass = protein.mass  # kDa
-        self.add_metabolites({self._model._protein_biomass: protein_mass},
+        self.add_metabolites({metabolites.protein_biomass: protein_mass},
                              combine=False)
         # RNA biomass consumed due to degradation
         mrna_mass = transcript.mass  # kDa
         self.add_metabolites(
-            {self._model._mRNA_biomass: (-mrna_mass * deg_amount)},
+            {metabolites.mRNA_biomass: (-mrna_mass * deg_amount)},
             combine=False)
 
 

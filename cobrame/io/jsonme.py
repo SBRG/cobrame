@@ -203,7 +203,7 @@ _PROCESS_DATA_TYPE_DEPENDENCIES = \
      'PostTranslationData': ['processed_protein_id', 'unprocessed_protein_id',
                              'propensity_scaling', 'aggregation_propensity',
                              'translocation', 'subreactions', 'surface_area',
-                             'keq_folding', 'k_folding',
+                             'keq_folding', 'k_folding', 'biomass_type',
                              'translocation_multipliers'],
 
      'SubreactionData': ['stoichiometry', 'enzyme', 'keff',

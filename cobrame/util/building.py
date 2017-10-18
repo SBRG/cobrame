@@ -259,6 +259,8 @@ def build_reactions_from_genbank(me_model, gb_filename, tu_frame=None,
     if not trna_to_codon:
         trna_to_codon = {}
 
+    metabolites = me_model.metabolites
+
     # Load genbank file and extract DNA sequence
     gb_file = SeqIO.read(gb_filename, 'gb')
     full_seq = str(gb_file.seq)
@@ -339,16 +341,16 @@ def build_reactions_from_genbank(me_model, gb_filename, tu_frame=None,
         # mRNA biomass is handled during translation
         if rna_type == 'tRNA':
             demand_reaction.add_metabolites({
-                me_model._tRNA_biomass: -mass.compute_rna_mass(seq)})
+                metabolites.tRNA_biomass: -mass.compute_rna_mass(seq)})
         elif rna_type == 'rRNA':
             demand_reaction.add_metabolites({
-                me_model._rRNA_biomass: -mass.compute_rna_mass(seq)})
+                metabolites.rRNA_biomass: -mass.compute_rna_mass(seq)})
         elif rna_type == 'ncRNA':
             demand_reaction.add_metabolites({
-                me_model._ncRNA_biomass: -mass.compute_rna_mass(seq)})
+                metabolites.ncRNA_biomass: -mass.compute_rna_mass(seq)})
         elif rna_type == 'mRNA':
             demand_reaction.add_metabolites({
-                me_model._mRNA_biomass: -mass.compute_rna_mass(seq)})
+                metabolites.mRNA_biomass: -mass.compute_rna_mass(seq)})
 
         # ---- Associate TranscribedGene to a TU ----
         parent_tu = tu_frame[

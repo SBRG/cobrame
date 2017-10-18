@@ -36,53 +36,18 @@ class MEModel(Model):
         # biomass, and requiring production of the appropriate amount of dummy
         # protein
         self._unmodeled_protein_fraction = None
-        self._protein_biomass = Constraint("protein_biomass")
-        self._protein_biomass_dilution = \
-            SummaryVariable("protein_biomass_dilution")
-        self._protein_biomass_dilution.add_metabolites({
-            self._protein_biomass: -1,
-            self._biomass: 1,
-        })
-        self._mRNA_biomass = Constraint("mRNA_biomass")
-        self._mRNA_biomass_dilution = SummaryVariable("mRNA_biomass_dilution")
-        self._mRNA_biomass_dilution.add_metabolites({
-            self._mRNA_biomass: -1,
-            self._biomass: 1,
-        })
-        self._tRNA_biomass = Constraint("tRNA_biomass")
-        self._tRNA_biomass_dilution = SummaryVariable("tRNA_biomass_dilution")
-        self._tRNA_biomass_dilution.add_metabolites({
-            self._tRNA_biomass: -1,
-            self._biomass: 1,
-        })
-        self._rRNA_biomass = Constraint("rRNA_biomass")
-        self._rRNA_biomass_dilution = SummaryVariable("rRNA_biomass_dilution")
-        self._rRNA_biomass_dilution.add_metabolites({
-            self._rRNA_biomass: -1,
-            self._biomass: 1,
-        })
 
-        self._ncRNA_biomass = Constraint("ncRNA_biomass")
-        self._ncRNA_biomass_dilution = \
-            SummaryVariable("ncRNA_biomass_dilution")
-        self._ncRNA_biomass_dilution.add_metabolites({
-            self._ncRNA_biomass: -1,
-            self._biomass: 1,
-        })
-
-        self._DNA_biomass = Constraint("DNA_biomass")
-        self._DNA_biomass_dilution = SummaryVariable("DNA_biomass_dilution")
-        self._DNA_biomass_dilution.add_metabolites({
-            self._DNA_biomass: -1,
-            self._biomass: 1,
-        })
-
-        self.add_reactions([self._protein_biomass_dilution,
-                            self._mRNA_biomass_dilution,
-                            self._tRNA_biomass_dilution,
-                            self._rRNA_biomass_dilution,
-                            self._ncRNA_biomass_dilution,
-                            self._DNA_biomass_dilution])
+    def add_biomass_constraints_to_model(self, biomass_types):
+        for biomass_type in biomass_types:
+            if '_biomass' not in biomass_type:
+                raise ValueError('Biomass types should be suffixed with '
+                                 '"_biomass"')
+            constraint_obj = Constraint(biomass_type)
+            summary_variable_obj = SummaryVariable("%s_to_biomass" %
+                                                   biomass_type)
+            summary_variable_obj.add_metabolites({constraint_obj: -1,
+                                                  self._biomass: 1})
+            self.add_reactions([summary_variable_obj])
 
     @property
     def unmodeled_protein(self):
@@ -94,15 +59,21 @@ class MEModel(Model):
 
     @property
     def unmodeled_protein_biomass(self):
-        return self.metabolites.get_by_id('dummy_protein_biomass')
+        return self.metabolites.get_by_id('unmodeled_protein_biomass')
 
     @unmodeled_protein_fraction.setter
     def unmodeled_protein_fraction(self, value):
+        if 'protein_biomass_to_biomass' not in self.reactions:
+            raise UserWarning("Must add SummaryVariable handling the protein"
+                              "biomass constraint (via "
+                              ":meth:`add_biomass_constraints_to_model`) "
+                              "before defining the unmodeled protein fraction")
+
         # see the Biomass_formulations for an explanation
         amount = value / (1 - value)
-        self._protein_biomass_dilution.add_metabolites(
+        self.reactions.protein_biomass_to_biomass.add_metabolites(
             {self.unmodeled_protein_biomass: -amount}, combine=False)
-        self._protein_biomass_dilution.add_metabolites(
+        self.reactions.protein_biomass_to_biomass.add_metabolites(
             {self._biomass: 1 + amount}, combine=False)
         self._unmodeled_protein_fraction = value
 
@@ -137,7 +108,6 @@ class MEModel(Model):
             self.reactions.ATPM.add_metabolites(atp_hydrolysis)
         self.reactions.ATPM.lower_bound = value
         self._ngam = value
-
 
     @property
     def stoichiometric_data(self):

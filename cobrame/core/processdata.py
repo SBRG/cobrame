@@ -1055,6 +1055,11 @@ class PostTranslationData(ProcessData):
 
         Dictionary of {subreaction_id: float}
 
+    biomass_type : str
+        If the subreactions add biomass to the translated gene, the
+        biomass type (:attr:`cobrame.core.compontent.Constraint.id`) of the
+        modification must be defined.
+
     folding_mechanism : str
         ID of folding mechanism for post translation reaction
 
@@ -1089,6 +1094,7 @@ class PostTranslationData(ProcessData):
 
         # For post translation modifications
         self.subreactions = defaultdict(float)
+        self.biomass_type = ''
 
         # For protein folding reactions (FoldME)
         self.folding_mechanism = ''
