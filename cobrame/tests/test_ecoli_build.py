@@ -26,7 +26,7 @@ def test_full_json_dumping():
 
 
 def test_ecoli_build():
-    benchmark_model = load_json_me(join(models_dir, 'iLE1678_benchmark.json'))
+    benchmark_model = load_json_me(join(models_dir, 'iJL1678b_benchmark.json'))
     difference = find_me_model_difference(benchmark_model, test_model, 1e-6)
     print('-----------------------Difference----------------------')
     print(difference)
