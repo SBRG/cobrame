@@ -7,7 +7,7 @@ COBRA Toolbox for constructing and manipulating genome-scale models of metabolis
 
 For more information on ME-models and the COBRAme ME-model architecture, see the COBRAme readthedocs_.
 
-If using COBRAme or *i*JL1678b-ME in a publication, please cite: `doi:10.1101/106559 <https://doi.org/10.1101/106559>`_. Note that the model may be edited and updated until it is peer-reviewed and published.
+If using COBRAme or iJL1678b-ME in a publication, please cite: `doi:10.1101/106559 <https://doi.org/10.1101/106559>`_. Note that the model may be edited and updated until it is peer-reviewed and published.
 
 Installation
 ------------
@@ -17,7 +17,7 @@ Installation
 
 Build ME-model
 --------------
-A full COBRAme ME-model currently only exists for *E. coli* K-12 MG1655. See the ECOLIme_ package for the data and scripts required to build *i*JL1678b-ME. After installing ECOLIme_, *i*JL1678b-ME can be constructed from scratch by running `build_ME_model.py <https://github.com/SBRG/ecolime/tree/master/ecolime>`_.
+A full COBRAme ME-model currently only exists for *E. coli* K-12 MG1655. See the ECOLIme_ package for the data and scripts required to build iJL1678b-ME. After installing ECOLIme_, iJL1678b-ME can be constructed from scratch by running `build_ME_model.py <https://github.com/SBRG/ecolime/tree/master/ecolime>`_.
 
 Solving
 -------
@@ -64,6 +64,7 @@ Requirements
 COBRAme and its extensions require:
 
 - Python versions >= 2.7
+- COBRApy versions <= 0.5.11. We recommend using 0.5.11.
 - Linux is recommended, with a relatively recent glibc. Mac OS X is also supported. Windows has worked in the past, but is not explicitly supported at this time.
 
 .. _readthedocs: http://cobrame.readthedocs.io/en/stable/
