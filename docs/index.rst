@@ -7,7 +7,7 @@ This resource is intended to:
 2. Describe the architecture of the COBRAme code base.
 3. Highlight the major object classes and how they interrelate
 4. Demonstrate basic model building and editing procedures
-5. Provide examples of how to query, edit and update information in a constructed ME-Model 
+5. Provide examples of how to query, edit and update information in a constructed ME-model
 
 .. toctree::
    :numbered:
