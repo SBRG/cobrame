@@ -3,7 +3,7 @@
 COBRAme
 =======
 
-COBRA Toolbox for constructing and manipulating genome-scale models of metabolism and expression (ME-models)
+A COBRApy_ extension for constructing and simulating genome-scale models of metabolism and gene expression (ME-models)
 
 For more information on ME-models and the COBRAme ME-model architecture, see the COBRAme readthedocs_.
 
@@ -63,15 +63,16 @@ Requirements
 
 COBRAme and its extensions require:
 
-- Python versions >= 2.7
+- Python versions 2.7+/3.5+
 - COBRApy versions <= 0.5.11. We recommend using 0.5.11.
 - Linux is recommended, with a relatively recent glibc. Mac OS X is also supported. Windows has worked in the past, but is not explicitly supported at this time.
 
-.. _readthedocs: http://cobrame.readthedocs.io/en/stable/
+.. _readthedocs: http://cobrame.readthedocs.io/
 .. _ECOLIme: https://github.com/SBRG/ECOLIme
 .. _ZIB: http://soplex.zib.de/
 .. _soplex_cython: https://github.com/SBRG/soplex_cython
 .. _solvemepy: https://github.com/SBRG/solvemepy
+.. _COBRApy: https://github.com/opencobra/cobrapy
 .. |Build_Status| image:: https://travis-ci.org/SBRG/cobrame.svg?branch=master
     :target: https://travis-ci.org/SBRG/cobrame
 .. |License| image:: https://img.shields.io/github/license/mashape/apistatus.svg
