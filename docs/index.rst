@@ -17,6 +17,7 @@ This resource is intended to:
    CobrameArchitectureOverview
    building_a_model
    Reaction_Manipulation
+   model_saving_loading
    cobrame
 
 

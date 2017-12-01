@@ -28,7 +28,7 @@ except ImportError:
 
 
 def get_me_solver(solver=None):
-    if solver is None:
+    if solver is None or solver == 'soplex':
         if soplex is None:
             raise RuntimeError("soplex not installed")
         return soplex
