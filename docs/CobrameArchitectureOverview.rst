@@ -64,4 +64,4 @@ COBRAme/ME-model software architecture can be
 downloaded :download:`here <_static/cobrame_full_uml.pdf>`
 
 
-.. image:: _static/cobrame_uml.svg
+.. image:: _static/cobrame_uml.png
