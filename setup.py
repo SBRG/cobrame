@@ -2,9 +2,8 @@ from setuptools import setup, find_packages
 
 
 setup(name="cobrame",
-      version="0.0.5",
-      author="Ali Ebrahim and Colton Lloyd",
-      author_email="minime_dev@googlegroups.com",
+      version="0.0.7",
+      author="Colton Lloyd and Ali Ebrahim",
       url="https://github.com/SBRG/cobrame",
       install_requires=["sympy", "six", "Biopython", "cobra<=0.5.11", "pandas",
                         "scipy", "numpy", "setuptools", "jsonschema"],
