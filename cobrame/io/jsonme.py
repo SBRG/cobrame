@@ -212,10 +212,9 @@ _PROCESS_DATA_TYPE_DEPENDENCIES = \
      'GenericData': ['component_list']
      }
 
-_REQUIRED_METABOLITE_ATTRIBUTES = {"id", "name", "formula"}
+_REQUIRED_METABOLITE_ATTRIBUTES = {"id", "name", "formula", "compartment"}
 
-_OPTIONAL_METABOLITE_ATTRIBUTES = {"charge", "formula", "compartment",
-                                   "_bound", "_constraint_sense"}
+_OPTIONAL_METABOLITE_ATTRIBUTES = {"charge", "_bound", "_constraint_sense"}
 
 # Some metabolite types require additional attributes
 _METABOLITE_TYPE_DEPENDENCIES = \
@@ -316,7 +315,7 @@ def _metabolite_to_dict(metabolite):
     new_metabolite = {key: _fix_type(getattr(metabolite, key))
                       for key in _REQUIRED_METABOLITE_ATTRIBUTES}
 
-    # Som metabolites require additional information to construct working
+    # Some metabolites require additional information to construct working
     # ME-model
     new_metabolite['metabolite_type'] = {}
     new_metabolite['metabolite_type'][metabolite_type] = {}
