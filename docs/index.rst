@@ -18,6 +18,7 @@ This resource is intended to:
    building_a_model
    Reaction_Manipulation
    model_saving_loading
+   compling_constraint_derivation
    cobrame
 
 
