@@ -8,6 +8,7 @@ Subpackages
 
     cobrame.core
     cobrame.util
+    cobrame.io
 
 Module contents
 ---------------

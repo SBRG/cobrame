@@ -1,164 +1,13 @@
-from __future__ import print_function, division, absolute_import
+from __future__ import print_function, absolute_import, division
 
-import os
-import copy
-import json
-from collections import OrderedDict
 from warnings import warn
-from six import iteritems, string_types
 
-from sympy import Basic, sympify, Symbol
+from six import iteritems, string_types
 from numpy import bool_, float_
-from jsonschema import validate, ValidationError
-import cobra
+from sympy import Basic, sympify, Symbol
 
 import cobrame
-from cobrame.util import me_model_interface, mu
 
-try:
-    # If cannot import SymbolicParameter, assume using cobrapy
-    # versions <= 0.5.11
-    from optlang.interface import SymbolicParameter
-except ImportError:
-    from cobra.io.json import metabolite_from_dict, save_json_model
-else:
-    from cobra.io.json import save_json_model
-    from cobra.io.dict import metabolite_from_dict
-
-mu_temp = Symbol('mu')
-
-cur_dir = os.path.dirname(os.path.abspath(__file__))
-
-
-def save_json_me(me0, file_name):
-    """
-    Save a stripped-down JSON version of the ME-model. This will exclude all of
-    ME-Model information except the reaction stoichiometry information and the
-    reaction bounds. Saving/loading a model in this format will thus occur much
-    quicker, but limit the ability to edit the model and use most of its
-    features.
-
-    :param :class:`~cobrame.core.model.MEModel` me0:
-        A full ME-model
-
-    :param str or file-like object file_name:
-        Filename of the JSON output
-
-    :returns JSON-object:
-        Stripped-down JSON representation of full ME-model
-    """
-    me = copy.deepcopy(me0)
-
-    for rxn in me.reactions:
-        for met in rxn.metabolites:
-            s = rxn._metabolites[met]
-            if isinstance(s, Basic):
-                rxn._metabolites[met] = str(s)
-        if isinstance(rxn.lower_bound, Basic):
-            rxn.lower_bound = str(rxn.lower_bound)
-        if isinstance(rxn.upper_bound, Basic):
-            rxn.upper_bound = str(rxn.upper_bound)
-
-    for met in me.metabolites:
-        if isinstance(met._bound, Basic):
-            met._bound = str(met._bound)
-
-    save_json_model(me, file_name)
-
-
-def get_sympy_expression(value):
-    """
-    Return sympy expression from json string using sympify
-
-
-    mu is assumed to be positive but using sympify does not apply this
-    assumption"""
-
-    expression_value = sympify(value)
-    return expression_value.subs(mu_temp, mu)
-
-
-def get_numeric_from_string(string):
-    try:
-        return float(string)
-    except ValueError:
-        return get_sympy_expression(string)
-
-
-def load_json_me(file_name):
-    """
-    Load a stripped-down JSON version of the ME-model. This will exclude all of
-    ME-Model information except the reaction stoichiometry information and the
-    reaction bounds. Saving/loading a model in this format will thus occur much
-    quicker, but limit the ability to edit the model and use most of its
-    features.
-
-    :param str or file-like object file_name:
-        Filename of the JSON ME-model
-
-    Returns
-    -------
-    :class:`cobra.core.model.Model`
-        COBRA Model representation of the ME-model. This will not include
-        all of the functionality of a :class:`~cobrame.core.model.MEModel` but
-        will solve identically compared to the full model.
-    """
-    if isinstance(file_name, string_types):
-        with open(file_name, 'r') as f:
-            obj = json.load(f)
-    else:
-        obj = file_name
-
-    model = cobra.Model()
-
-    # If cannot import SymbolicParameter, assume using cobrapy
-    # versions <= 0.5.11. If versions >= 0.8.0 are used, a ME-model interface
-    # must be assigned as the solver interface
-    try:
-        from optlang.interface import SymbolicParameter
-    except ImportError:
-        pass
-    else:
-        model.solver = me_model_interface
-
-    default_reactions = [i.id for i in model.reactions]
-
-    for k, v in iteritems(obj):
-        if k in {'id', 'name'}:
-            setattr(model, k, v)
-
-    def _reaction_from_dict(reaction, model):
-        new_reaction = cobra.Reaction()
-        for k, v in iteritems(reaction):
-            if k in {'objective_coefficient', 'reversibility', 'reaction'}:
-                continue
-            elif k == 'metabolites':
-                new_reaction.add_metabolites(OrderedDict(
-                    (model.metabolites.get_by_id(str(met)),
-                     get_numeric_from_string(coeff))
-                    for met, coeff in iteritems(v)))
-            elif k in {'upper_bound', 'lower_bound'}:
-                v = get_numeric_from_string(v)
-                setattr(new_reaction, k, v)
-            else:
-                setattr(new_reaction, k, v)
-        return new_reaction
-
-    model.add_metabolites(
-        [metabolite_from_dict(metabolite) for metabolite in obj['metabolites']]
-    )
-
-    new_reactions = [
-        _reaction_from_dict(reaction, model) for reaction in obj['reactions']]
-
-    model.remove_reactions(default_reactions)
-    model.add_reactions(new_reactions)
-
-    return model
-
-# -----------------------------------------------------------------------------
-# Functions below here facilitate json dumping/loading of full ME-models with
-# all process_data/reaction info intact.
 _REQUIRED_REACTION_ATTRIBUTES = {"id", "name", "metabolites", "lower_bound",
                                  "upper_bound", "objective_coefficient",
                                  "variable_kind"}
@@ -224,9 +73,51 @@ _METABOLITE_TYPE_DEPENDENCIES = \
      }
 
 
-def get_schema():
-    with open(os.path.join(cur_dir, 'JSONSCHEMA'), 'r') as f:
-        return json.load(f)
+mu_temp = Symbol('mu')
+
+
+def get_sympy_expression(value):
+    """
+    Return sympy expression from json string using sympify
+
+    mu is assumed to be positive but using sympify does not apply this
+    assumption. The mu symbol produced from sympify is replaced with
+    cobrame's mu value to ensure the expression can be used in the model.
+
+    Parameters
+    ----------
+    value : str
+        String representation of mu containing expression
+
+    Returns
+    -------
+    sympy expression
+        Numeric representation of string with cobrame's mu symbol substituted
+
+    """
+
+    expression_value = sympify(value)
+    return expression_value.subs(mu_temp, cobrame.mu)
+
+
+def get_numeric_from_string(string):
+    """
+
+    Parameters
+    ----------
+    string : str
+        String representation of numeric expression
+
+    Returns
+    -------
+    float or sympy expression
+        Numeric representation of string
+
+    """
+    try:
+        return float(string)
+    except ValueError:
+        return get_sympy_expression(string)
 
 
 def _fix_type(value):
@@ -327,7 +218,7 @@ def _metabolite_to_dict(metabolite):
     return new_metabolite
 
 
-def get_attribute_array(dictlist, type):
+def _get_attribute_array(dictlist, type):
     if type == 'reaction':
         return [_reaction_to_dict(reaction) for reaction in dictlist]
     elif type == 'process_data':
@@ -338,7 +229,7 @@ def get_attribute_array(dictlist, type):
         raise TypeError('Type must be reaction, process_data or metabolite')
 
 
-def get_global_info_dict(global_info):
+def _get_global_info_dict(global_info):
     new_global_info = {}
     for key, value in global_info.items():
         if type(value) != dict:
@@ -348,46 +239,38 @@ def get_global_info_dict(global_info):
     return new_global_info
 
 
-def _to_dict(model):
+def me_model_to_dict(model):
+    """
+    Create dictionary representation of full ME-model
+
+    Parameters
+    ----------
+    model : :class:`~cobrame.core.model.MEModel`
+
+    Returns
+    -------
+    dict
+        Dictionary representation of ME-model
+
+    """
 
     obj = dict(
-        reactions=get_attribute_array(model.reactions, 'reaction'),
-        process_data=get_attribute_array(model.process_data,
-                                         'process_data'),
-        metabolites=get_attribute_array(model.metabolites, 'metabolite'),
-        global_info=get_global_info_dict(model.global_info)
+        reactions=_get_attribute_array(model.reactions, 'reaction'),
+        process_data=_get_attribute_array(model.process_data,
+                                          'process_data'),
+        metabolites=_get_attribute_array(model.metabolites, 'metabolite'),
+        global_info=_get_global_info_dict(model.global_info)
     )
 
     return obj
 
 
-def save_full_me_model_json(model, file_name):
-    """
-    Save a full JSON version of the ME-model. Saving/loading a model in this
-    format can then be loaded to return a ME-model identical to the one saved.
-
-    :param :class:`~cobrame.core.MEModel.MEModel` model:
-        A full ME-model
-
-    :param str or file-like object file_name:
-        Filename of the JSON output
-
-    :returns JSON-object:
-        Full JSON representation of full ME-model
-    """
-
-    should_close = False
-    if isinstance(file_name, string_types):
-        file_name = open(file_name, 'w')
-        should_close = True
-
-    json.dump(_to_dict(model), file_name)
-
-    if should_close:
-        file_name.close()
+# -----------------------------------------------------------------------------
+# Functions below here are used to create a ME-model from its dictionary
+# representation
 
 
-def add_metabolite_from_dict(model, metabolite_info):
+def _add_metabolite_from_dict(model, metabolite_info):
     """
     Builds metabolite instances defined in dictionary, then add it to the
     ME-model being constructed.
@@ -431,7 +314,7 @@ def add_metabolite_from_dict(model, metabolite_info):
     model.add_metabolites([metabolite_obj])
 
 
-def add_process_data_from_dict(model, process_data_dict):
+def _add_process_data_from_dict(model, process_data_dict):
     """
     Builds process_data instances defined in dictionary, then add it to the
     ME-model being constructed.
@@ -494,7 +377,7 @@ def add_process_data_from_dict(model, process_data_dict):
             setattr(process_data, '_' + attribute, value)
 
 
-def add_reaction_from_dict(model, reaction_info):
+def _add_reaction_from_dict(model, reaction_info):
     """
     Builds reaction instances defined in dictionary, then add it to the
     ME-model being constructed.
@@ -548,23 +431,22 @@ def add_reaction_from_dict(model, reaction_info):
         reaction_obj.update()
 
 
-def full_me_model_from_dict(obj):
+def me_model_from_dict(obj):
     """
-    Validate and load JSON representation of the ME-model. This will return
+    Load ME-model from its dictionary representation. This will return
     a full :class:`~cobrame.core.model.MEModel` object identical to the
     one saved.
 
-    :param str or file-like object obj:
-        JSON-serialized ME-model
+    Parameters
+    ----------
+    obj : dict
+        Dictionary representation of ME-model
 
-    :returns :class:`~cobrame.core.model.MEModel`:
+    Returns
+    -------
+    :class:`~cobrame.core.model.MEModel`:
         Full COBRAme ME-model
     """
-
-    try:
-        validate(obj, get_schema())
-    except ValidationError:
-        raise Exception('Must pass valid ME-model json file')
 
     model = cobrame.MEModel()
 
@@ -573,22 +455,14 @@ def full_me_model_from_dict(obj):
             setattr(model, k, v)
 
     for metabolite in obj['metabolites']:
-        add_metabolite_from_dict(model, metabolite)
+        _add_metabolite_from_dict(model, metabolite)
 
     for process_data in obj['process_data']:
-        add_process_data_from_dict(model, process_data)
+        _add_process_data_from_dict(model, process_data)
 
     for reaction in obj['reactions']:
-        add_reaction_from_dict(model, reaction)
+        _add_reaction_from_dict(model, reaction)
 
     model.update()
 
     return model
-
-
-def load_full_me_model_json(file_name):
-
-    with open(file_name, 'r') as f:
-        model_dict = json.load(f)
-
-    return full_me_model_from_dict(model_dict)
