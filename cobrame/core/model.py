@@ -5,13 +5,12 @@ from six import iteritems
 from warnings import warn
 
 from cobra import Model, DictList
-from numpy import array
+import numpy as np
 from scipy.sparse import dok_matrix
 
 from cobrame.core.reaction import (SummaryVariable, MetabolicReaction,
-                                   TranscriptionReaction,
-                                   TranslationReaction)
-from cobrame.core.component import (Constraint, ProcessedProtein,
+                                   TranscriptionReaction, TranslationReaction)
+from cobrame.core.component import (Constraint, ProcessedProtein, Complex,
                                     TranslatedGene, TranscribedGene)
 from cobrame.core import processdata
 from cobrame.util import mu
@@ -231,9 +230,9 @@ class MEModel(Model):
         """build a vector of a reaction attribute at a specific growth rate
 
         Mainly used for upper and lower bounds"""
-        return array([float(value.subs(mu, growth_rate))
-                      if hasattr(value, "subs") else float(value)
-                      for value in self.reactions.list_attr(attr_name)])
+        return np.array([float(value.subs(mu, growth_rate))
+                         if hasattr(value, "subs") else float(value)
+                         for value in self.reactions.list_attr(attr_name)])
 
     def compute_solution_error(self, solution=None):
         errors = {}
@@ -242,7 +241,7 @@ class MEModel(Model):
         s = self.construct_s_matrix(solution.f)
         lb = self.construct_attribute_vector("lower_bound", solution.f)
         ub = self.construct_attribute_vector("upper_bound", solution.f)
-        x = array(solution.x)
+        x = np.array(solution.x)
         err = abs(s * x)
         errors["max_error"] = err.max()
         errors["sum_error"] = err.sum()
@@ -401,68 +400,37 @@ class MEModel(Model):
                 t_process_id = t.id.replace('transcription_', '')
                 self.process_data.remove(t_process_id)
 
-    def set_sasa_keffs(self, avg_keff):
+    def set_sasa_keffs(self, median_keff):
+        # Get median SASA value considering all complexes in model
         sasa_list = []
-        for rxn in self.reactions:
-            if hasattr(rxn, 'keff') and rxn.complex_data is not None:
-                weight = rxn.complex_data.complex.mass
-                sasa = weight ** (3. / 4.)
-                if sasa == 0:
-                    warn('Keff not updated for %s' % rxn)
-                else:
-                    sasa_list.append(sasa)
-
-        for data in self.process_data:
-            cplx_mw = 0.
-            if isinstance(data, processdata.TranslocationData):
+        for met in self.metabolites:
+            cplx_sasa = 0.
+            if not isinstance(met, Complex):
                 continue
-            if hasattr(data, 'keff') and data.enzyme is not None:
-                if type(data.enzyme) == str:
-                    cplxs = [data.enzyme]
-                else:
-                    cplxs = data.enzyme
-                for cplx in cplxs:
-                    if cplx in self.process_data:
-                        try:
-                            cplx_mw += self.metabolites.get_by_id(cplx).mass \
-                                ** (3. / 4)
-                        except:
-                            warn('Complex (%s) cannot access mass' % cplx)
-                    elif cplx.split('_mod_')[0] in self.process_data:
-                        cplx_mw += self.metabolites.get_by_id(
-                            cplx.split('_mod_')[0]).mass ** (3. / 4)
-
-                sasa_list.append(cplx_mw)
-
-        avg_sasa = array(sasa_list).mean()
+            cplx_sasa += met.formula_weight ** (3. / 4)
+            sasa_list.append(cplx_sasa)
+        median_sasa = np.median(np.array(sasa_list))
 
         # redo scaling average SASA to 65.
         for rxn in self.reactions:
             if hasattr(rxn, 'keff') and rxn.complex_data is not None:
-                weight = rxn.complex_data.complex.mass
-                sasa = weight ** (3. / 4.)
+                sasa = rxn.complex_data.complex.formula_weight ** (3. / 4.)
                 if sasa == 0:
-                    sasa = avg_sasa
-                rxn.keff = sasa * avg_keff / avg_sasa
+                    raise UserWarning('No SASA for %s' % rxn)
+                rxn.keff = sasa * median_keff / median_sasa
         for data in self.process_data:
             sasa = 0.
             if isinstance(data, processdata.TranslocationData):
                 continue
             if hasattr(data, 'keff') and data.enzyme is not None:
-                if data.enzyme == str:
-                    cplxs = [data.enzyme]
-                else:
-                    cplxs = data.enzyme
+                cplxs = \
+                    [data.enzyme] if type(data.enzyme) == str else data.enzyme
                 for cplx in cplxs:
-                    if cplx in self.process_data:
-                        sasa += \
-                            self.metabolites.get_by_id(cplx).mass ** (3. / 4)
-                    elif cplx.split('_mod_')[0] in self.process_data:
-                        sasa += self.metabolites.get_by_id(
-                            cplx.split('_mod_')[0]).mass ** (3. / 4)
-
+                    sasa += \
+                        self.metabolites.get_by_id(cplx).formula_weight ** \
+                        (3. / 4)
                 if sasa == 0:
-                    sasa = avg_sasa
-                data.keff = sasa * avg_keff / avg_sasa
+                    raise UserWarning('No SASA for %s' % rxn)
+                data.keff = sasa * median_keff / median_sasa
 
         self.update()

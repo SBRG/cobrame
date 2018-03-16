@@ -7,7 +7,7 @@ from cobra import Reaction
 from six import iteritems, string_types
 
 import cobrame
-from .component import create_component
+from cobrame.core.component import create_component
 from cobrame.util import mu, massbalance
 
 
@@ -178,7 +178,7 @@ class MEReaction(Reaction):
             subrxn_obj = self._model.process_data.get_by_id(subrxn)
             biomass += \
                 subrxn_obj.calculate_biomass_contribution() / 1000. * count
-        return biomass
+        return biomass  # in kDa
 
     def clear_metabolites(self):
         """
@@ -678,7 +678,7 @@ class PostTranslationReaction(MEReaction):
                                                        posttranslation_data,
                                                        elements)
 
-        # Convert element dict to formula string and associate it with complex
+        # Convert element dict to formula string and associate it with protein
         massbalance.elements_to_formula(protein_met, elements)
 
         # Add biomass from significant modifications (i.e. lipids for
@@ -762,6 +762,43 @@ class TranscriptionReaction(MEReaction):
 
         massbalance.elements_to_formula(transcript, elements)
 
+    def _add_or_update_demand_reaction(self, transcript):
+        """
+        This is in case the TU makes multiple products and one needs a sink.
+        If the demand reaction is used, it means the RNA biomass doesn't count
+        toward the overall biomass constraint
+
+        Parameters
+        ----------
+        transcript : :class:`cobrame.core.component.TranscribedGene`
+            Instance of gene having its demand reaction updated/added
+
+        """
+        metabolites = self._model.metabolites
+        demand_reaction_id = "DM_" + transcript.id
+        if demand_reaction_id not in self._model.reactions:
+            demand_reaction = cobrame.MEReaction(demand_reaction_id)
+            self._model.add_reaction(demand_reaction)
+            demand_reaction.add_metabolites({transcript.id: -1})
+        else:
+            demand_reaction = \
+                self._model.reactions.get_by_id(demand_reaction_id)
+
+        mass_in_kda = transcript.formula_weight / 1000.
+        # Add biomass drain for each demand reaction
+        if transcript.RNA_type == 'tRNA':
+            demand_reaction.add_metabolites({
+                metabolites.tRNA_biomass: -mass_in_kda}, combine=False)
+        elif transcript.RNA_type == 'rRNA':
+            demand_reaction.add_metabolites({
+                metabolites.rRNA_biomass: -mass_in_kda}, combine=False)
+        elif transcript.RNA_type == 'ncRNA':
+            demand_reaction.add_metabolites({
+                metabolites.ncRNA_biomass: -mass_in_kda}, combine=False)
+        elif transcript.RNA_type == 'mRNA':
+            demand_reaction.add_metabolites({
+                metabolites.mRNA_biomass: -mass_in_kda}, combine=False)
+
     def update(self, verbose=True):
         """
         Creates reaction using the associated transcription data and adds
@@ -785,6 +822,8 @@ class TranscriptionReaction(MEReaction):
 
         6) Biomass :class:`cobrame.core.component.Constraint` corresponding to
            data.RNA_products and their associated masses
+
+        7) Demand reactions for each transcript product of this reaction
 
         Parameters
         ----------
@@ -854,13 +893,16 @@ class TranscriptionReaction(MEReaction):
             if v < 0 or not hasattr(met, "RNA_type"):
                 continue
             if met.RNA_type == 'tRNA':
-                trna_mass += met.mass  # kDa
+                trna_mass += met.formula_weight / 1000.  # kDa
             if met.RNA_type == 'rRNA':
-                rrna_mass += met.mass  # kDa
+                rrna_mass += met.formula_weight / 1000.  # kDa
             if met.RNA_type == 'ncRNA':
-                ncrna_mass += met.mass  # kDa
+                ncrna_mass += met.formula_weight / 1000.  # kDa
             if met.RNA_type == 'mRNA':
-                mrna_mass += met.mass  # kDa
+                mrna_mass += met.formula_weight / 1000.  # kDa
+
+            # Add demand of each transcript
+            self._add_or_update_demand_reaction(met)
 
         # Add the appropriate biomass constraints for each RNA contained in
         # the transcription unit
@@ -1121,11 +1163,11 @@ class TranslationReaction(MEReaction):
 
         # ------------------ Add biomass constraints --------------------------
         # add biomass constraint for protein translated
-        protein_mass = protein.mass  # kDa
+        protein_mass = protein.formula_weight / 1000.  # kDa
         self.add_metabolites({metabolites.protein_biomass: protein_mass},
                              combine=False)
         # RNA biomass consumed due to degradation
-        mrna_mass = transcript.mass  # kDa
+        mrna_mass = transcript.formula_weight / 1000.  # kDa
         self.add_metabolites(
             {metabolites.mRNA_biomass: (-mrna_mass * deg_amount)},
             combine=False)

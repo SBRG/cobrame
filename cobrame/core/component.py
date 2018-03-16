@@ -3,8 +3,7 @@ from __future__ import print_function, division, absolute_import
 from six import iteritems, string_types
 
 from cobra import Metabolite as Component
-
-from cobrame.util import dogma, mass
+from cobrame.util import dogma
 
 
 class MEComponent(Component):
@@ -79,7 +78,7 @@ class TranscribedGene(MEComponent):
         Identifier of the transcribed gene. As a best practice, this ID should
         be prefixed with 'RNA + _'
 
-    rna_type : str
+    RNA_type : str
         Type of RNA encoded by gene sequence (mRNA, rRNA, tRNA, or ncRNA)
 
     nucleotide_sequence : str
@@ -124,24 +123,6 @@ class TranscribedGene(MEComponent):
                                                                      "mp_c"): v
                                 for k, v in iteritems(counts)}
         return monophosphate_counts
-
-    @property
-    def mass(self):
-        """
-        Calculate mass of transcribed gene from nucleotide_sequence
-
-        Returns
-        -------
-        float
-            Mass of gene (in kDA)
-        """
-
-        if not self.nucleotide_sequence:
-            raise UserWarning(
-                'TranscribedGene (%s) must be assigned a nucleotide sequence '
-                'in order to calculate its mass' % self.id)
-        else:
-            return mass.compute_rna_mass(self.nucleotide_sequence)
 
 
 class TranslatedGene(MEComponent):
@@ -206,18 +187,6 @@ class TranslatedGene(MEComponent):
         return metabolic_reactions
 
     @property
-    def mass(self):
-        """
-        Get mass of protein
-
-        Returns
-        -------
-        float
-            Mass of translated protein based on amino acid sequence in kDa
-        """
-        return self.translation_data.mass
-
-    @property
     def amino_acid_sequence(self):
         """
         Get amino acid sequence of protein
@@ -260,19 +229,6 @@ class ProcessedProtein(MEComponent):
         """
         return self._model.metabolites.get_by_id(self.unprocessed_protein_id)
 
-    @property
-    def unprocessed_protein_mass(self):
-        """
-        Get mass of unprocessed protein
-
-        Returns
-        -------
-        float
-            Mass of unprocessed protein metabolite in kDa
-
-        """
-        return self.unprocessed_protein.mass
-
 
 class Complex(MEComponent):
     """
@@ -302,24 +258,6 @@ class Complex(MEComponent):
             if hasattr(reaction, 'stoichiometric_data'):
                 reaction_list.append(reaction)
         return reaction_list
-
-    @property
-    def mass(self):
-        """
-        Get mass of complex based on protein subunit stoichiometries
-
-        Returns
-        -------
-        int
-            Mass of complex based on protein subunit composition in kDa
-
-        """
-        value = 0
-        complex_data = self._model.process_data.get_by_id(self.id)
-        for protein, coefficient in iteritems(complex_data.stoichiometry):
-            protein_met = self._model.metabolites.get_by_id(protein)
-            value += protein_met.mass * coefficient
-        return value
 
 
 class Ribosome(Complex):

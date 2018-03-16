@@ -7,7 +7,7 @@ import pandas
 from Bio import SeqIO
 
 import cobrame
-from cobrame.util import dogma, mass
+from cobrame.util import dogma
 
 
 def add_transcription_reaction(me_model, tu_name, locus_ids, sequence,
@@ -330,28 +330,6 @@ def build_reactions_from_genbank(me_model, gb_filename, tu_frame=None,
         elif rna_type == "tRNA":
             trna_aa[bnum] = feature.qualifiers["product"][0].split("-")[1]
 
-        # ---- Add in a demand reaction for each mRNA ---
-        # This is in case the TU makes multiple products and one needs a sink.
-        # If the demand reaction is used, it means the mRNA doesn't count
-        # towards biomass
-        demand_reaction = cobrame.MEReaction("DM_" + gene.id)
-        me_model.add_reaction(demand_reaction)
-        demand_reaction.add_metabolites({gene: -1})
-
-        # mRNA biomass is handled during translation
-        if rna_type == 'tRNA':
-            demand_reaction.add_metabolites({
-                metabolites.tRNA_biomass: -mass.compute_rna_mass(seq)})
-        elif rna_type == 'rRNA':
-            demand_reaction.add_metabolites({
-                metabolites.rRNA_biomass: -mass.compute_rna_mass(seq)})
-        elif rna_type == 'ncRNA':
-            demand_reaction.add_metabolites({
-                metabolites.ncRNA_biomass: -mass.compute_rna_mass(seq)})
-        elif rna_type == 'mRNA':
-            demand_reaction.add_metabolites({
-                metabolites.mRNA_biomass: -mass.compute_rna_mass(seq)})
-
         # ---- Associate TranscribedGene to a TU ----
         parent_tu = tu_frame[
             (tu_frame.start - 1 <= left_pos) & (tu_frame.stop >= right_pos) & (
@@ -371,8 +349,8 @@ def build_reactions_from_genbank(me_model, gb_filename, tu_frame=None,
 
     convert_aa_codes_and_add_charging(me_model, trna_aa, trna_to_codon,
                                       verbose=verbose)
-
     if update:
+        # Update all newly added reactions
         for r in me_model.reactions:
             if isinstance(r, (cobrame.TranscriptionReaction,
                               cobrame.TranslationReaction)):

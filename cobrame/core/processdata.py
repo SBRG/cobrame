@@ -8,7 +8,6 @@ import cobra
 
 from cobrame.core.reaction import GenericFormationReaction, ComplexFormation
 from cobrame.core.component import GenerictRNA, GenericComponent
-from cobrame.util.mass import compute_rna_mass, compute_protein_mass
 from cobrame.util.massbalance import elements_to_formula
 from cobrame.util import dogma
 
@@ -496,22 +495,6 @@ class TranscriptionData(ProcessData):
                 yield rna_type
 
     @property
-    def mass(self):
-        """
-        Get mass of transcription unit in kDa from nucleotide sequence
-
-        If transcription unit is spliced, the mass of the excised bases are
-        subtracted
-
-        Returns
-        -------
-        float
-            Mass of transcription unit in kDas
-
-        """
-        return compute_rna_mass(self.nucleotide_sequence, self.excised_bases)
-
-    @property
     def excised_bases(self):
         """
         Get count of bases that are excised during transcription
@@ -769,18 +752,6 @@ class TranslationData(ProcessData):
         for i in self.amino_acid_sequence:
             aa_count[dogma.amino_acids[i]] += 1
         return aa_count
-
-    @property
-    def mass(self):
-        """Get mass of protein from amino acid composition
-
-        Returns
-        -------
-        float
-            Mass of protein (in kDa)
-        """
-
-        return compute_protein_mass(self.amino_acid_count)
 
     @property
     def subreactions_from_sequence(self):
