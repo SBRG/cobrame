@@ -409,7 +409,8 @@ def _add_reaction_from_dict(model, reaction_info):
     except Exception:
         reaction_obj = model.reactions.get_by_id(reaction_obj.id)
         if reaction_type not in ['SummaryVariable',
-                                 'GenericFormationReaction']:
+                                 'GenericFormationReaction'] and \
+                not reaction_obj.id.startswith('DM_'):
             warn('Reaction (%s) already in model' % reaction_obj.id)
 
     # These reactions types do not have update functions and need their
