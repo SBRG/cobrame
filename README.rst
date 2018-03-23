@@ -1,4 +1,4 @@
-|Build_Status| |License| |Documentation|
+|Build_Status| |License| |Documentation| |Docker|
 
 COBRAme
 =======
@@ -8,6 +8,12 @@ A COBRApy_ extension for constructing and simulating genome-scale models of meta
 For more information on ME-models and the COBRAme ME-model architecture, see the COBRAme readthedocs_.
 
 If using COBRAme or iJL1678b-ME in a publication, please cite: `doi:10.1101/106559 <https://doi.org/10.1101/106559>`_. Note that the model may be edited and updated until it is peer-reviewed and published.
+
+COBRAme with Docker
+-------------------
+Docker images are available on DockerHub_ which contain pre-installed versions COBRAme, the solvers, all dependencies using Python 3.6. Dockerfiles_ are also available to build Docker containers locally.
+
+The DockerHub images contain a precompiled version the qMINOS solver and SoPlex can additionally be installed if a Docker container is build locally.
 
 Installation
 ------------
@@ -73,9 +79,13 @@ COBRAme and its extensions require:
 .. _soplex_cython: https://github.com/SBRG/soplex_cython
 .. _solvemepy: https://github.com/SBRG/solvemepy
 .. _COBRApy: https://github.com/opencobra/cobrapy
+.. _DockerFiles: https://github.com/SBRG/cobrame/tree/master/docker
+.. _DockerHub: https://hub.docker.com/r/sbrg/cobrame/
 .. |Build_Status| image:: https://travis-ci.org/SBRG/cobrame.svg?branch=master
     :target: https://travis-ci.org/SBRG/cobrame
-.. |License| image:: https://img.shields.io/github/license/mashape/apistatus.svg
+.. |License| image:: https://img.shields.io/github/license/sbrg/cobrame.svg
     :target: https://github.com/SBRG/cobrame/blob/master/LICENSE
 .. |Documentation| image:: https://readthedocs.org/projects/cobrame/badge/?version=master
     :target: http://cobrame.readthedocs.io/en/master/?badge=master
+.. |Docker| image:: https://img.shields.io/docker/build/sbrg/cobrame.svg
+    :target: https://hub.docker.com/r/sbrg/cobrame/builds/

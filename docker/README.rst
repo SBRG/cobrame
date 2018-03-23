@@ -11,7 +11,7 @@ Installation
 To run a Docker container with everything required to build and solve the iJL1678b model of *E. coli* K-12 MG1655 using qMINOS:
 
 1. Install Docker (https://docs.docker.com/install/)
-2. In the command line, run ``docker run --rm -i -v $(pwd):/home/meuser/ -t sbrg/cobrame:everything bash``.
+2. In the command line, run ``docker run --rm -i -v $(pwd):/home/meuser/ -t sbrg/cobrame:master bash``.
 
 This will initiate a Docker container (virtual machine) and copy everything in the directory where the command was run into the docker container at ``/workdir/``
 

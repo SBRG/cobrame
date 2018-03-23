@@ -49,7 +49,6 @@ RUN echo \
 	&& if [[ -e /source/soplex-$SOPLEX_VERSION.tgz ]]; then \
         git clone https://github.com/SBRG/soplex_cython.git; \
         cd /source/soplex_cython; \
-        git checkout devel_windows; \
         mv /source/soplex-$SOPLEX_VERSION.tgz  /source/soplex_cython/ ;\
         pip install . ;\
         fi \
