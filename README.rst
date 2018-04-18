@@ -83,7 +83,7 @@ COBRAme and its extensions require:
 .. _DockerHub: https://hub.docker.com/r/sbrg/cobrame/
 .. |Build_Status| image:: https://travis-ci.org/SBRG/cobrame.svg?branch=master
     :target: https://travis-ci.org/SBRG/cobrame
-.. |License| image:: https://img.shields.io/github/license/sbrg/cobrame.svg
+.. |License| image:: https://img.shields.io/badge/License-MIT-blue.svg
     :target: https://github.com/SBRG/cobrame/blob/master/LICENSE
 .. |Documentation| image:: https://readthedocs.org/projects/cobrame/badge/?version=master
     :target: http://cobrame.readthedocs.io/en/master/?badge=master
