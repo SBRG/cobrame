@@ -25,9 +25,11 @@ Build ME-model
 --------------
 A full COBRAme ME-model currently only exists for *E. coli* K-12 MG1655. See the ECOLIme_ package for the data and scripts required to build iJL1678b-ME. After installing ECOLIme_, iJL1678b-ME can be constructed from scratch by running `build_ME_model.py <https://github.com/SBRG/ecolime/tree/master/ecolime>`_.
 
+**Note:** ECOLIme and COBRAme are versioned together (i.e. version 0.0.8 of ECOLIme should be used with version 0.0.8 of COBRAme, etc.)
+
 Solving
 -------
-ME-models are inherently ill-scaled and thus require extended precision solvers in to be solved accurately. COBRAme currently supports the use of two such solvers: **qMINOS** (128-bit precision) and **SoPlex** (80-bit precision). Both solvers are freely avaialbe for academic use. For further examples, refer to `solve_demo.ipynb <https://github.com/SBRG/ecolime/tree/master/ecolime>`_
+ME-models are inherently ill-scaled and thus require extended precision solvers in to be solved accurately. COBRAme currently supports the use of two such solvers: **qMINOS** (128-bit precision) and **SoPlex** (80-bit precision). Both solvers are freely available for academic use. For further examples, refer to `solve_demo.ipynb <https://github.com/SBRG/ecolime/tree/master/ecolime>`_
 
 qMINOS
 ~~~~~~
