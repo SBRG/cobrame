@@ -20,7 +20,7 @@ from cobrame.core.processdata import (
 from cobrame.util import mu
 
 
-__version__ = "0.0.8"
+__version__ = "0.0.9"
 
 if StrictVersion(cobra.__version__) > StrictVersion('0.5.11'):
     raise UserWarning('COBRApy version (%s) is not <= 0.5.11. We recommend '
