@@ -3,7 +3,11 @@ COBRAme, ECOLIme, and qMINOS using Docker
 
 Builds of the latest versions of COBRAme and ECOLIme_ can be found on Docker Hub. This build also includes a compiled version of the qMINOS solver that can be used to solve ME-models using solvemepy_.
 
-This container will initialize  which contains a json and pickle of
+The Docker image initializes in the ``/home/meuser`` directory which contains a json and pickle of iJL1678b in the ``/home/meuser/me_models`` directory which were created from running ``build_me_model.py`` while building the Docker image.
+
+Also contained in the ``/home/meuser`` directory is ``solve_demo.ipynb`` containing an example of how to load and solve ME-models in a jupyter notebook (instructions below).
+
+The installed COBRAme and ECOLIme packages can be found in ``/source/``.
 
 Docker is cross-platform and allows Windows, Mac and Linux users to run ME-models without going through the process of installing each solver and dependency locally.
 
@@ -20,8 +24,8 @@ This will initiate a Docker container (virtual machine) into the ``/home/meuser`
 3. To start a jupyter notebook, run ``jupyter notebook --ip=0.0.0.0 --port=8888``. Point the browser to ``localhost:8888`` and input the provided token to access notebook.
 
 
-Building Docker locally w/ SoPlex
----------------------------------
+Building Docker image locally w/ SoPlex
+---------------------------------------
 To build a Docker image that can solve ME-models with SoPlex as well as qMINOS
 
 1. Install Docker (https://docs.docker.com/install/)
