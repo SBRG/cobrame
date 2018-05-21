@@ -1,7 +1,6 @@
 FROM sbrg/cobrame:qminos AS qminos
 FROM sbrg/cobrame:dependencies
 USER root
-WORKDIR /source/
 
 # Get qminos shared libraries
 COPY --from=qminos /source/libminos.a .
@@ -37,6 +36,8 @@ RUN useradd -m -s /bin/bash -N -u $NB_UID $NB_USER && \
 # Switch back to non-root
 USER $NB_UID
 
+WORKDIR /home/$NB_USER
+
 RUN echo \
 	&& cd /source \
 	# Install cobrapy version 0.5.11
@@ -55,6 +56,7 @@ RUN echo \
 
     # Install remaining ME-model software. qMINOS/solvemepy is automatically
     # installed
+    && pip install escher \
     && cd /source \
 	&& git clone https://github.com/SBRG/cobrame.git \
 	&& git clone https://github.com/SBRG/ecolime.git \
@@ -71,7 +73,6 @@ RUN echo \
 
 	# build iJL1678b ME-model
 	&& $PYTHON  /source/ecolime/ecolime/build_me_model.py \
+	&& cp -r /source/ecolime/ecolime/me_models /home/$NB_USER/ \
+	&& cp /source/ecolime/ecolime/solve_demo.ipynb /home/$NB_USER/ \
 	&& echo
-
-COPY run_jupyter.sh /home/$NB_USER
-
