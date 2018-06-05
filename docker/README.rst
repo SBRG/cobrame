@@ -17,11 +17,12 @@ Installation
 To run a Docker container with everything required to build and solve the iJL1678b model of *E. coli* K-12 MG1655 using qMINOS:
 
 1. Install Docker (https://docs.docker.com/install/)
-2. In the command line, run ``docker run -p 8888:8888 --rm -i -v $(pwd):/mount_point/ -t sbrg/cobrame:master bash``.
+2. Pull the latest image from DockerHub with ``docker pull sbrg/cobrame:master``
+3. In the command line, run ``docker run -p 8888:8888 --rm -i -v $(pwd):/mount_point/ -t sbrg/cobrame:master bash``.
 
 This will initiate a Docker container (virtual machine) into the ``/home/meuser`` directory and mount the contents of the directory where the command was ran into the docker container at ``/mount_point/``.
 
-3. To start a jupyter notebook, run ``jupyter notebook --ip=0.0.0.0 --port=8888``. Point the browser to ``localhost:8888`` and input the provided token to access notebook.
+4. To start a jupyter notebook, run ``jupyter notebook --ip=0.0.0.0 --port=8888``. Point the browser to ``localhost:8888`` and input the provided token to access notebook.
 
 
 Building Docker image locally w/ SoPlex
@@ -36,7 +37,7 @@ To build a Docker image that can solve ME-models with SoPlex as well as qMINOS
 
 where the ``[repository:tag name]`` can be decided by the user
 
-6. To run the built Docker image, ``docker run -p 8888:8888 --rm -i -v $(pwd):/mount_point/ -t [repository:tag name] bash``
+6. To run the Docker image, ``docker run -p 8888:8888 --rm -i -v $(pwd):/mount_point/ -t [repository:tag name] bash``
 
 This will initialize a Docker container with everything required to use ME-models and to solve them using qMINOS and SoPlex.
 
