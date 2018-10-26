@@ -684,10 +684,10 @@ class PostTranslationReaction(MEReaction):
         # Add biomass from significant modifications (i.e. lipids for
         # lipoproteins)
         biomass = self.add_biomass_from_subreactions(posttranslation_data)
-        if biomass > 0 and posttranslation_data.biomass_type:
+        if abs(biomass) > 0 and posttranslation_data.biomass_type:
             self.add_metabolites({metabolites.get_by_id(
                 posttranslation_data.biomass_type): biomass})
-        elif biomass > 0 and not posttranslation_data.biomass_type:
+        elif abs(biomass) > 0 and not posttranslation_data.biomass_type:
             raise ValueError('If subreactions in PostTranslationData modify '
                              'the protein, the biomass_type must be provided')
 

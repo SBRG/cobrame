@@ -276,11 +276,24 @@ class SubreactionData(ProcessData):
         """
         elements = self.element_contribution
 
-        # Create temporary metabolite for calculating formula weight
-        tmp_met = cobra.Metabolite('mass')
-        elements_to_formula(tmp_met, elements)
+        pos_elements = {}
+        neg_elements = {}
+        for key, value in iteritems(elements):
+            if value < 0:
+                warn('Negative element found in (%s), element '
+                     'contributions are usually positive' % elements)
+                neg_elements[key] = -value
+            else:
+                pos_elements[key] = value
 
-        return tmp_met.formula_weight
+        # Create temporary metabolite for calculating formula weight
+        pos_met = cobra.Metabolite('pos_mass')
+        elements_to_formula(pos_met, pos_elements)
+
+        neg_met = cobra.Metabolite('neg_mass')
+        elements_to_formula(neg_met, neg_elements)
+
+        return pos_met.formula_weight - neg_met.formula_weight
 
     def get_complex_data(self):
         """
