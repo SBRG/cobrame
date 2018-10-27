@@ -3,6 +3,7 @@ from __future__ import absolute_import, print_function, division
 from collections import defaultdict
 from six import iteritems, string_types
 from warnings import warn
+import math
 
 import cobra
 
@@ -10,6 +11,7 @@ from cobrame.core.reaction import GenericFormationReaction, ComplexFormation
 from cobrame.core.component import GenerictRNA, GenericComponent
 from cobrame.util.massbalance import elements_to_formula
 from cobrame.util import dogma
+from cobrame import mu
 
 
 class ProcessData(object):
@@ -1011,7 +1013,9 @@ class PostTranslationData(ProcessData):
         ID of protein following post translational process
 
     preprocessed_protein : str
-        ID of protein before post translational process
+        ID of original protein before all post translational processes
+
+        If there are intermediate metabolites created from e.g.
 
 
     Attributes
@@ -1086,3 +1090,56 @@ class PostTranslationData(ProcessData):
         self.keq_folding = {}
         self.k_folding = {}
         self.propensity_scaling = 1.
+        self.coupling_expression_id = None
+
+        self.dilution_multiplier = 1.
+        self.size_or_target_scaling_factor = 1
+
+    @property
+    def temperature_dependant_coupling(self):
+        temp = str(self._model.global_info['temperature'])
+        keq_folding = self.keq_folding[temp]
+        k_folding = self.k_folding[temp] * 3600.  # in hr-1
+        unprocessed_protein_data = \
+            self._model.process_data.get_by_id(self.unprocessed_protein_id)
+        protein_length = len(unprocessed_protein_data.amino_acid_sequence)
+        aggregation_propensity = self.aggregation_propensity
+
+        reactant_coupling = product_coupling = reactant_constraint = \
+            product_constraint = deg_coupling = 0
+
+        if self.coupling_expression_id == 'folding_spontaneous_w_degradation':
+
+            dilution1 = (keq_folding + mu / k_folding)
+            dilution2 = math.floor(protein_length / 10.)
+
+            reactant_coupling = (dilution1 + 1.) / (dilution1 * dilution2)
+            product_coupling = 1. / (dilution1 * dilution2)
+            deg_coupling = 1 / dilution2
+
+        elif self.coupling_expression_id == 'folding_protease':
+            num = math.floor(protein_length / 10.)
+            if keq_folding <= 1:
+                dilution = num
+            else:
+                dilution = self.dilution_multiplier * num * \
+                           (2 + 0.5 * math.log(keq_folding)) / 2
+
+            reactant_coupling = 1 / dilution
+            deg_coupling = 1 / dilution
+
+        elif self.coupling_expression_id == 'chaperone_folding':
+            dilution = aggregation_propensity * (keq_folding + 1.)
+
+            reactant_constraint = dilution * self.dilution_multiplier * \
+                                  self.size_or_target_scaling_factor
+
+            product_coupling = 1
+
+        elif self.coupling_expression_id == 'chaperone_intermediate_to_intermediate':
+            pass
+        else:
+            raise UserWarning('Folding coupling id not valid')
+
+        return reactant_coupling, product_coupling, reactant_constraint,\
+            product_constraint, deg_coupling

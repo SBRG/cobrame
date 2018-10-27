@@ -2,6 +2,7 @@ from __future__ import print_function, division, absolute_import
 
 from collections import defaultdict
 from warnings import warn
+import math
 
 from cobra import Reaction
 from six import iteritems, string_types
@@ -607,15 +608,16 @@ class PostTranslationReaction(MEReaction):
         posttranslation_data = self.posttranslation_data
         unprocessed_protein = posttranslation_data.unprocessed_protein_id
         processed_protein = posttranslation_data.processed_protein_id
+        protein_bnum = unprocessed_protein.replace('protein_', '')
+        intermediate_protein = 'protein_' + protein_bnum + '_intermediate'
+        KJE_folding_intermediate1 = 'protein_' + protein_bnum + '_KJE_folding_intermediate1'
+        GroEL_ES_folding_intermediate1 = 'protein_' + protein_bnum + '_GroEL_ES_folding_intermediate1'
+        KJE_folding_intermediate2 = 'protein_' + protein_bnum + '_KJE_folding_intermediate2'
+        GroEL_ES_folding_intermediate2 = 'protein_' + protein_bnum + '_GroEL_ES_folding_intermediate2'
 
         # folding properties
         folding_mechanism = posttranslation_data.folding_mechanism
-        aggregation_propensity = posttranslation_data.aggregation_propensity
         scaling = posttranslation_data.propensity_scaling
-        if folding_mechanism:
-            temp = str(self._model.global_info['temperature'])
-            keq_folding = posttranslation_data.keq_folding[temp]
-            k_folding = posttranslation_data.k_folding[temp] * 3600.  # in hr-1
 
         # Get or make processed protein metabolite
         try:
@@ -637,19 +639,106 @@ class PostTranslationReaction(MEReaction):
                                                 stoichiometry)
 
         # Add folding protein coupling coefficients, if applicable
+        reactant_coupling, product_coupling, deg_coupling = \
+            posttranslation_data.temperature_dependant_coupling
+
         if folding_mechanism == 'folding_spontaneous':
-            dilution = (keq_folding + mu / k_folding)
-            stoichiometry[unprocessed_protein] -= (dilution + 1.)
+            ## simple spontaneous folding without Lon protease
+            # dilution = (keq_folding + mu / k_folding)
+            # stoichiometry[unprocessed_protein] -= dilution + 1.
+            # stoichiometry[protein_met.id] += 1.
+
+            ## spontaneous folding with Lon protease
+
+            stoichiometry[unprocessed_protein] -= reactant_coupling
+            stoichiometry[protein_met.id] += product_coupling
+            peptide = self._model.process_data.get_by_id(
+                posttranslation_data.unprocessed_protein_id)
+            for aa, count in peptide.amino_acid_count.items():
+                stoichiometry[aa] += count / dilution2
+            stoichiometry['protein_biomass'] -= peptide.formula_weight / 1000. / dilution2
+
+        elif folding_mechanism == 'folding_Lon':
+
+            stoichiometry[intermediate_protein] -= 1. / dilution
+            peptide = self._model.process_data.get_by_id(protein_bnum[0:5])
+            for aa, count in peptide.amino_acid_count.items():
+                stoichiometry[aa] += count / dilution
+            stoichiometry['protein_biomass'] -= peptide.formula_weight / 1000. / dilution
+
+        elif '_1' in folding_mechanism:
+            stoichiometry[unprocessed_protein] -= 1.
+            if 'KJE' in folding_mechanism:
+                stoichiometry[KJE_folding_intermediate1] += 1.
+            elif 'GroEL_ES' in folding_mechanism:
+                stoichiometry[GroEL_ES_folding_intermediate1] += 1.
+
+        elif '_4' in folding_mechanism:
+            stoichiometry[intermediate_protein] -= 1.
+            if 'KJE' in folding_mechanism:
+                stoichiometry[KJE_folding_intermediate2] += 1.
+            elif 'GroEL_ES' in folding_mechanism:
+                stoichiometry[GroEL_ES_folding_intermediate2] += 1.
+
+        elif '_2' in folding_mechanism:
             stoichiometry[protein_met.id] += 1.
-
-        elif folding_mechanism:
-            dilution = aggregation_propensity * scaling * (keq_folding + 1.)+1.
-            stoichiometry[unprocessed_protein] -= (1. / dilution + 1.)
-
-            stoichiometry[protein_met.id] += 1. / dilution
-            stoichiometry[protein_met.id.replace('_folded', '')] += (1.)
+            dilution = aggregation_propensity * (keq_folding + 1.)
+            if 'KJE' in folding_mechanism:
+                stoichiometry[KJE_folding_intermediate1] -= 1.
+                constraint_id = unprocessed_protein + '_folding_KJE_constraint1'
+                stoichiometry[constraint_id] -= dilution * pd
+            elif 'GroEL_ES' in folding_mechanism:
+                stoichiometry[GroEL_ES_folding_intermediate1] -= 1.
+                constraint_id = unprocessed_protein + '_folding_GroEL_ES_constraint1'
+                met = metabolites.get_by_id(unprocessed_protein)
+                if met.mass < 60. or unprocessed_protein.replace('protein_',
+                                                                 '') in GroEL_targets:
+                    stoichiometry[
+                        constraint_id] -= dilution * pg * ELS_scaling_factor
+                else:
+                    stoichiometry[constraint_id] -= dilution * pg
+        elif '_5' in folding_mechanism:
+            stoichiometry[protein_met.id] += 1.
+            dilution = aggregation_propensity * (keq_folding + 1.)
+            if 'KJE' in folding_mechanism:
+                stoichiometry[KJE_folding_intermediate2] -= 1.
+                constraint_id = unprocessed_protein + '_folding_KJE_constraint2'
+                stoichiometry[constraint_id] -= dilution * (1 - pd)
+            elif 'GroEL_ES' in folding_mechanism:
+                stoichiometry[GroEL_ES_folding_intermediate2] -= 1.
+                constraint_id = unprocessed_protein + '_folding_GroEL_ES_constraint2'
+                met = metabolites.get_by_id(unprocessed_protein)
+                if met.mass < 60. or unprocessed_protein.replace('protein_',
+                                                                 '') in GroEL_targets:
+                    stoichiometry[constraint_id] -= dilution * (
+                            1 - pg) * ELS_scaling_factor
+                else:
+                    stoichiometry[constraint_id] -= dilution * (1 - pg)
+        elif '_3' in folding_mechanism:
+            stoichiometry[intermediate_protein] += 1.
+            if 'KJE' in folding_mechanism:
+                stoichiometry[KJE_folding_intermediate1] -= 1.
+                constraint_id = unprocessed_protein + '_folding_KJE_constraint1'
+                stoichiometry[constraint_id] += 1.
+            elif 'GroEL_ES' in folding_mechanism:
+                stoichiometry[GroEL_ES_folding_intermediate1] -= 1.
+                constraint_id = unprocessed_protein + '_folding_GroEL_ES_constraint1'
+                stoichiometry[constraint_id] += 1.
+        elif '_6' in folding_mechanism:
+            stoichiometry[intermediate_protein] += 1.
+            if 'KJE' in folding_mechanism:
+                stoichiometry[KJE_folding_intermediate2] -= 1.
+                constraint_id = unprocessed_protein + '_folding_KJE_constraint2'
+                stoichiometry[constraint_id] += 1.
+            elif 'GroEL_ES' in folding_mechanism:
+                stoichiometry[GroEL_ES_folding_intermediate2] -= 1.
+                constraint_id = unprocessed_protein + '_folding_GroEL_ES_constraint2'
+                stoichiometry[constraint_id] += 1.
         else:
-            stoichiometry[unprocessed_protein] = -1.
+            if not posttranslation_data.translocation:  ### KC modification ###
+                stoichiometry[unprocessed_protein] = -1.
+            else:
+                stoichiometry[pretranslocated_protein.id] = -1.
             stoichiometry[protein_met.id] = 1.
 
         # Add surface area constraints for all translocated proteins, if
