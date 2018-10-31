@@ -1081,7 +1081,7 @@ class PostTranslationData(ProcessData):
         self.biomass_type = ''
 
         # For protein folding reactions (FoldME)
-        self.folding = True
+        self.folding = False
         self.aggregation_propensity = 0.
         self.keq_folding = {}
         self.k_folding = {}

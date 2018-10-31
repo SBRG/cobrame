@@ -11,7 +11,8 @@ from scipy.sparse import dok_matrix
 from cobrame.core.reaction import (SummaryVariable, MetabolicReaction,
                                    TranscriptionReaction, TranslationReaction)
 from cobrame.core.component import (Constraint, ProcessedProtein, Complex,
-                                    TranslatedGene, TranscribedGene)
+                                    TranslatedGene, TranscribedGene,
+                                    GenericComponent)
 from cobrame.core import processdata
 from cobrame.util import mu
 
@@ -401,20 +402,22 @@ class MEModel(Model):
                 self.process_data.remove(t_process_id)
 
     def set_sasa_keffs(self, median_keff):
+
         # Get median SASA value considering all complexes in model
         sasa_list = []
         for met in self.metabolites:
             cplx_sasa = 0.
             if not isinstance(met, Complex):
                 continue
-            cplx_sasa += met.formula_weight ** (3. / 4)
+            cplx_sasa += (met.formula_weight / 1000.) ** (3. / 4)
             sasa_list.append(cplx_sasa)
         median_sasa = np.median(np.array(sasa_list))
 
         # redo scaling average SASA to 65.
         for rxn in self.reactions:
             if hasattr(rxn, 'keff') and rxn.complex_data is not None:
-                sasa = rxn.complex_data.complex.formula_weight ** (3. / 4.)
+                weight = rxn.complex_data.complex.formula_weight / 1000
+                sasa = weight ** (3. / 4.)
                 if sasa == 0:
                     raise UserWarning('No SASA for %s' % rxn)
                 rxn.keff = sasa * median_keff / median_sasa
@@ -422,15 +425,23 @@ class MEModel(Model):
             sasa = 0.
             if isinstance(data, processdata.TranslocationData):
                 continue
-            if hasattr(data, 'keff') and data.enzyme is not None:
+            elif hasattr(data, 'keff') and data.enzyme:
                 cplxs = \
                     [data.enzyme] if type(data.enzyme) == str else data.enzyme
                 for cplx in cplxs:
-                    sasa += \
-                        self.metabolites.get_by_id(cplx).formula_weight ** \
-                        (3. / 4)
+                    cplx_met = self.metabolites.get_by_id(cplx)
+                    if isinstance(cplx_met, GenericComponent):
+                        generic_data = self.process_data.get_by_id(cplx)
+                        formula_weights = []
+                        for generic_cplx in generic_data.component_list:
+                            formula_weights.append(self.metabolites.get_by_id(
+                                generic_cplx).formula_weight / 1000.)
+                        weight = np.mean(np.array(formula_weights))
+                    else:
+                        weight = cplx_met.formula_weight / 1000
+                    sasa += weight ** (3. / 4)
                 if sasa == 0:
-                    raise UserWarning('No SASA for %s' % rxn)
+                    raise UserWarning('No SASA for %s' % data)
                 data.keff = sasa * median_keff / median_sasa
 
         self.update()

@@ -627,6 +627,9 @@ class PostTranslationReaction(MEReaction):
                 self.add_translocation_pathways(posttranslation_data.id,
                                                 unprocessed_protein,
                                                 stoichiometry)
+            stoichiometry[unprocessed_protein] = -1.
+            stoichiometry[protein_met.id] = 1.
+
         elif posttranslation_data.folding:
             # Add folding protein coupling coefficients, if applicable
             metabolite_type_to_coupling = \
